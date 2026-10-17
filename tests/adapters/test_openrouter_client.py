@@ -309,3 +309,52 @@ def test_model_parameters_are_unknown_when_the_server_is_unreachable():
 def test_server_usage_is_none_when_the_server_is_unreachable():
     client = OpenRouterClient(lambda: KEY, base_url="http://127.0.0.1:1", timeout=(1.0, 1.0))
     assert client.server_usage() is None
+
+
+# ---------- 키 확인(채팅 호출 없이 키 정보만 조회) ----------
+
+
+def test_a_valid_key_reports_validity_and_the_free_model_counter(make_client):
+    body = {"data": {"free_model_daily_requests": {"used": 33, "limit": 1000}}}
+    client, server = make_client(lambda *_: json_reply(200, body))
+    check = client.check_key()
+    assert (check.valid, check.used, check.limit, check.reason) == (True, 33, 1000, "")
+    assert [(r[0], r[1]) for r in server.requests] == [("GET", "/key")]  # 채팅 호출은 없다
+    assert server.requests[0][2].get("authorization") == f"Bearer {KEY}"
+
+
+@pytest.mark.parametrize(
+    "body", [{}, {"data": {}}, {"data": {"free_model_daily_requests": {"used": "x"}}}]
+)
+def test_a_valid_key_without_a_usable_counter_is_still_valid(make_client, body):
+    client, _ = make_client(lambda *_: json_reply(200, body))
+    check = client.check_key()
+    assert (check.valid, check.used, check.limit) == (True, None, None)
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_a_rejected_key_is_reported_as_invalid_without_showing_the_key(make_client, status):
+    client, _ = make_client(lambda *_: json_reply(status, {"error": {"message": f"bad key {KEY}"}}))
+    check = client.check_key()
+    assert check.valid is False and f"HTTP {status}" in check.reason
+    assert KEY not in check.reason
+
+
+@pytest.mark.parametrize("status", [429, 500, 503])
+def test_other_failures_mean_the_key_could_not_be_checked(make_client, status):
+    client, _ = make_client(lambda *_: json_reply(status, {}))
+    check = client.check_key()
+    assert check.valid is None and f"HTTP {status}" in check.reason
+
+
+def test_a_connection_failure_means_the_key_could_not_be_checked():
+    client = OpenRouterClient(lambda: KEY, base_url="http://127.0.0.1:1", timeout=(0.5, 0.5))
+    check = client.check_key()
+    assert check.valid is None and "ConnectionError" in check.reason and KEY not in check.reason
+
+
+def test_a_missing_key_is_invalid_and_nothing_is_sent(make_client):
+    client, server = make_client(lambda *_: json_reply(200, {}), key=None)
+    check = client.check_key()
+    assert check.valid is False and "설정되지 않았습니다" in check.reason
+    assert server.requests == []

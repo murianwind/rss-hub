@@ -6,6 +6,7 @@ from fastapi.templating import Jinja2Templates
 
 from rss_hub.domain.topics import TopicInputError, validate_topic_fields
 from rss_hub.services.settings import SettingsService
+from rss_hub.services.topic_probe import ProbeResult, TopicProbe
 from rss_hub.storage.topics import TopicRepository
 
 
@@ -15,14 +16,27 @@ def _webhook_id(value: object) -> int | None:
 
 
 def build_topic_router(
-    topics: TopicRepository, settings: SettingsService, templates: Jinja2Templates
+    topics: TopicRepository,
+    settings: SettingsService,
+    templates: Jinja2Templates,
+    probe: TopicProbe,
 ) -> APIRouter:
     router = APIRouter()
 
     def page(
-        request: Request, *, error: str = "", notice: str = "", status_code: int = 200
+        request: Request,
+        *,
+        error: str = "",
+        notice: str = "",
+        status_code: int = 200,
+        probe_result: ProbeResult | None = None,
+        probe_input: tuple[str, str] = ("", ""),
     ) -> HTMLResponse:
         context = {
+            "probe": probe_result,
+            "probe_title": probe_input[0],
+            "probe_body": probe_input[1],
+            "webhook_names": {w.id: w.name for w in settings.list_webhooks()},
             "topics": topics.list_all(),
             "webhooks": settings.list_webhooks(),
             "error": error,
@@ -34,6 +48,12 @@ def build_topic_router(
     def topic_page(request: Request, saved: str = "", deleted: str = "") -> HTMLResponse:
         notice = "저장했습니다." if saved else "삭제했습니다." if deleted else ""
         return page(request, notice=notice)
+
+    @router.post("/topics/probe", response_class=HTMLResponse)
+    async def probe_topics(request: Request) -> Response:
+        form = await request.form()
+        title, body = str(form.get("title", "")), str(form.get("body", ""))
+        return page(request, probe_result=probe.run(title, body), probe_input=(title, body))
 
     @router.post("/topics/add", response_class=HTMLResponse)
     async def add_topic(request: Request) -> Response:

@@ -89,6 +89,16 @@ class ServerUsage:
         return self.limit - self.used
 
 
+@dataclass(frozen=True)
+class KeyCheck:
+    """OpenRouter 키 확인 결과. 채팅 호출은 하지 않고 키 정보만 조회한다."""
+
+    valid: bool | None  # True 유효, False 거부(또는 키 없음), None 확인하지 못함
+    reason: str = ""  # 사용자에게 보여 줄 수 있는 문구. 키 값은 넣지 않는다
+    used: int | None = None  # 오늘 무료 모델 호출 수(서버 기준)
+    limit: int | None = None
+
+
 class LlmClient(Protocol):
     def complete(self, model: str, prompt: str, options: CallOptions) -> LlmResult:
         """호출 한 번. 실패하면 LlmCallError를 올린다."""
@@ -100,6 +110,10 @@ class LlmClient(Protocol):
 
     def server_usage(self) -> ServerUsage | None:
         """서버가 알려 주는 오늘 호출 수. 호출 한도를 쓰지 않는다. 조회에 실패하면 None."""
+        ...
+
+    def check_key(self) -> KeyCheck:
+        """키가 유효한지와 사용량. 호출 한도를 쓰지 않는다."""
         ...
 
 

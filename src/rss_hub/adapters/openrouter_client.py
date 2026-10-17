@@ -12,6 +12,7 @@ import requests
 
 from rss_hub.services.ports import (
     CallOptions,
+    KeyCheck,
     LlmCallError,
     LlmErrorKind,
     LlmResult,
@@ -188,6 +189,38 @@ class OpenRouterClient:
         if not isinstance(used, int) or not isinstance(limit, int):
             return None
         return ServerUsage(used=used, limit=limit)
+
+    def check_key(self) -> KeyCheck:
+        """GET /key만 호출한다(채팅 호출이 아니고 호출 한도를 쓰지 않는다)."""
+        key = self._key_provider()
+        if not key:
+            return KeyCheck(valid=False, reason="OpenRouter 키가 설정되지 않았습니다")
+        try:
+            response = requests.get(
+                f"{self._base_url}/key", headers=self._headers(key), timeout=self._timeout
+            )
+        except requests.exceptions.RequestException as error:
+            return KeyCheck(
+                valid=None, reason=f"OpenRouter에 연결하지 못했습니다({type(error).__name__})"
+            )
+        if response.status_code in (401, 403):
+            return KeyCheck(
+                valid=False, reason=f"OpenRouter가 키를 거부했습니다(HTTP {response.status_code})"
+            )
+        if response.status_code != 200:
+            return KeyCheck(
+                valid=None, reason=f"키를 확인하지 못했습니다(HTTP {response.status_code})"
+            )
+        body = self._json(response)
+        data = body.get("data") if isinstance(body, dict) else None
+        counter = data.get("free_model_daily_requests") if isinstance(data, dict) else None
+        used = counter.get("used") if isinstance(counter, dict) else None
+        limit = counter.get("limit") if isinstance(counter, dict) else None
+        return KeyCheck(
+            valid=True,
+            used=used if isinstance(used, int) else None,
+            limit=limit if isinstance(limit, int) else None,
+        )
 
     # ---------- 내부 ----------
 

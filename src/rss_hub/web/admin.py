@@ -8,8 +8,10 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from rss_hub.domain.delivery import describe_send_failure
 from rss_hub.domain.settings_rules import SettingError, normalize_base_url
 from rss_hub.services.clock import Clock
+from rss_hub.services.ports import LlmClient, WebhookSender
 from rss_hub.services.settings import SETTING_BY_KEY, SETTING_DEFS, SettingsService
 from rss_hub.storage.articles import STATUS_COLLECTED, STATUS_READY, ArticleRepository
 from rss_hub.storage.feeds import FeedRepository
@@ -84,6 +86,8 @@ def build_admin_router(
     job_runs: JobRunRepository,
     usage: LlmUsageRepository,
     clock: Clock,
+    sender: WebhookSender,
+    llm_client: LlmClient,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -96,6 +100,7 @@ def build_admin_router(
         section_error: tuple[str, str] | None = None,
         notice: str = "",
         webhook_name: str = "",
+        test_result: tuple[str, str] | None = None,
     ) -> HTMLResponse:
         snapshot = service.snapshot()
         values = {**service.raw_values(), **(form_values or {})}
@@ -124,6 +129,7 @@ def build_admin_router(
             "suggestion": suggestion,
             "audit": audit,
             "webhook_name": webhook_name,
+            "test_result": test_result,
         }
         return templates.TemplateResponse(
             request, "settings.html", context, status_code=status_code
@@ -224,6 +230,39 @@ def build_admin_router(
             return error_page(request, "webhook", CONFIRM_MESSAGE)
         service.delete_webhook(webhook_id)
         return RedirectResponse("/settings?saved=1", status_code=303)
+
+    @router.post("/settings/webhooks/{webhook_id}/test", response_class=HTMLResponse)
+    async def test_webhook(request: Request, webhook_id: int) -> Response:
+        """선택한 웹훅으로 시험 메시지 한 건만 보낸다. 결과 화면에 웹훅 주소는 나타나지 않는다."""
+        url = service.get_webhook_url(webhook_id)
+        name = next((w.name for w in service.list_webhooks() if w.id == webhook_id), "")
+        if url is None:
+            return render_settings(
+                request, status_code=404, test_result=("error", "웹훅을 찾을 수 없습니다")
+            )
+        result = sender.send(
+            url, f"✅ RSS Hub 시험 메시지입니다. 웹훅 '{name}'이 정상으로 연결되었습니다."
+        )
+        if 200 <= result.status < 300:
+            return render_settings(
+                request, test_result=("ok", f"성공: '{name}'으로 시험 메시지를 보냈습니다")
+            )
+        reason = describe_send_failure(result.status, result.error)
+        return render_settings(request, test_result=("error", f"실패: '{name}' {reason}"))
+
+    @router.post("/settings/openrouter-key/check", response_class=HTMLResponse)
+    async def check_key(request: Request) -> Response:
+        """키 정보만 조회한다(채팅 호출이 아니라서 호출 한도와 오늘 호출 수를 쓰지 않는다)."""
+        check = llm_client.check_key()
+        if check.valid:
+            usage_text = (
+                f" · 오늘 무료 모델 호출 {check.used}/{check.limit}"
+                if check.used is not None and check.limit is not None
+                else ""
+            )
+            return render_settings(request, test_result=("ok", f"키가 유효합니다{usage_text}"))
+        kind = "error" if check.valid is False else "warn"
+        return render_settings(request, test_result=(kind, check.reason))
 
     @router.post("/settings/webhook-roles", response_class=HTMLResponse)
     async def save_roles(request: Request) -> Response:

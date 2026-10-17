@@ -4,7 +4,14 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from rss_hub.services.ports import CallOptions, LlmCallError, LlmErrorKind, LlmResult, ServerUsage
+from rss_hub.services.ports import (
+    CallOptions,
+    KeyCheck,
+    LlmCallError,
+    LlmErrorKind,
+    LlmResult,
+    ServerUsage,
+)
 
 GOOD_CONTENT = json.dumps(
     {"title_ko": "애플, 새 폰 공개", "summary_ko": "애플이 새 폰을 공개했다.", "topics": []},
@@ -47,6 +54,8 @@ class FakeLlmClient:
     parameters: dict[str, frozenset[str] | None] = field(default_factory=dict)
     usage: ServerUsage | None = None
     usage_queries: int = 0
+    key_check: KeyCheck = field(default_factory=lambda: KeyCheck(valid=True, used=33, limit=1000))
+    key_checks: int = 0
 
     def will(self, model: str, *outcomes: Outcome) -> None:
         self.queues.setdefault(model, []).extend(outcomes)
@@ -67,6 +76,10 @@ class FakeLlmClient:
     def server_usage(self) -> ServerUsage | None:
         self.usage_queries += 1
         return self.usage
+
+    def check_key(self) -> KeyCheck:
+        self.key_checks += 1
+        return self.key_check
 
     def models_called(self) -> list[str]:
         return [call.model for call in self.calls]

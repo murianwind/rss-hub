@@ -6,6 +6,7 @@
 
 import threading
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from rss_hub.adapters.discord_webhook import DiscordNotifier, RequestsWebhookSender
@@ -34,6 +35,37 @@ JOB_SUMMARIZE = "summarize"
 JOB_DELIVER = "deliver"
 
 
+@dataclass(frozen=True)
+class LlmServices:
+    alerts: AlertService
+    gateway: LlmGateway
+
+
+def build_llm_services(
+    database: Database,
+    clock: Clock,
+    settings: SettingsService,
+    *,
+    client: LlmClient,
+    sender: WebhookSender,
+) -> LlmServices:
+    """시스템 알림과 LLM 게이트웨이(호출 예산 포함). 실행기와 웹 화면이 같은 방식으로 쓴다."""
+    alerts = AlertService(
+        alerts=AlertRepository(database, clock),
+        settings=settings,
+        notifier=DiscordNotifier(sender),
+        clock=clock,
+    )
+    gateway = LlmGateway(
+        client=client,
+        usage=LlmUsageRepository(database, clock),
+        settings=settings,
+        alerts=alerts,
+        clock=clock,
+    )
+    return LlmServices(alerts=alerts, gateway=gateway)
+
+
 def build_runner(
     database: Database,
     clock: Clock,
@@ -51,19 +83,14 @@ def build_runner(
     stop = threading.Event()  # 서비스 종료 요청. 실행기와 발송 서비스가 함께 본다
 
     webhook_sender = sender or RequestsWebhookSender()
-    alerts = AlertService(
-        alerts=AlertRepository(database, clock),
-        settings=settings,
-        notifier=DiscordNotifier(webhook_sender),
-        clock=clock,
-    )
-    gateway = LlmGateway(
+    llm = build_llm_services(
+        database,
+        clock,
+        settings,
         client=client or OpenRouterClient(settings.get_openrouter_key),
-        usage=LlmUsageRepository(database, clock),
-        settings=settings,
-        alerts=alerts,
-        clock=clock,
+        sender=webhook_sender,
     )
+    alerts, gateway = llm.alerts, llm.gateway
     collector = CollectService(
         feeds=feeds,
         articles=articles,

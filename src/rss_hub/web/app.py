@@ -14,10 +14,15 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import PlainTextResponse
 from fastapi.templating import Jinja2Templates
 
+from rss_hub.adapters.discord_webhook import RequestsWebhookSender
+from rss_hub.adapters.openrouter_client import OpenRouterClient
 from rss_hub.jobs.runner import JobRunner
+from rss_hub.runtime import build_llm_services
 from rss_hub.services.clock import Clock, SystemClock
 from rss_hub.services.importer import ImportService
+from rss_hub.services.ports import LlmClient, WebhookSender
 from rss_hub.services.settings import SettingsService
+from rss_hub.services.topic_probe import TopicProbe
 from rss_hub.storage.articles import ArticleRepository
 from rss_hub.storage.database import Database
 from rss_hub.storage.feeds import FeedRepository
@@ -50,6 +55,8 @@ def create_app(
     clock: Clock | None = None,
     *,
     runner_factory: Callable[[Database, Clock], JobRunner] | None = None,
+    webhook_sender: WebhookSender | None = None,
+    llm_client: LlmClient | None = None,
 ) -> FastAPI:
     # 인증 없이 외부에 열리는 서비스라서 API 문서 화면과 스키마는 내놓지 않는다
     app = FastAPI(title="RSS Hub", docs_url=None, redoc_url=None, openapi_url=None)
@@ -62,6 +69,10 @@ def create_app(
     articles = ArticleRepository(database, app_clock)
     feeds = FeedRepository(database, app_clock)
     job_runs = JobRunRepository(database, app_clock)
+    sender = webhook_sender or RequestsWebhookSender()
+    client = llm_client or OpenRouterClient(service.get_openrouter_key)
+    topics = TopicRepository(database, app_clock)
+    llm = build_llm_services(database, app_clock, service, client=client, sender=sender)
     app.include_router(
         build_admin_router(
             service,
@@ -71,10 +82,11 @@ def create_app(
             job_runs=job_runs,
             usage=LlmUsageRepository(database, app_clock),
             clock=app_clock,
+            sender=sender,
+            llm_client=client,
         )
     )
     app.include_router(build_article_router(articles))
-    topics = TopicRepository(database, app_clock)
     importer = ImportService(
         feeds=feeds, staging=ImportStagingRepository(database, app_clock), clock=app_clock
     )
@@ -104,7 +116,8 @@ def create_app(
 
     app.router.lifespan_context = lifespan
     app.include_router(build_import_router(importer, templates))
-    app.include_router(build_topic_router(topics, service, templates))
+    probe = TopicProbe(gateway=llm.gateway, topics=topics, clock=app_clock)
+    app.include_router(build_topic_router(topics, service, templates, probe))
     app.include_router(build_category_router(feeds, service, templates))
     app.include_router(build_feed_router(feeds, service, templates))
 

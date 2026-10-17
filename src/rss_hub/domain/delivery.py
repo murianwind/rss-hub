@@ -26,6 +26,19 @@ def classify_status(status: int) -> SendOutcome:
     return SendOutcome.TRANSIENT
 
 
+def describe_send_failure(status: int, error: str = "") -> str:
+    """웹훅 전송 실패를 사용자에게 보여 줄 문구로. 주소나 토큰은 넣지 않는다."""
+    if status == 0:
+        return f"Discord에 연결하지 못했습니다({error or '알 수 없는 오류'})"
+    if status in (401, 403, 404):
+        return f"웹훅 주소가 틀렸거나 삭제되었습니다(HTTP {status})"
+    if status == 429:
+        return "Discord가 잠시 전송을 제한했습니다(HTTP 429). 잠시 뒤에 다시 시도하세요"
+    if status >= 500:
+        return f"Discord 서버 오류입니다(HTTP {status})"
+    return f"Discord가 메시지를 받지 않았습니다(HTTP {status})"
+
+
 def pause_after_send(remaining: int | None, reset_after: float | None) -> float:
     """보낸 직후 남은 횟수가 0이면, 429를 받기 전에 한도가 다시 채워질 때까지 기다린다."""
     if remaining is None or reset_after is None or remaining > 0:

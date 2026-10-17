@@ -4,6 +4,7 @@
 <h1>설정</h1>
 
 {% if notice %}<div class="banner" role="status">{{ notice }}</div>{% endif %}
+{% if test_result %}<div class="banner {{ 'error' if test_result[0] == 'error' else '' }}" role="status">{{ test_result[1] }}</div>{% endif %}
 {% if section_error %}<div class="banner error" role="alert">{{ section_error[1] }}</div>{% endif %}
 
 {% if suggestion %}
@@ -40,6 +41,9 @@
     <button type="submit" class="primary">키 저장</button>
   </form>
   {% if has_key %}
+  <form method="post" action="/settings/openrouter-key/check" class="row">
+    <button type="submit">키 확인</button>
+  </form>
   <form method="post" action="/settings/openrouter-key/delete" class="row">
     <label class="check-row"><input type="checkbox" name="confirm" value="yes">삭제합니다</label>
     <button type="submit" class="danger">키 삭제</button>
@@ -53,6 +57,9 @@
   <ul class="checks">
     {% for w in webhooks %}
     <li class="check"><span class="label">{{ w.name }}</span>
+      <form method="post" action="/settings/webhooks/{{ w.id }}/test" class="row">
+        <button type="submit">시험 전송</button>
+      </form>
       <form method="post" action="/settings/webhooks/{{ w.id }}/delete" class="row">
         <label class="check-row"><input type="checkbox" name="confirm" value="yes">삭제합니다</label>
         <button type="submit" class="danger">삭제</button>

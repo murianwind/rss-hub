@@ -7,6 +7,38 @@
 {% if notice %}<div class="banner" role="status">{{ notice }}</div>{% endif %}
 {% if error %}<div class="banner error" role="alert">{{ error }}</div>{% endif %}
 
+<h2>판별 시험</h2>
+<form method="post" action="/topics/probe" class="panel">
+  <p class="note">제목(과 본문)을 넣으면 실제 모델이 어떤 주제를 고르는지, 키워드가 맞는지, 최종적으로 해당하는지 보여 줍니다. 시험 한 번이 LLM 호출 1회를 사용하고, 글이나 알림은 만들지 않습니다.</p>
+  <div class="field">
+    <label for="probe_title">제목</label>
+    <input id="probe_title" name="title" value="{{ probe_title }}" maxlength="300">
+  </div>
+  <div class="field">
+    <label for="probe_body">본문(선택)</label>
+    <textarea id="probe_body" name="body" rows="3" maxlength="5000">{{ probe_body }}</textarea>
+  </div>
+  <div class="row"><button type="submit" class="primary">시험</button></div>
+</form>
+{% if probe %}
+  {% if probe.error %}
+  <div class="banner error" role="alert">{{ probe.error }}</div>
+  {% else %}
+  <div class="panel">
+    <p><strong>{{ probe.title_ko }}</strong> <span class="hint">모델 {{ probe.model }}</span><br>{{ probe.summary_ko }}</p>
+    <ul class="checks">
+    {% for row in probe.rows %}
+      <li class="check"><span class="label">{{ row.name }}
+        <span class="hint">LLM {{ '선택' if row.chosen else '선택 안 함' }} · 키워드 {{ row.keyword_hits | join(', ') if row.keyword_hits else '없음' }}
+        {% if row.matched and row.webhook_id %} · 웹훅 {{ webhook_names.get(row.webhook_id, '') }}{% endif %}</span></span>
+        <span class="state {{ 'ok' if row.matched else 'todo' }}">{{ '해당' if row.matched else '해당 안 함' }}</span></li>
+    {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+{% endif %}
+
+<h2>주제 목록</h2>
 {% for t in topics %}
 <form method="post" action="/topics/{{ t.id }}/update" class="panel">
   <div class="field">
