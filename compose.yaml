@@ -1,0 +1,23 @@
+# RSS Hub 스택. Docker Desktop(docker compose)과 Portainer(Stacks)에서 같은 내용을 쓴다.
+# 환경 변수는 필요 없다. 설정은 모두 웹 화면에서 한다.
+name: rss-hub
+
+services:
+  rss-hub:
+    # 저장소 소유자와 이름에 맞게 바꾼다(소문자). 태그는 latest, sha-xxxxxxx, v0.1.0 중에서 고른다.
+    image: ghcr.io/murianwind/rss-hub:latest
+    pull_policy: always
+    container_name: rss-hub
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - rss-hub-data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  rss-hub-data:

@@ -1,0 +1,86 @@
+# RSS 통합 서비스 — M1
+
+상태: **M1 기능 구현 완료, 실제 배포 전 점검 단계** — 수집, 요약(주제 판별), Discord 발송(피드, 카테고리, 주제 웹훅), 피드 가져오기, 잡 연결, Docker/Actions까지 구현했다. 남은 것: 설정 화면의 웹훅 시험 전송과 키 확인(SET-13, 14), 실제 무료 모델로 새 요약 프롬프트 시험, 배포와 병행 확인.
+설계 확인 사항은 `docs/00-final-plan.md` §6, **배포는 `docs/04-deploy-guide.md`**.
+
+> 서비스를 시작하면 수집(5분 슬롯), 요약, 발송이 자동으로 돌고, 설정 화면에서 바꾼 값이 재시작 없이 반영된다. **웹훅과 OpenRouter 키, 서비스 주소를 설정하기 전에는 요약과 발송이 기다리기만 하고 아무것도 보내지 않는다.** 서버를 슬롯(0, 5, 10분…)이 아닌 시각에 시작하면 첫 수집은 다음 슬롯까지 최대 5분 기다린다.
+> 인증이 없으므로 외부에 열 때는 NPM Access List를 권장한다(`docs/04-deploy-guide.md` §6).
+
+## 빠른 시작
+
+```
+python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+make check          # 린트 + 타입 + 데드코드 + 테스트 (모두 통과해야 한다)
+pytest -m golden    # 기존 스크립트와 동작 비교만
+pytest --cov        # 커버리지
+```
+
+`make`가 없는 환경(Windows)에서는 Makefile의 명령을 그대로 실행한다.
+
+Docker로 바로 확인하려면(저장소를 받은 상태에서):
+```
+docker compose -f compose.yaml -f compose.build.yaml up -d --build
+curl.exe http://localhost:8000/healthz
+```
+
+## 구성
+
+```
+.github/workflows/
+  ci.yml                  PR/브랜치: 린트, 타입, 데드코드, 테스트 + Docker 이미지 빌드와 기동 확인
+  image.yml               main/태그: CI 통과 후 ghcr.io에 이미지 게시
+  dependabot.yml          pip, docker, github-actions 주간 업데이트(.github/ 바로 아래)
+Dockerfile  compose.yaml  compose.build.yaml  .dockerignore
+docs/
+  00-final-plan.md        합의한 결정, 범위, 마일스톤, 위험, 확인 대기 항목
+  01-m1-design.md         M1 설계: 아키텍처, 데이터 모델, 관리 화면, 설정, 의도적 변경점
+  02-m1-test-design.md    테스트 전략, 추적성 매트릭스, 품질 게이트, 완료 기준
+  03-step1-review.md      1단계 점검 기록(체크리스트 결과, 변이 확인, 발견한 문제)
+  04-deploy-guide.md      GitHub → Actions → 이미지 → Docker 스택 → NPM 가이드
+  05-step2-review.md      2단계 점검 기록(설정 저장소와 화면, 보안 장치, 변이 확인)
+  06-step3-review.md      3단계 점검 기록(수집 서비스, 저장소, HTTP 수집기, 변이 확인)
+  07-spike-s1-result.md   스파이크 S1(OpenRouter) 결과와 설계 반영
+  08-step4-review.md      4단계 점검 기록(LLM 게이트웨이, 호출 예산, 요약 서비스, 변이 확인)
+  09-spike-s2-result.md   스파이크 S2(Discord 웹훅) 결과와 설계 반영
+  10-step5-review.md      5단계 점검 기록(발송 서비스, Discord 웹훅 어댑터, 변이 확인)
+  11-step6-review.md      6단계 점검 기록(피드 가져오기, 사설망 주소 차단)
+  12-topic-routing-design.md  웹훅 구조(기본, 카테고리, 주제)와 주제 알림 설계
+  13-step7a-review.md     주제 알림 반영 점검 기록
+  14-step7-review.md      7단계 점검 기록(잡 연결, 피드 웹훅 복구)
+features/                 BDD 시나리오 9개 파일, 142개 시나리오 (Gherkin, 한국어 본문)
+src/rss_hub/
+  domain/                 도메인 계층(순수 규칙 12개 모듈)
+  storage/                SQLite 연결, 마이그레이션, 피드와 글 저장소
+  services/               설정, 수집, LLM 게이트웨이, 요약, 발송, 시스템 알림 서비스와 포트, 시계
+  adapters/               HTTP 피드 수집기, OpenRouter 클라이언트, Discord 웹훅 전송기와 알림 전송기
+  web/                    FastAPI 앱: 상태, 설정 화면(templates/), /healthz, 보안 장치
+  version.py
+tests/
+  unit/  golden/  bdd/  web/  services/  storage/  fakes/
+tools/generate_legacy_golden.py   골든 데이터 생성기 (Linux/Docker에서 실행)
+tools/spike.py, tools/SPIKE.md    스파이크 S1(OpenRouter), S2(Discord) 시험 스크립트와 안내
+```
+
+## 진행 상황
+
+| 단계 | 내용 | 상태 |
+|---|---|---|
+| 0 | 프로젝트 골격, 품질 게이트 | 완료 |
+| 1 | 도메인 계층 + 골든 parity + BDD 24개 시나리오 연결 | 완료 |
+| 1.5 | 배포 경로 검증용 최소 서비스, Dockerfile, 스택, GitHub Actions | **완료**(Docker 빌드와 Actions 실행은 첫 푸시에서 검증) |
+| 스파이크 | **S1 OpenRouter 완료**(`docs/07-spike-s1-result.md`: 추론 토큰이 답을 잘라 먹는 것이 원인, `reasoning.effort=none`으로 해결). **S2 Discord 완료**(`docs/09-spike-s2-result.md`: 한도 5회/약 2초, 2000자 한도, 메시지 id와 삭제 확인, 429 응답 형식은 미확인). S3 Docker 볼륨, S5 NPM은 `docs/04-deploy-guide.md` §7로 확인 가능 | 진행 중 |
+| 2 | 설정 저장소와 설정 화면, 요청 출처 확인과 보안 헤더 | **완료** (594개 테스트, 커버리지 100%, BDD 33개 시나리오 연결) |
+| 3 | 피드와 글 저장소, 수집 서비스, HTTP 수집기 | **완료** (717개 테스트, 커버리지 100%, BDD 59개 시나리오 연결) |
+| 4 | LLM 게이트웨이, 호출 예산, 요약 서비스, 시스템 알림 | **완료** (996개 테스트, BDD 90개 시나리오 연결) |
+| 5 | 발송 서비스, Discord 웹훅 어댑터, 시스템 알림 전송기 | **완료** (1138개 테스트, BDD 109개 시나리오 연결) |
+| 6 | 피드 가져오기(OPML 업로드, 사설망 주소 차단) | **완료** |
+| 6.5 | 웹훅 구조 변경(기본, 카테고리, 주제)과 주제 알림(OTT 일반화) | **완료** (1593개 테스트, BDD 145개 시나리오 연결) |
+| 6.6 | 피드 웹훅 복구(카테고리와 상호 배제), 기본 웹훅에서 빠지는 규칙 | **완료** |
+| 7 | 잡 연결(수집, 요약, 발송), `/healthz` 정체 판정, `/status`, `/a/{id}`, 종료 처리, Docker 시작 명령 | **완료** (1736개 테스트, BDD 165개 시나리오 연결) |
+
+## 골든 데이터 다시 만들기
+```
+python tools/generate_legacy_golden.py --legacy-dir <기존 스크립트 7개가 있는 폴더> --out tests/golden/legacy_golden.json
+```
+기존 스크립트가 바뀌지 않으면 다시 만들 필요가 없다.

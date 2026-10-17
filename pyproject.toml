@@ -1,0 +1,88 @@
+[project]
+name = "rss-hub"
+version = "0.1.0"
+description = "RSS 수집, 요약, Discord 알림 통합 서비스"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi==0.143.2",
+    "uvicorn==0.54.0",
+    "jinja2==3.1.6",
+    "python-multipart==0.0.32",
+    "requests==2.33.1",
+    "feedparser==6.0.14",
+    "defusedxml==0.7.1",
+    "tzdata",  # Windows와 일부 슬림 이미지에는 시스템 시간대 데이터베이스가 없다
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+    "pytest-bdd==9.0.0",
+    "pytest-cov==7.1.0",
+    "gherkin-official==42.0.1",  # tests/bdd/binding.py가 직접 사용
+    "httpx2==2.13.1",  # FastAPI TestClient (starlette가 httpx 대신 httpx2를 권장)
+    "ruff==0.17.1",
+    "mypy==2.4.0",
+    "vulture==2.16",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+rss_hub = ["web/templates/*.html"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+bdd_features_base_dir = "features"
+markers = [
+    "golden: 기존 스크립트 동작(골든 데이터)과 비교하는 테스트",
+    "live: 실제 외부 서비스를 호출하는 테스트(기본 제외)",
+    "security: 업로드, 설정, 비밀 노출 관련 테스트",
+]
+addopts = "-m 'not live'"
+filterwarnings = [
+    # pytest-bdd는 feature 파일의 태그(@SCH-01, @legacy-parity 등)를 pytest 마커로 바꾼다.
+    # 태그는 문서와 추적용이라 마커로 등록하지 않는다.
+    "ignore:Unknown pytest.mark:pytest.PytestUnknownMarkWarning",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]  # 한국어 문자열과 주석의 전각 문자 경고 제외
+
+[tool.ruff.lint.per-file-ignores]
+# 사용자 PC의 파이썬(3.9 이상)에서 돌아야 하는 단독 스크립트라서 timezone.utc를 쓰고, 프롬프트와 보고서 문구가 길다
+"tools/spike.py" = ["E501", "UP017"]
+# 프롬프트 본문은 한 줄 그대로여야 해서 줄을 나눌 수 없다
+"src/rss_hub/domain/prompts.py" = ["E501"]
+# XML 공격 문자열(엔티티 폭탄 등)은 한 줄 그대로여야 읽기 쉽다
+"tests/bdd/test_feed_import.py" = ["E501"]
+"tests/unit/test_importing.py" = ["E501"]
+"tests/web/test_import_pages.py" = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src"]
+strict = true
+
+[[tool.mypy.overrides]]
+module = ["feedparser", "feedparser.*", "requests", "requests.*", "defusedxml", "defusedxml.*"]
+ignore_missing_imports = true  # 이 라이브러리들은 타입 정보를 제공하지 않는다
+
+[tool.coverage.run]
+source = ["src/rss_hub"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
