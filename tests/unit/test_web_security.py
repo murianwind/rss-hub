@@ -71,3 +71,42 @@ def test_cross_site_marker_wins_even_if_origin_matches():
         "sec-fetch-site": "cross-site",
     }
     assert request_is_same_origin(headers) is False
+
+
+# ---------- 실제 브라우저의 헤더 조합 ----------
+# 이 서비스는 Referrer-Policy를 보내고, 브라우저는 그 정책에 따라 폼 제출의 Origin을 정한다.
+# Sec-Fetch-Site는 브라우저가 직접 붙이는 값이라 스크립트가 바꿀 수 없다.
+
+
+def test_a_same_origin_form_post_is_allowed_even_when_the_browser_sends_origin_null():
+    # Referrer-Policy가 no-referrer이면 브라우저는 같은 사이트 폼 제출에도 Origin: null을 보낸다
+    assert check(host="rss.example.com", origin="null", sec_fetch_site="same-origin") is True
+
+
+def test_a_same_origin_post_is_allowed_whatever_host_the_proxy_forwards():
+    # 리버스 프록시가 Host를 바꿔도(내부 주소) 브라우저의 판단(Sec-Fetch-Site)은 변하지 않는다
+    headers = {
+        "host": "172.21.0.2:8000",
+        "origin": "https://rss.example.com",
+        "sec_fetch_site": "same-origin",
+    }
+    assert check(**headers) is True
+
+
+def test_a_user_typing_the_address_or_using_a_bookmark_is_not_a_cross_site_request():
+    assert check(host="rss.example.com", sec_fetch_site="none") is True
+
+
+@pytest.mark.parametrize("site", ["cross-site", "same-site"])
+def test_other_sites_are_rejected_even_with_a_matching_or_null_origin(site):
+    assert check(host="rss.example.com", origin="null", sec_fetch_site=site) is False
+    assert (
+        check(host="rss.example.com", origin="https://rss.example.com", sec_fetch_site=site)
+        is False
+    )
+
+
+def test_an_older_browser_without_sec_fetch_site_is_judged_by_its_origin():
+    assert check(host="rss.example.com", origin="https://rss.example.com") is True
+    assert check(host="rss.example.com", origin="https://evil.example.com") is False
+    assert check(host="rss.example.com", origin="null") is False  # 어디서 왔는지 알 수 없다

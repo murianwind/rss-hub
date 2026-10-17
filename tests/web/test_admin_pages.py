@@ -264,7 +264,9 @@ def test_security_headers_are_set(client, path):
     )
     assert headers["x-frame-options"] == "DENY"
     assert headers["x-content-type-options"] == "nosniff"
-    assert headers["referrer-policy"] == "no-referrer"
+    assert (
+        headers["referrer-policy"] == "same-origin"
+    )  # 같은 사이트 폼 제출에 Origin이 정상으로 붙는다
 
 
 @pytest.mark.security

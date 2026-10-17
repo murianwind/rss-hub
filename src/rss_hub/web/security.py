@@ -17,19 +17,21 @@ SECURITY_HEADERS: dict[str, str] = {
     ),
     "X-Frame-Options": "DENY",
     "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "no-referrer",
+    "Referrer-Policy": "same-origin",  # no-referrer이면 같은 사이트 폼 제출의 Origin이 null이 된다
 }
 
 
 def request_is_same_origin(headers: Mapping[str, str]) -> bool:
     """상태를 바꾸는 요청이 우리 화면에서 왔는지 판단한다(헤더 이름은 소문자).
 
-    브라우저는 다른 사이트에서 보내는 요청에 Origin과 Sec-Fetch-Site를 붙이고, 페이지의 스크립트가
-    이 헤더를 바꿀 수 없다. 이 헤더가 없는 요청(curl 등)은 브라우저를 통한 CSRF 경로가 아니다.
+    1. Sec-Fetch-Site가 있으면 그것을 믿는다. 브라우저가 직접 붙이는 값이라 페이지의 스크립트가
+       바꿀 수 없고, 리버스 프록시가 Host를 바꿔도, Origin이 "null"이어도 정확하다.
+    2. 없으면(오래된 브라우저) Origin이 Host나 X-Forwarded-Host와 같은지 본다.
+    3. Origin도 없으면 브라우저를 통한 CSRF 경로가 아니다(curl 같은 도구).
     """
     site = headers.get("sec-fetch-site")
-    if site is not None and site not in ("same-origin", "none"):
-        return False
+    if site is not None:
+        return site in ("same-origin", "none")
 
     origin = headers.get("origin")
     if origin is None:
