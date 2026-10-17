@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}카테고리 · RSS Hub{% endblock %}
+{% block content %}
+<h1>카테고리</h1>
+<p class="note">웹훅을 지정한 카테고리의 피드는 그 웹훅으로 알림이 갑니다. 지정하지 않으면 기본 웹훅으로 갑니다. OPML의 폴더로 가져온 카테고리도 여기에 보입니다.</p>
+
+{% if notice %}<div class="banner" role="status">{{ notice }}</div>{% endif %}
+{% if error %}<div class="banner error" role="alert">{{ error }}</div>{% endif %}
+
+{% for c in categories %}
+<form method="post" action="/categories/{{ c.id }}/webhook" class="panel">
+  <p><strong>{{ c.name }}</strong> <span class="hint">피드 {{ c.feed_count }}개</span></p>
+  <div class="field">
+    <label for="wh_{{ c.id }}">웹훅</label>
+    <select id="wh_{{ c.id }}" name="webhook_id">
+      <option value="">지정 안 함(기본 웹훅)</option>
+      {% for w in webhooks %}<option value="{{ w.id }}" {% if c.webhook_id == w.id %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="row"><button type="submit" class="primary">저장</button></div>
+</form>
+{% else %}
+<p class="hint">아직 카테고리가 없습니다.</p>
+{% endfor %}
+
+<h2>카테고리 추가</h2>
+<form method="post" action="/categories/add" class="panel">
+  <div class="field">
+    <label for="new_name">이름</label>
+    <input id="new_name" name="name" maxlength="40" required>
+  </div>
+  <div class="row"><button type="submit" class="primary">추가</button></div>
+</form>
+{% endblock %}

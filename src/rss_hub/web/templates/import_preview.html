@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}가져오기 미리보기 · RSS Hub{% endblock %}
+{% block content %}
+<h1>가져오기 미리보기</h1>
+
+<p>신규 <strong>{{ preview.new_count }}</strong> · 중복 <strong>{{ preview.duplicate_count }}</strong> · 오류 <strong>{{ preview.error_count }}</strong></p>
+<p class="note">아직 저장하지 않았습니다. 확정해야 구독 목록에 반영되고, 미리보기는 60분 동안만 보관됩니다.</p>
+
+<form method="post" action="/import/confirm">
+  <input type="hidden" name="token" value="{{ token }}">
+
+  {% if preview.new_categories %}
+  <div class="panel">
+    <label class="check-row"><input type="checkbox" name="import_categories" value="yes" checked>OPML 폴더를 카테고리로 가져오기</label>
+    <p class="note">새 카테고리: {{ preview.new_categories | join(', ') }}</p>
+  </div>
+  {% endif %}
+
+  <ul class="checks">
+  {% for item in preview.items %}
+    <li class="check" data-status="{{ item.status }}">
+      <span class="label">
+        {% if item.status == new_status %}✔{% elif item.status == 'duplicate' %}↺{% else %}✖{% endif %}
+        {{ item.name }}
+        {% if item.category %}<span class="hint">[{{ item.category }}]</span>{% endif %}
+        <br><span class="hint">{{ item.url }}</span>
+        {% if item.status != new_status %}<br><span class="hint">{{ item.reason }}</span>{% endif %}
+      </span>
+    </li>
+    {% if item.status == new_status and item.preset %}
+    <li class="panel">
+      <label class="check-row"><input type="checkbox" name="preset_{{ item.index }}" value="yes" checked>프리셋 제안: {{ preset_labels[item.preset] }}</label>
+    </li>
+    {% endif %}
+  {% endfor %}
+  </ul>
+
+  <div class="row">
+    <button type="submit" class="primary">확정</button>
+  </div>
+</form>
+<form method="post" action="/import/cancel" class="row">
+  <input type="hidden" name="token" value="{{ token }}">
+  <button type="submit">취소</button>
+</form>
+{% endblock %}

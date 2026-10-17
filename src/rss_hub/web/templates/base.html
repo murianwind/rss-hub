@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{% block title %}RSS Hub{% endblock %}</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1c1c21; --muted: #62626d; --panel: #f3f3f6; --line: #d6d6de;
+  --accent: #2155d4; --accent-fg: #ffffff; --ok: #17803a; --todo: #a15c00; --error: #b3261e;
+  color-scheme: light;
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111114; --fg: #ececf1; --muted: #a0a0ad; --panel: #1c1c22; --line: #34343e;
+    --accent: #7ea2ff; --accent-fg: #0c1020; --ok: #5fd08a; --todo: #f0b45a; --error: #ff8a80;
+    color-scheme: dark;
+  }
+}
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; -webkit-text-size-adjust: 100%; }
+header { border-bottom: 1px solid var(--line); }
+nav { max-width: 720px; margin: 0 auto; padding: 0 16px; display: flex; gap: 8px; }
+nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; color: var(--fg); text-decoration: none; }
+nav a:hover, nav a:focus-visible { color: var(--accent); }
+main { max-width: 720px; margin: 0 auto; padding: 16px 16px 48px; }
+h1 { font-size: 1.25rem; margin: 8px 0 12px; }
+h2 { font-size: 1.05rem; margin: 28px 0 8px; }
+p { margin: 0 0 12px; }
+.note, .hint { color: var(--muted); font-size: 0.9rem; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+.checks { list-style: none; padding: 0; margin: 0 0 12px; }
+.check { display: flex; justify-content: space-between; align-items: center; min-height: 44px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.state.ok { color: var(--ok); font-weight: 600; }
+.state.todo { color: var(--todo); font-weight: 600; }
+.field { margin-bottom: 12px; }
+label { display: block; font-weight: 600; margin-bottom: 4px; }
+input[type=text], input[type=password], select { width: 100%; min-height: 44px; padding: 8px 10px; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
+.check-row { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+.check-row input { width: 20px; height: 20px; }
+button { font: inherit; min-height: 44px; padding: 8px 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); }
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+button.danger { color: var(--error); }
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.error { color: var(--error); margin: 4px 0 0; font-size: 0.9rem; }
+.banner { padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; background: var(--panel); border: 1px solid var(--ok); }
+.banner.error { border-color: var(--error); color: var(--error); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.history { list-style: none; padding: 0; margin: 0; font-size: 0.9rem; }
+.history li { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.history time { color: var(--muted); margin-right: 8px; }
+</style>
+</head>
+<body>
+<header><nav><a href="/">상태</a><a href="/feeds">피드</a><a href="/import">가져오기</a><a href="/categories">카테고리</a><a href="/topics">주제</a><a href="/settings">설정</a></nav></header>
+<main>
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

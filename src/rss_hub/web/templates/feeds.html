@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}피드 · RSS Hub{% endblock %}
+{% block content %}
+<h1>피드</h1>
+<p class="note">웹훅을 지정한 피드의 알림은 그 웹훅으로 가고 기본 웹훅에서는 빠집니다. 카테고리에 속한 피드는 카테고리의 웹훅을 따르며, 피드마다 웹훅을 지정할 수 없습니다. 카테고리에서 빼면 다시 지정할 수 있습니다.</p>
+
+{% if notice %}<div class="banner" role="status">{{ notice }}</div>{% endif %}
+{% if error %}<div class="banner error" role="alert">{{ error }}</div>{% endif %}
+
+{% for f in feeds %}
+<div class="panel">
+  <p><strong>{{ f.name }}</strong>
+    {% if f.status == 'baseline_pending' %}<span class="hint">첫 점검 대기</span>{% endif %}
+    {% if f.fail_count %}<span class="hint">연속 실패 {{ f.fail_count }}회{% if f.last_error %}: {{ f.last_error }}{% endif %}</span>{% endif %}
+    <br><span class="hint">{{ f.url }}</span></p>
+  <form method="post" action="/feeds/{{ f.id }}/category" class="field">
+    <label for="cat_{{ f.id }}">카테고리</label>
+    <select id="cat_{{ f.id }}" name="category_id">
+      <option value="">없음</option>
+      {% for c in categories %}<option value="{{ c.id }}" {% if f.category_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+    </select>
+    <button type="submit">저장</button>
+  </form>
+  {% if f.category_id %}
+  <p class="hint">웹훅: 카테고리 '{{ category_names[f.category_id] }}'의 설정을 따릅니다.</p>
+  {% else %}
+  <form method="post" action="/feeds/{{ f.id }}/webhook" class="field">
+    <label for="wh_{{ f.id }}">웹훅</label>
+    <select id="wh_{{ f.id }}" name="webhook_id">
+      <option value="">지정 안 함(기본 웹훅)</option>
+      {% for w in webhooks %}<option value="{{ w.id }}" {% if f.webhook_id == w.id %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+    </select>
+    <button type="submit">저장</button>
+  </form>
+  {% endif %}
+</div>
+{% else %}
+<p class="hint">등록된 피드가 없습니다. <a href="/import">피드 가져오기</a>로 추가하세요.</p>
+{% endfor %}
+{% endblock %}

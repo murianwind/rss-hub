@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}피드 가져오기 · RSS Hub{% endblock %}
+{% block content %}
+<h1>피드 가져오기</h1>
+
+{% if notice %}<div class="banner" role="status">{{ notice }}</div>{% endif %}
+{% if error %}<div class="banner error" role="alert">{{ error }}</div>{% endif %}
+
+<div class="panel">
+  <p>기존 구독 목록을 <strong>OPML</strong> 파일로 올리면, 저장하기 전에 신규, 중복, 오류를 먼저 보여 줍니다.</p>
+  <p class="note">최대 5MB, 한 번에 2000개까지. 사설망, 내부 주소(192.168.x.x, localhost 등)는 허용하지 않습니다.</p>
+  <form method="post" action="/import/preview" enctype="multipart/form-data">
+    <div class="field">
+      <label for="file">파일 선택</label>
+      <input type="file" id="file" name="file" accept=".opml,.xml">
+    </div>
+    <button type="submit" class="primary">미리보기</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}상태 · RSS Hub{% endblock %}
+{% block content %}
+<h1>상태</h1>
+
+{% if waiting_for_address %}
+<div class="banner error" role="alert">서비스 주소 필요: 발송을 기다리는 글이 {{ waiting_for_address }}개 있습니다. <a href="/settings">설정 화면</a>에서 서비스 주소를 지정하세요.</div>
+{% endif %}
+
+<h2>현재 상태</h2>
+<ul class="checks">
+  <li class="check"><span class="label">발송 대기 글</span><span class="state">{{ ready_count }}개</span></li>
+  <li class="check"><span class="label">요약 대기 글</span><span class="state">{{ collected_count }}개</span></li>
+  <li class="check"><span class="label">오늘 LLM 호출</span><span class="state">{{ llm_calls_today }}회</span></li>
+  <li class="check"><span class="label">실패 피드</span><span class="state">{{ failing_feeds | length }}개</span></li>
+</ul>
+{% if failing_feeds %}
+<ul class="checks">
+{% for f in failing_feeds %}
+  <li class="check"><span class="label">{{ f.name }} <span class="hint">{{ f.last_error or '' }}</span></span><span class="state todo">연속 {{ f.fail_count }}회</span></li>
+{% endfor %}
+</ul>
+{% endif %}
+
+<h2>작업</h2>
+<ul class="checks">
+{% for job in jobs %}
+  <li class="check"><span class="label">{{ job.label }} <span class="hint">마지막 성공 {{ job.last_ok or '없음' }}{% if job.skipped %} · 건너뜀 {{ job.skipped }}회{% endif %}</span></span><span class="state {{ 'ok' if job.status == 'ok' else 'todo' }}">{{ job.status or '대기' }}</span></li>
+{% endfor %}
+</ul>
+
+<h2>설정 점검</h2>
+<ul class="checks">
+{% for item in checklist %}
+  <li class="check" data-item="{{ item.key }}" data-ready="{{ 'true' if item.ready else 'false' }}"><span class="label">{{ item.label }}</span><span class="state {{ 'ok' if item.ready else 'todo' }}">{{ '설정됨' if item.ready else '미설정' }}</span></li>
+{% endfor %}
+</ul>
+
+{% if all_ready %}
+<p class="note">필요한 설정이 모두 채워졌습니다.</p>
+{% else %}
+<p class="note">아래 항목은 <a href="/settings">설정 화면</a>에서 채워 주세요.</p>
+{% endif %}
+
+<div class="panel">
+  <p class="note">버전 {{ version }}</p>
+</div>
+{% endblock %}

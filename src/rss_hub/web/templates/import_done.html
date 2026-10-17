@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}가져오기 결과 · RSS Hub{% endblock %}
+{% block content %}
+<h1>가져오기 결과</h1>
+
+<div class="banner" role="status">신규 {{ result.created }}개 · 중복 {{ result.duplicate }}개 · 오류 {{ result.error }}개</div>
+{% if result.categories_created %}<p>새 카테고리 {{ result.categories_created }}개를 만들었습니다.</p>{% endif %}
+<p class="note">새로 등록한 피드는 첫 점검에서 지금 있는 글을 "이미 본 글"로만 기록합니다. 그래서 기존에 보낸 글이 다시 나가지 않습니다.</p>
+<p><a href="/">상태 화면으로</a> · <a href="/import">다른 파일 가져오기</a></p>
+{% endblock %}

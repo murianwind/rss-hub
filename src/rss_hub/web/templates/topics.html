@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}주제 알림 · RSS Hub{% endblock %}
+{% block content %}
+<h1>주제 알림</h1>
+<p class="note">글이 어떤 주제에 해당하면, 원래 가는 웹훅에 더해 그 주제의 웹훅으로도 한 번 더 보냅니다. LLM이 요약하면서 주제를 고르고, 키워드를 등록했다면 글에 키워드가 하나라도 있어야 해당합니다(키워드를 비워 두면 LLM의 판단만 씁니다).</p>
+
+{% if notice %}<div class="banner" role="status">{{ notice }}</div>{% endif %}
+{% if error %}<div class="banner error" role="alert">{{ error }}</div>{% endif %}
+
+{% for t in topics %}
+<form method="post" action="/topics/{{ t.id }}/update" class="panel">
+  <div class="field">
+    <label for="name_{{ t.id }}">이름</label>
+    <input id="name_{{ t.id }}" name="name" value="{{ t.name }}" maxlength="40" required>
+  </div>
+  <div class="field">
+    <label for="desc_{{ t.id }}">설명 <span class="hint">LLM이 주제를 이해하는 데 쓰입니다</span></label>
+    <input id="desc_{{ t.id }}" name="description" value="{{ t.description }}" maxlength="200">
+  </div>
+  <div class="field">
+    <label for="kw_{{ t.id }}">키워드 <span class="hint">쉼표나 줄바꿈으로 구분</span></label>
+    <textarea id="kw_{{ t.id }}" name="keywords" rows="3">{{ t.keywords | join(', ') }}</textarea>
+  </div>
+  <div class="field">
+    <label for="wh_{{ t.id }}">웹훅</label>
+    <select id="wh_{{ t.id }}" name="webhook_id">
+      <option value="">지정 안 함(알림만 판별)</option>
+      {% for w in webhooks %}<option value="{{ w.id }}" {% if t.webhook_id == w.id %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <label class="check-row"><input type="checkbox" name="enabled" value="yes" {% if t.enabled %}checked{% endif %}>사용</label>
+  <div class="row"><button type="submit" class="primary">저장</button></div>
+</form>
+<form method="post" action="/topics/{{ t.id }}/delete" class="row">
+  <label class="check-row"><input type="checkbox" name="confirm" value="yes">'{{ t.name }}' 삭제합니다</label>
+  <button type="submit" class="danger">삭제</button>
+</form>
+{% endfor %}
+
+<h2>주제 추가</h2>
+<form method="post" action="/topics/add" class="panel">
+  <div class="field">
+    <label for="new_name">이름</label>
+    <input id="new_name" name="name" maxlength="40" required>
+  </div>
+  <div class="field">
+    <label for="new_desc">설명</label>
+    <input id="new_desc" name="description" maxlength="200">
+  </div>
+  <div class="field">
+    <label for="new_kw">키워드</label>
+    <textarea id="new_kw" name="keywords" rows="3"></textarea>
+  </div>
+  <div class="field">
+    <label for="new_wh">웹훅</label>
+    <select id="new_wh" name="webhook_id">
+      <option value="">지정 안 함</option>
+      {% for w in webhooks %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <label class="check-row"><input type="checkbox" name="enabled" value="yes" checked>사용</label>
+  <div class="row"><button type="submit" class="primary">추가</button></div>
+</form>
+{% endblock %}

@@ -1,0 +1,145 @@
+"""FastAPI 앱: 상태, 설정 화면과 /healthz.
+
+설정은 환경 변수가 아니라 화면에서 하고 DB에 저장한다. 앱을 만들 때는 디스크를 건드리지 않고,
+DB는 처음 필요할 때 만들어진다.
+"""
+
+import logging
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
+from datetime import timedelta
+from pathlib import Path
+
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import PlainTextResponse
+from fastapi.templating import Jinja2Templates
+
+from rss_hub.jobs.runner import JobRunner
+from rss_hub.services.clock import Clock, SystemClock
+from rss_hub.services.importer import ImportService
+from rss_hub.services.settings import SettingsService
+from rss_hub.storage.articles import ArticleRepository
+from rss_hub.storage.database import Database
+from rss_hub.storage.feeds import FeedRepository
+from rss_hub.storage.import_staging import ImportStagingRepository
+from rss_hub.storage.job_runs import JobRunRepository
+from rss_hub.storage.llm_usage import LlmUsageRepository
+from rss_hub.storage.topics import TopicRepository
+from rss_hub.version import get_version
+from rss_hub.web.admin import build_admin_router
+from rss_hub.web.articles import build_article_router
+from rss_hub.web.categories import build_category_router
+from rss_hub.web.feeds import build_feed_router
+from rss_hub.web.health import data_dir_is_writable
+from rss_hub.web.importer import build_import_router
+from rss_hub.web.security import SAFE_METHODS, SECURITY_HEADERS, request_is_same_origin
+from rss_hub.web.topics import build_topic_router
+
+logger = logging.getLogger(__name__)
+
+STALE_MINUTES = 15  # 수집이 이만큼 멈춰 있으면 /healthz가 503으로 답한다
+SHUTDOWN_WAIT_SECONDS = 30.0
+DEFAULT_DATA_DIR = Path("/data")
+DATABASE_FILENAME = "rss_hub.db"
+TEMPLATE_DIR = Path(__file__).parent / "templates"
+REJECTED_MESSAGE = "요청이 거부되었습니다(출처가 다릅니다)."
+
+
+def create_app(
+    data_dir: Path = DEFAULT_DATA_DIR,
+    clock: Clock | None = None,
+    *,
+    runner_factory: Callable[[Database, Clock], JobRunner] | None = None,
+) -> FastAPI:
+    # 인증 없이 외부에 열리는 서비스라서 API 문서 화면과 스키마는 내놓지 않는다
+    app = FastAPI(title="RSS Hub", docs_url=None, redoc_url=None, openapi_url=None)
+
+    database = Database(data_dir / DATABASE_FILENAME)
+    app_clock = clock or SystemClock()
+    service = SettingsService(database, app_clock)
+    app.state.settings_service = service
+    templates = Jinja2Templates(directory=TEMPLATE_DIR)
+    articles = ArticleRepository(database, app_clock)
+    feeds = FeedRepository(database, app_clock)
+    job_runs = JobRunRepository(database, app_clock)
+    app.include_router(
+        build_admin_router(
+            service,
+            templates,
+            articles,
+            feeds=feeds,
+            job_runs=job_runs,
+            usage=LlmUsageRepository(database, app_clock),
+            clock=app_clock,
+        )
+    )
+    app.include_router(build_article_router(articles))
+    topics = TopicRepository(database, app_clock)
+    importer = ImportService(
+        feeds=feeds, staging=ImportStagingRepository(database, app_clock), clock=app_clock
+    )
+    app.state.importer = importer
+    app.state.topics = topics
+    runner = runner_factory(database, app_clock) if runner_factory else None
+    app.state.runner = runner
+    created_at = app_clock.now()
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        # 서버가 실제로 시작될 때 처음 설치용 기본 주제(OTT)를 만든다.
+        # 앱을 만드는 것만으로는 디스크를 건드리지 않는다(/healthz가 파일을 만들지 않게).
+        try:
+            topics.ensure_defaults()
+        except Exception:
+            logger.exception(
+                "기본 주제를 만들지 못했습니다"
+            )  # 데이터 폴더 문제는 /healthz가 알린다
+        if runner is not None:
+            runner.start()
+        try:
+            yield
+        finally:
+            if runner is not None:  # 진행 중인 작업(발송 등)을 끝내고 멈춘다
+                runner.shutdown(SHUTDOWN_WAIT_SECONDS)
+
+    app.router.lifespan_context = lifespan
+    app.include_router(build_import_router(importer, templates))
+    app.include_router(build_topic_router(topics, service, templates))
+    app.include_router(build_category_router(feeds, service, templates))
+    app.include_router(build_feed_router(feeds, service, templates))
+
+    @app.middleware("http")
+    async def protect(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        if request.method not in SAFE_METHODS and not request_is_same_origin(request.headers):
+            response: Response = PlainTextResponse(REJECTED_MESSAGE, status_code=403)
+        else:
+            response = await call_next(request)
+        for name, value in SECURITY_HEADERS.items():
+            response.headers.setdefault(name, value)
+        return response
+
+    @app.get("/healthz")
+    def healthz(response: Response) -> dict[str, str | None]:
+        if not data_dir_is_writable(data_dir):
+            response.status_code = 503
+            return {"status": "error", "reason": "data_dir_not_writable"}
+        body: dict[str, str | None] = {"status": "ok", "version": get_version()}
+        if runner is None:
+            return body
+        runs = job_runs.all()
+        for name in ("collect", "summarize", "deliver"):
+            ok_at = runs[name].last_ok_at if name in runs else None
+            body[f"last_{name}"] = None if ok_at is None else ok_at.isoformat()
+        # 수집이 오래 멈춰 있으면 컨테이너를 비정상으로 표시한다.
+        # 방금 시작해서 아직 한 번도 안 돌았다면 시작 시각을 기준으로 한다.
+        interval = service.snapshot().collect_interval_minutes
+        limit = timedelta(minutes=max(STALE_MINUTES, 3 * interval))
+        last_ok = runs["collect"].last_ok_at if "collect" in runs else None
+        if app_clock.now() - (last_ok or created_at) > limit:
+            response.status_code = 503
+            body["status"] = "stale"
+        return body
+
+    return app
