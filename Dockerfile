@@ -1,14 +1,14 @@
 # syntax=docker/dockerfile:1
 
 # ---- 1단계: 패키지 설치 ----
-FROM python:3.12-slim AS build
+FROM python:3.14-slim AS build
 WORKDIR /app
 COPY pyproject.toml ./
 COPY src ./src
 RUN pip install --no-cache-dir --prefix=/install .
 
 # ---- 2단계: 실행 이미지 ----
-FROM python:3.12-slim
+FROM python:3.14-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
