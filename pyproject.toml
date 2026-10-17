@@ -8,7 +8,7 @@ dependencies = [
     "uvicorn==0.54.0",
     "jinja2==3.1.6",
     "python-multipart==0.0.32",
-    "requests==2.34.2",
+    "requests==2.33.1",
     "feedparser==6.0.14",
     "defusedxml==0.7.1",
     "tzdata",  # Windows와 일부 슬림 이미지에는 시스템 시간대 데이터베이스가 없다
@@ -79,6 +79,12 @@ strict = true
 [[tool.mypy.overrides]]
 module = ["feedparser", "feedparser.*", "requests", "requests.*", "defusedxml", "defusedxml.*"]
 ignore_missing_imports = true  # 이 라이브러리들은 타입 정보를 제공하지 않는다
+
+# requests의 HTTPAdapter를 상속한다. 타입 정보가 없는 환경(Any)과 있는 환경(types-requests가 설치된 CI)에서
+# 결과가 같도록, 줄마다 "type: ignore"를 달지 않고 이 모듈에서만 허용한다.
+[[tool.mypy.overrides]]
+module = "rss_hub.adapters.guarded_http"
+disallow_subclassing_any = false
 
 [tool.coverage.run]
 source = ["src/rss_hub"]

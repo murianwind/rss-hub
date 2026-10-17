@@ -49,7 +49,7 @@ def build_guarded_session(forbid_address: Callable[[str], bool]) -> requests.Ses
     class GuardedSecurePool(HTTPSConnectionPool):
         ConnectionCls = GuardedSecureConnection
 
-    class GuardedAdapter(HTTPAdapter):  # type: ignore[misc]  # requests는 타입 정보가 없다
+    class GuardedAdapter(HTTPAdapter):
         def init_poolmanager(self, *args: Any, **kwargs: Any) -> None:
             super().init_poolmanager(*args, **kwargs)
             self.poolmanager.pool_classes_by_scheme = {
