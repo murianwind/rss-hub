@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>날짜 없는 피드</title>
+    <item><title>날짜 없는 글</title><link>https://nodate.example.com/1</link><guid>nodate-1</guid></item>
+  </channel>
+</rss>

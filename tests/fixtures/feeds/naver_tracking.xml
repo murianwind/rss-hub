@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>네이버 블로그</title>
+    <item>
+      <title>추적 파라미터가 붙은 글</title>
+      <link>https://blog.naver.com/abc/123?fromRss=true&amp;trackingCode=rss</link>
+      <guid>https://blog.naver.com/abc/123?fromRss=true&amp;trackingCode=rss</guid>
+      <pubDate>Fri, 16 Oct 2026 02:00:00 +0900</pubDate>
+    </item>
+  </channel>
+</rss>

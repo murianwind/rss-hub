@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>예시 블로그</title>
+    <link>https://blog.example.com</link>
+    <description>테스트용 피드</description>
+    <item>
+      <title>첫 번째 글</title>
+      <link>https://blog.example.com/posts/1</link>
+      <guid>https://blog.example.com/posts/1</guid>
+      <pubDate>Fri, 16 Oct 2026 01:30:00 +0900</pubDate>
+      <description>&lt;p&gt;안녕하세요&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>두 번째 글</title>
+      <link>https://blog.example.com/posts/2</link>
+      <guid>https://blog.example.com/posts/2</guid>
+      <pubDate>Thu, 15 Oct 2026 10:00:00 +0900</pubDate>
+      <description>어제 글</description>
+    </item>
+  </channel>
+</rss>

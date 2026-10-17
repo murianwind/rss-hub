@@ -1,0 +1,481 @@
+{
+  "meta": {
+    "tz": "Asia/Seoul",
+    "target_date": "2026-10-16",
+    "legacy_files": [
+      "rss_collector.py",
+      "rss_gizmodo_collector.py",
+      "rss_gizmodo_reporter.py",
+      "rss_gizmodo_translator.py",
+      "rss_llm.py",
+      "rss_reporter.py",
+      "rss_translator.py"
+    ],
+    "how_to_read": {
+      "parity": "새 구현이 같은 입력에 같은 결과를 내야 한다.",
+      "known_defects": "레거시가 틀린 케이스. 새 구현은 new_expected를 따라야 한다.",
+      "invariants": "정확한 값이 아니라 만족해야 하는 성질."
+    }
+  },
+  "normalize_guid": {
+    "parity": [
+      {
+        "input": "https://blog.naver.com/abc/123?fromRss=true&trackingCode=rss",
+        "expected": "https://blog.naver.com/abc/123"
+      },
+      {
+        "input": "https://blog.naver.com/abc/123?fromRss=true&trackingCode=rss&x=1",
+        "expected": "https://blog.naver.com/abc/123?x=1"
+      },
+      {
+        "input": "https://example.com/p?a=1&a=2",
+        "expected": "https://example.com/p?a=1"
+      },
+      {
+        "input": "https://example.com/p?q=hello world&z=%EA%B0%80",
+        "expected": "https://example.com/p?q=hello+world&z=%EA%B0%80"
+      },
+      {
+        "input": "https://gizmodo.com/?p=123",
+        "expected": "https://gizmodo.com/?p=123"
+      },
+      {
+        "input": "tag:example.com,2026:post-1",
+        "expected": "tag:example.com,2026:post-1"
+      },
+      {
+        "input": "urn:uuid:1225c695-cfb8-4ebb-aaaa-80da344efa6a",
+        "expected": "urn:uuid:1225c695-cfb8-4ebb-aaaa-80da344efa6a"
+      },
+      {
+        "input": "https://example.com/post#frag",
+        "expected": "https://example.com/post#frag"
+      },
+      {
+        "input": "https://example.com/p?empty=&k=v",
+        "expected": "https://example.com/p?empty=&k=v"
+      },
+      {
+        "input": "",
+        "expected": ""
+      },
+      {
+        "input": null,
+        "expected": null
+      }
+    ],
+    "idempotent_for_all_inputs": true
+  },
+  "guid_for": {
+    "parity": [
+      {
+        "entry": {
+          "id": "https://x.com/a?trackingCode=1"
+        },
+        "expected": "https://x.com/a"
+      },
+      {
+        "entry": {
+          "guid": "g1"
+        },
+        "expected": "g1"
+      },
+      {
+        "entry": {
+          "link": "https://x.com/l?fromRss=true"
+        },
+        "expected": "https://x.com/l"
+      },
+      {
+        "entry": {
+          "title": "t",
+          "summary": "s"
+        },
+        "expected": "4402abb98f9559cbfb6d73029f928227b498069b"
+      }
+    ]
+  },
+  "parsed_entry_datetime": {
+    "parity": [
+      {
+        "entry": {
+          "published_parsed": [
+            2026,
+            10,
+            15,
+            16,
+            30,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "expected_iso": "2026-10-16T01:30:00+09:00",
+        "expected_date": "2026-10-16"
+      },
+      {
+        "entry": {
+          "updated_parsed": [
+            2026,
+            10,
+            16,
+            0,
+            5,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "expected_iso": "2026-10-16T09:05:00+09:00",
+        "expected_date": "2026-10-16"
+      },
+      {
+        "entry": {
+          "published": "Fri, 16 Oct 2026 01:30:00 +0900"
+        },
+        "expected_iso": "2026-10-16T01:30:00+09:00",
+        "expected_date": "2026-10-16"
+      },
+      {
+        "entry": {
+          "published": "Fri, 16 Oct 2026 01:30:00 GMT"
+        },
+        "expected_iso": "2026-10-16T10:30:00+09:00",
+        "expected_date": "2026-10-16"
+      },
+      {
+        "entry": {
+          "published": "2026-10-16T01:30:00Z"
+        },
+        "expected_iso": "2026-10-16T10:30:00+09:00",
+        "expected_date": "2026-10-16"
+      },
+      {
+        "entry": {
+          "published": "2026-10-16T01:30:00"
+        },
+        "expected_iso": "2026-10-16T01:30:00+09:00",
+        "expected_date": "2026-10-16"
+      },
+      {
+        "entry": {
+          "published": "Fri, 16 Oct 2026 01:30:00"
+        },
+        "expected_iso": "2026-10-16T01:30:00+09:00",
+        "expected_date": "2026-10-16"
+      },
+      {
+        "entry": {
+          "published": "not a date"
+        },
+        "expected_iso": null,
+        "expected_date": null
+      },
+      {
+        "entry": {},
+        "expected_iso": null,
+        "expected_date": null
+      }
+    ]
+  },
+  "is_korean": {
+    "parity": [
+      {
+        "text": "",
+        "expected": false
+      },
+      {
+        "text": "<p></p>",
+        "expected": false
+      },
+      {
+        "text": "hello world",
+        "expected": false
+      },
+      {
+        "text": "안녕 hello world this is a long english sentence okay",
+        "expected": false
+      },
+      {
+        "text": "가aaaaaaaa",
+        "expected": true
+      },
+      {
+        "text": "가aaaaaaaaa",
+        "expected": true
+      },
+      {
+        "text": "가aaaaaaaaaa",
+        "expected": false
+      }
+    ]
+  },
+  "needs_retranslation": {
+    "parity": [
+      {
+        "item": {},
+        "expected": true
+      },
+      {
+        "item": {
+          "translated": "ok",
+          "translated_model": "openrouter/x"
+        },
+        "expected": false
+      },
+      {
+        "item": {
+          "translated": "ok",
+          "translated_model": "fallback"
+        },
+        "expected": true
+      },
+      {
+        "item": {
+          "translated": "ok",
+          "translated_model": "fallback-final"
+        },
+        "expected": false
+      },
+      {
+        "item": {
+          "translated": "TITLE: x"
+        },
+        "expected": true
+      },
+      {
+        "item": {
+          "translated": "We need to translate this"
+        },
+        "expected": true
+      },
+      {
+        "item": {
+          "translated": "漢字 포함",
+          "translated_model": "m"
+        },
+        "expected": true
+      },
+      {
+        "item": {
+          "translated": "good",
+          "translated_model": "korean-summary"
+        },
+        "expected": true
+      }
+    ]
+  },
+  "desired_checks_per_hour": {
+    "parity": [
+      {
+        "target_date_count": 0,
+        "recent_count_7d": 0,
+        "expected_checks": 1,
+        "expected_score": 0
+      },
+      {
+        "target_date_count": 0,
+        "recent_count_7d": 2,
+        "expected_checks": 2,
+        "expected_score": 20
+      },
+      {
+        "target_date_count": 0,
+        "recent_count_7d": 6,
+        "expected_checks": 2,
+        "expected_score": 60
+      },
+      {
+        "target_date_count": 1,
+        "recent_count_7d": 1,
+        "expected_checks": 2,
+        "expected_score": 110
+      },
+      {
+        "target_date_count": 2,
+        "recent_count_7d": 0,
+        "expected_checks": 2,
+        "expected_score": 200
+      },
+      {
+        "target_date_count": 0,
+        "recent_count_7d": 7,
+        "expected_checks": 3,
+        "expected_score": 70
+      },
+      {
+        "target_date_count": 3,
+        "recent_count_7d": 0,
+        "expected_checks": 3,
+        "expected_score": 300
+      }
+    ]
+  },
+  "current_slot": {
+    "parity": [
+      {
+        "minute": 0,
+        "expected": 0
+      },
+      {
+        "minute": 4,
+        "expected": 0
+      },
+      {
+        "minute": 5,
+        "expected": 1
+      },
+      {
+        "minute": 59,
+        "expected": 11
+      }
+    ]
+  },
+  "schedule": {
+    "invariants": {
+      "feeds": 134,
+      "runs_per_hour": 12,
+      "batch_size": 15,
+      "capacity": 180,
+      "every_feed_covered_at_least_once": true,
+      "max_slot_size": 12
+    },
+    "batch_size_for_200_feeds": 17,
+    "known_defects": [
+      {
+        "case": "통계가 없는 첫 실행",
+        "legacy_slots_for_every_slot_feed": 1,
+        "new_expected_slots": 12
+      },
+      {
+        "case": "다른 피드의 활동 점수가 더 높음",
+        "legacy_slots_for_every_slot_feed": 1,
+        "new_expected_slots": 12
+      }
+    ]
+  },
+  "ott_gate": {
+    "parity": [
+      {
+        "title": "New Netflix drama",
+        "content": "",
+        "is_ott": true,
+        "expected": true
+      },
+      {
+        "title": "Apple event recap",
+        "content": "",
+        "is_ott": true,
+        "expected": false
+      },
+      {
+        "title": "스트리밍 서비스 요금",
+        "content": "",
+        "is_ott": true,
+        "expected": true
+      },
+      {
+        "title": "movie night",
+        "content": "",
+        "is_ott": true,
+        "expected": true
+      },
+      {
+        "title": "filmmaker interview",
+        "content": "",
+        "is_ott": true,
+        "expected": false
+      },
+      {
+        "title": "seasoning tips",
+        "content": "",
+        "is_ott": true,
+        "expected": false
+      },
+      {
+        "title": "Season finale",
+        "content": "",
+        "is_ott": true,
+        "expected": true
+      },
+      {
+        "title": "New Netflix drama",
+        "content": "",
+        "is_ott": false,
+        "expected": false
+      },
+      {
+        "title": "New Netflix drama",
+        "content": "",
+        "is_ott": null,
+        "expected": false
+      }
+    ],
+    "known_defects": [
+      {
+        "case": "영문 약어 'ott'가 단어 안에서도 일치(부분 문자열)",
+        "title": "A bottle of water",
+        "legacy": true,
+        "new_expected": false
+      },
+      {
+        "case": "영문 약어 'ott'가 단어 안에서도 일치(부분 문자열)",
+        "title": "Lotto results",
+        "legacy": true,
+        "new_expected": false
+      },
+      {
+        "case": "영문 약어 'ott'가 단어 안에서도 일치(부분 문자열)",
+        "title": "gotta love it",
+        "legacy": true,
+        "new_expected": false
+      },
+      {
+        "case": "'+'로 끝나는 키워드: 공백이 뒤따르면 불일치, 글자가 붙으면 오일치",
+        "title": "Disney+ announces a new slate",
+        "legacy": false,
+        "new_expected": true
+      },
+      {
+        "case": "'+'로 끝나는 키워드: 공백이 뒤따르면 불일치, 글자가 붙으면 오일치",
+        "title": "Paramount+ pricing",
+        "legacy": false,
+        "new_expected": true
+      },
+      {
+        "case": "'+'로 끝나는 키워드: 공백이 뒤따르면 불일치, 글자가 붙으면 오일치",
+        "title": "disney+x launch",
+        "legacy": true,
+        "new_expected": false
+      },
+      {
+        "case": "HTML 태그/속성/URL 안의 단어에도 반응",
+        "title": "Apple event recap",
+        "content": "<img src=\"https://x.com/movie.jpg\"> text",
+        "legacy": true,
+        "new_expected": false
+      },
+      {
+        "case": "HTML 태그/속성/URL 안의 단어에도 반응",
+        "title": "Apple event recap",
+        "content": "<a class=\"trailer-link\">text</a>",
+        "legacy": true,
+        "new_expected": false
+      }
+    ]
+  },
+  "discord_message": {
+    "known_defects": [
+      {
+        "case": "요약이 길면 끝부분(링크)이 잘려 나감",
+        "legacy_input_length": 2583,
+        "legacy_sent_length": 1903,
+        "legacy_link_preserved": false,
+        "new_expected_link_preserved": true,
+        "new_expected_max_length": 1900
+      }
+    ]
+  }
+}
