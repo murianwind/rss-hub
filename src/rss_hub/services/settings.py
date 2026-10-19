@@ -47,6 +47,10 @@ def _bounded(maximum: int) -> Callable[[str], str]:
     return lambda raw: str(parse_positive_int(raw, maximum=maximum))
 
 
+def _bounded_from_zero(maximum: int) -> Callable[[str], str]:
+    return lambda raw: str(parse_positive_int(raw, minimum=0, maximum=maximum))
+
+
 def _base_url(raw: str) -> str:
     return normalize_base_url(raw) if raw.strip() else ""
 
@@ -71,6 +75,18 @@ SETTING_DEFS: tuple[SettingDef, ...] = (
     ),
     SettingDef("slot_batch_size", "슬롯 기본 배치 크기", "15", _bounded(1000)),
     SettingDef("default_max_entries", "피드 기본 최대 검사 항목", "50", _bounded(500)),
+    SettingDef(
+        "baseline_archive_count",
+        "첫 점검 때 보관할 최근 글 수(0이면 보관하지 않음)",
+        "5",
+        _bounded_from_zero(20),
+    ),
+    SettingDef(
+        "article_retention_days",
+        "글 보관 기간(일, 0이면 계속 보관)",
+        "90",
+        _bounded_from_zero(3650),
+    ),
     SettingDef(
         "model_chain",
         "모델 체인",
@@ -104,6 +120,8 @@ class AppSettings:
     deliver_interval_seconds: int
     slot_batch_size: int
     default_max_entries: int
+    baseline_archive_count: int
+    article_retention_days: int
     model_chain: tuple[str, ...]
     llm_daily_cap: int
     llm_warn_percent: int
@@ -168,6 +186,8 @@ class SettingsService:
             deliver_interval_seconds=int(v["deliver_interval_seconds"]),
             slot_batch_size=int(v["slot_batch_size"]),
             default_max_entries=int(v["default_max_entries"]),
+            baseline_archive_count=int(v["baseline_archive_count"]),
+            article_retention_days=int(v["article_retention_days"]),
             model_chain=tuple(v["model_chain"].split(",")),
             llm_daily_cap=int(v["llm_daily_cap"]),
             llm_warn_percent=int(v["llm_warn_percent"]),

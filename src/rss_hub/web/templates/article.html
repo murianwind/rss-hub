@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · RSS Hub{% endblock %}
+{% block body %}
+<div class="reader">
+  <aside class="side">{% include "_sidebar.html" %}</aside>
+  <section>
+    <details class="menu-mobile"><summary>메뉴</summary>{% include "_sidebar.html" %}</details>
+    <article>
+      <h1>{{ title }}</h1>
+      {% if show_original_title %}<p class="hint">{{ article.title }}</p>{% endif %}
+      <p class="meta"><a href="/reader/feed/{{ feed.id }}">{{ feed.name }}</a> · {{ published }}
+        {% for match in topic_matches %}<span class="badge" title="{{ match.keywords | join(', ') }}">{{ match.name }}</span>{% endfor %}</p>
+      {% if topic_matches %}<p class="hint">{% for match in topic_matches %}{{ match.name }}{% if match.keywords %}: 키워드 {{ match.keywords | join(', ') }}{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+      {% if article.summary_ko %}<div class="panel"><strong>요약</strong><p>{{ article.summary_ko }}</p></div>{% endif %}
+      {% if has_original %}<p><a class="button" href="/a/{{ article.id }}/original" target="_blank" rel="noopener noreferrer">원문 보기</a></p>{% endif %}
+      <div class="article-body" {% if lang %}lang="{{ lang }}"{% endif %}>
+        {% if body %}{{ body | safe }}{% else %}<p class="hint">본문이 없습니다. 원문에서 확인하세요.</p>{% endif %}
+      </div>
+    </article>
+  </section>
+</div>
+{% endblock %}

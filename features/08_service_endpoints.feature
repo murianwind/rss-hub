@@ -36,21 +36,21 @@ Feature: 서비스 상태와 임시 글 링크
   # ---------- 임시 글 링크 ----------
 
   @SVC-05 @new
-  Scenario: /a/{id}는 M4 전까지 글의 원문 주소로 이동시킨다
+  Scenario: /a/{id}/original은 글의 원문 주소로 이동시킨다(글 페이지는 /a/{id}, 뷰어 시나리오 참고)
     Given 글 123의 원문 주소는 "https://example.com/original"이다
-    When "/a/123"을 요청한다
+    When "/a/123/original"을 요청한다
     Then 상태 코드는 302이다
     And 이동 주소는 "https://example.com/original"이다
 
   @SVC-06 @new
   Scenario: 없는 글이면 404로 답한다
-    When "/a/999999"를 요청한다
+    When "/a/999999/original"를 요청한다
     Then 상태 코드는 404이다
 
   @SVC-07 @new
   Scenario Outline: 원문 주소가 http, https가 아니면 이동시키지 않는다
     Given 글 124의 원문 주소는 "<link>"이다
-    When "/a/124"를 요청한다
+    When "/a/124/original"를 요청한다
     Then 상태 코드는 404이다
 
     Examples:

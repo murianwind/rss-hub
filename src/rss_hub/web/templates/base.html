@@ -22,8 +22,10 @@
 }
 *, *::before, *::after { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; -webkit-text-size-adjust: 100%; }
+a { color: var(--accent); }
 header { border-bottom: 1px solid var(--line); }
-nav { max-width: 720px; margin: 0 auto; padding: 0 16px; display: flex; gap: 8px; }
+nav { max-width: 720px; margin: 0 auto; padding: 0 16px; display: flex; flex-wrap: wrap; gap: 0 4px; }
+header nav a { white-space: nowrap; }
 nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; color: var(--fg); text-decoration: none; }
 nav a:hover, nav a:focus-visible { color: var(--accent); }
 main { max-width: 720px; margin: 0 auto; padding: 16px 16px 48px; }
@@ -52,12 +54,41 @@ button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible
 .history { list-style: none; padding: 0; margin: 0; font-size: 0.9rem; }
 .history li { padding: 6px 0; border-bottom: 1px solid var(--line); }
 .history time { color: var(--muted); margin-right: 8px; }
+.reader { max-width: 1100px; margin: 0 auto; padding: 16px 16px 48px; display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 28px; align-items: start; }
+.reader nav { display: block; max-width: none; margin: 0; padding: 0; }
+.side { position: sticky; top: 8px; max-height: calc(100vh - 16px); overflow-y: auto; font-size: 0.95rem; }
+.side summary, .menu-mobile summary { cursor: pointer; font-weight: 700; min-height: 36px; display: flex; align-items: center; }
+.side ul, .menu-mobile ul { list-style: none; margin: 0 0 8px; padding: 0 0 0 4px; }
+.side .sub, .menu-mobile .sub { margin-left: 12px; }
+.side .sub summary, .menu-mobile .sub summary { font-weight: 500; }
+.reader nav a { display: block; min-height: 0; padding: 6px 8px; border-radius: 6px; color: var(--fg); text-decoration: none; }
+.reader nav a[aria-current=page] { background: var(--panel); font-weight: 600; color: var(--accent); }
+.menu-mobile { display: none; }
+@media (max-width: 820px) {
+  .reader { display: block; padding-top: 8px; }
+  .side { display: none; }
+  .menu-mobile { display: block; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 10px; padding: 4px 12px; background: var(--panel); }
+}
+.item { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.item .title { font-weight: 600; font-size: 1.05rem; color: var(--fg); text-decoration: none; }
+.item .title:hover { color: var(--accent); }
+.meta { color: var(--muted); font-size: 0.85rem; margin: 2px 0 4px; }
+.badge { display: inline-block; padding: 0 8px; border: 1px solid var(--line); border-radius: 999px; font-size: 0.8rem; margin-right: 4px; }
+.snippet { margin: 4px 0 0; color: var(--muted); font-size: 0.92rem; }
+.pager { display: flex; justify-content: space-between; margin: 20px 0; }
+.button { display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--accent); color: var(--accent); text-decoration: none; }
+.article-body { overflow-wrap: anywhere; }
+.article-body img { max-width: 100%; height: auto; }
+.article-body table { display: block; overflow-x: auto; border-collapse: collapse; }
+.article-body td, .article-body th { border: 1px solid var(--line); padding: 4px 8px; }
+.article-body pre { overflow-x: auto; background: var(--panel); padding: 10px; border-radius: 8px; }
+.article-body blockquote { margin: 0 0 12px; padding-left: 12px; border-left: 3px solid var(--line); color: var(--muted); }
 </style>
 </head>
 <body>
-<header><nav><a href="/">상태</a><a href="/feeds">피드</a><a href="/import">가져오기</a><a href="/categories">카테고리</a><a href="/topics">주제</a><a href="/settings">설정</a></nav></header>
-<main>
+<header><nav><a href="/reader">읽기</a><a href="/">상태</a><a href="/feeds">피드</a><a href="/import">가져오기</a><a href="/categories">카테고리</a><a href="/topics">주제</a><a href="/settings">설정</a></nav></header>
+{% block body %}<main>
 {% block content %}{% endblock %}
-</main>
+</main>{% endblock %}
 </body>
 </html>

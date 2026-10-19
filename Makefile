@@ -22,6 +22,6 @@ typecheck:
 # requests가 읽는 이름이다.
 # tools/는 배포 대상이 아니다.
 deadcode:
-	vulture src tests --min-confidence 60 --ignore-decorators "@given*,@when*,@then*,@pytest.fixture,@app.*,@router.*" --ignore-names "pytestmark,row_factory,do_GET,do_POST,do_DELETE,log_message,daemon_threads,block_on_close,ConnectionCls,pool_classes_by_scheme,trust_env,lifespan_context,handle_starttag"
+	vulture src tests --min-confidence 60 --ignore-decorators "@given*,@when*,@then*,@pytest.fixture,@app.*,@router.*" --ignore-names "pytestmark,row_factory,do_GET,do_POST,do_DELETE,log_message,daemon_threads,block_on_close,ConnectionCls,pool_classes_by_scheme,trust_env,lifespan_context,handle_starttag,handle_endtag"
 
 check: lint typecheck deadcode test

@@ -50,22 +50,71 @@ def test_the_llm_request_has_the_title_and_the_plain_text_excerpt(env):
 def test_the_topics_the_llm_chose_are_recorded_and_unknown_numbers_are_dropped(env):
     first = env.topics.add(TopicFields("OTT", "스트리밍", ("netflix",)))
     second = env.topics.add(TopicFields("게임", "", ()))
-    article_id = env.add_article()
+    article_id = env.add_article(title="Netflix announces a drama")
     env.client.default = reply("t", "s", topics=[second, 999, str(first), True, 1.5, None, second])
     env.summarizer.run()
     assert article(env, article_id).llm_topics == (second, first)
 
 
-def test_the_prompt_lists_only_enabled_topics_with_their_numbers_and_descriptions(env):
-    ott = env.topics.add(TopicFields("OTT", "스트리밍 소식", ()))
-    off = env.topics.add(TopicFields("꺼진 주제", "", ()), enabled=False)
-    game = env.topics.add(TopicFields("게임", "", ()))
-    env.add_article()
+def test_only_topics_whose_keywords_matched_are_listed_in_the_request(env):
+    ott = env.topics.add(TopicFields("OTT", "스트리밍 소식", ("netflix",)))
+    game = env.topics.add(TopicFields("게임", "게임 소식", ("steam",)))
+    off = env.topics.add(TopicFields("꺼진 주제", "", ("netflix",)), enabled=False)
+    env.add_article(title="Netflix announces a drama")
     env.client.default = reply("t", "s")
     env.summarizer.run()
     prompt = env.client.calls[0].prompt
-    assert f"{ott}. OTT: 스트리밍 소식" in prompt and f"{game}. 게임" in prompt
+    assert f"{ott}. OTT: 스트리밍 소식" in prompt and f"{game}. 게임" not in prompt
     assert f"{off}. 꺼진 주제" not in prompt and '"topics"' in prompt
+
+
+def test_the_body_text_counts_for_the_keyword_check_but_markup_does_not(env):
+    env.topics.add(TopicFields("OTT", "스트리밍", ("trailer",)))
+    env.add_article(title="Weekend picks", content="<p>A new <b>trailer</b> today</p>")
+    env.add_article(title="Another", content='<img src="https://x.example.com/trailer.jpg">plain')
+    env.client.default = reply("t", "s")
+    env.summarizer.run()
+    prompts = sorted(call.prompt for call in env.client.calls)
+    assert sum("Candidate topics" in prompt for prompt in prompts) == 1
+
+
+def test_without_a_keyword_match_the_request_has_no_topic_part_and_nothing_is_recorded(env):
+    env.topics.add(TopicFields("OTT", "스트리밍", ("netflix",)))
+    article_id = env.add_article(title="Spring gardening tips")
+    env.client.default = reply(
+        "t", "s", topics=[1]
+    )  # 모델이 멋대로 답해도 후보가 아니라서 무시한다
+    env.summarizer.run()
+    prompt = env.client.calls[0].prompt
+    assert '"topics"' not in prompt and "Candidate topics" not in prompt
+    assert article(env, article_id).llm_topics == ()
+
+
+def test_the_llm_cannot_pick_a_topic_that_was_not_a_candidate(env):
+    ott = env.topics.add(TopicFields("OTT", "스트리밍", ("netflix",)))
+    game = env.topics.add(TopicFields("게임", "", ("steam",)))
+    article_id = env.add_article(title="Netflix announces a drama")
+    env.client.default = reply("t", "s", topics=[ott, game])
+    env.summarizer.run()
+    assert article(env, article_id).llm_topics == (ott,)
+
+
+def test_a_topic_without_keywords_is_always_a_candidate(env):
+    topic_id = env.topics.add(TopicFields("보안", "보안 소식", ()))
+    article_id = env.add_article(title="Anything at all")
+    env.client.default = reply("t", "s", topics=[topic_id])
+    env.summarizer.run()
+    assert f"{topic_id}. 보안: 보안 소식" in env.client.calls[0].prompt
+    assert article(env, article_id).llm_topics == (topic_id,)
+
+
+def test_the_candidate_check_costs_no_extra_call(env):
+    env.topics.add(TopicFields("OTT", "스트리밍", ("netflix",)))
+    env.topics.add(TopicFields("게임", "", ()))
+    env.add_article(title="Netflix announces a drama")
+    env.client.default = reply("t", "s")
+    env.summarizer.run()
+    assert len(env.client.calls) == 1
 
 
 def test_without_enabled_topics_the_prompt_does_not_ask_for_topics_and_the_answer_has_none(env):
@@ -77,10 +126,10 @@ def test_without_enabled_topics_the_prompt_does_not_ask_for_topics_and_the_answe
 
 
 def test_a_topic_the_user_turns_off_before_the_summary_is_not_recorded(env):
-    topic_id = env.topics.add(TopicFields("OTT", "", ()))
+    topic_id = env.topics.add(TopicFields("OTT", "", ("phone",)))
     article_id = env.add_article()
     env.client.default = reply("t", "s", topics=[topic_id])
-    env.topics.update(topic_id, TopicFields("OTT", "", ()), webhook_id=None, enabled=False)
+    env.topics.update(topic_id, TopicFields("OTT", "", ("phone",)), webhook_id=None, enabled=False)
     env.summarizer.run()
     assert article(env, article_id).llm_topics == ()
 
@@ -389,3 +438,39 @@ def test_every_required_setting_is_needed_before_summarizing(tmp_path, missing):
     assert report.waiting_for_setup is True
     assert env.client.calls == []
     assert article(env, article_id).status == STATUS_COLLECTED
+
+
+# ---------- 요약 직후 주제 소속 기록(뷰어의 주제별 목록) ----------
+
+
+def test_the_topics_a_summary_confirmed_are_recorded_with_their_keywords_right_away(env):
+    ott = env.topics.add(TopicFields("OTT", "스트리밍", ("netflix", "drama")))
+    env.topics.add(TopicFields("게임", "", ("steam",)))
+    article_id = env.add_article(title="Netflix announces a drama")
+    env.client.default = reply("t", "s", topics=[ott])
+    env.summarizer.run()
+    assert env.topics.matches_for(article_id) == {ott: ("netflix", "drama")}
+
+
+def test_nothing_is_recorded_when_no_topic_is_confirmed(env):
+    env.topics.add(TopicFields("OTT", "스트리밍", ("netflix",)))
+    article_id = env.add_article(title="Netflix announces a drama")
+    env.client.default = reply("t", "s", topics=[])
+    env.summarizer.run()
+    assert env.topics.matches_for(article_id) == {}
+
+
+def test_a_topic_without_keywords_is_recorded_with_an_empty_keyword_list(env):
+    topic_id = env.topics.add(TopicFields("보안", "", ()))
+    article_id = env.add_article(title="Anything")
+    env.client.default = reply("t", "s", topics=[topic_id])
+    env.summarizer.run()
+    assert env.topics.matches_for(article_id) == {topic_id: ()}
+
+
+def test_a_failed_summary_records_no_topics(env):
+    env.topics.add(TopicFields("OTT", "", ("netflix",)))
+    article_id = env.add_article(title="Netflix announces a drama")
+    env.client.default = good("이건 JSON이 아닙니다")
+    env.summarizer.run()
+    assert env.topics.matches_for(article_id) == {}

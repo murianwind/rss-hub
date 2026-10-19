@@ -13,7 +13,7 @@ from tests.fakes.llm_client import reply
 from tests.fakes.llm_env import KEY
 from tests.fakes.web_parts import start_app
 
-bind(globals(), "04_topic_judgement.feature", ["TPC-12", "TPC-13", "TPC-14"])
+bind(globals(), "04_topic_judgement.feature", ["TPC-12", "TPC-13", "TPC-14", "TPC-15"])
 
 
 @pytest.fixture
@@ -89,16 +89,22 @@ def _probe(parts, title):
     parts.response = parts.client.post("/topics/probe", data={"title": title, "body": ""})
 
 
-@then('"OTT"는 LLM 선택, 키워드 "netflix", 결과 "해당"으로 표시된다')
+@then('"OTT"는 키워드 "netflix", LLM 선택, 결과 "해당"으로 표시된다')
 def _ott_row(parts):
     text = row(parts, "OTT")
-    assert "LLM 선택 ·" in text and "키워드 netflix" in text and text.endswith("해당")
+    assert "키워드 netflix" in text and "LLM 선택" in text and text.endswith("해당")
+    assert "묻지 않음" not in text and not text.endswith("해당 안 함")
 
 
-@then('"게임"은 LLM 선택 안 함, 키워드 없음, 결과 "해당 안 함"으로 표시된다')
+@then('"게임"은 키워드 없음, LLM에 묻지 않음, 결과 "해당 안 함"으로 표시된다')
 def _game_row(parts):
     text = row(parts, "게임")
-    assert "LLM 선택 안 함" in text and "키워드 없음" in text and text.endswith("해당 안 함")
+    assert "키워드 없음" in text and "LLM에 묻지 않음" in text and text.endswith("해당 안 함")
+
+
+@then(parsers.re(r'결과에 "(?P<text>[^"]+)"가 표시된다'))
+def _note_shown(parts, text):
+    assert text in re.sub(r"\s+", " ", parts.response.text)
 
 
 @then("LLM 호출은 1번이고 오늘 호출 수가 1 늘어난다")

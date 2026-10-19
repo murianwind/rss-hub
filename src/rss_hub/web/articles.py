@@ -1,4 +1,4 @@
-"""글 주소(/a/{id}): 디스코드 알림의 링크. 뷰어가 생기기 전(M4)에는 원문으로 보낸다."""
+"""글의 원문으로 이동(/a/{id}/original). 글 페이지(/a/{id})는 뷰어(reader.py)가 그린다."""
 
 from urllib.parse import urlsplit
 
@@ -21,8 +21,8 @@ def is_web_link(link: str) -> bool:
 def build_article_router(articles: ArticleRepository) -> APIRouter:
     router = APIRouter()
 
-    @router.get("/a/{article_id}")
-    def open_article(article_id: int) -> Response:
+    @router.get("/a/{article_id}/original")
+    def open_original(article_id: int) -> Response:
         article = articles.get(article_id)
         if article is None or not is_web_link(article.link):
             return PlainTextResponse(NOT_FOUND, status_code=404)

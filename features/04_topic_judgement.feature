@@ -122,12 +122,12 @@ Feature: 주제 판정
   # 새 프롬프트와 키워드를 실제 모델로 확인하는 도구다. 실제 요약과 같은 프롬프트와 게이트웨이를 쓴다.
 
   @TPC-12 @new
-  Scenario: 판별 시험은 켜진 주제마다 LLM의 선택, 키워드, 최종 결과를 보여 준다
+  Scenario: 판별 시험은 주제마다 키워드, LLM에게 물었는지와 선택, 최종 결과를 보여 준다
     Given 주제 "OTT"(키워드 "netflix")와 주제 "게임"(키워드 "steam")이 켜져 있다
     And LLM이 "OTT" 주제를 고른다
     When 제목 "Netflix announces a new show"로 판별을 시험한다
-    Then "OTT"는 LLM 선택, 키워드 "netflix", 결과 "해당"으로 표시된다
-    And "게임"은 LLM 선택 안 함, 키워드 없음, 결과 "해당 안 함"으로 표시된다
+    Then "OTT"는 키워드 "netflix", LLM 선택, 결과 "해당"으로 표시된다
+    And "게임"은 키워드 없음, LLM에 묻지 않음, 결과 "해당 안 함"으로 표시된다
 
   @TPC-13 @new
   Scenario: 판별 시험은 LLM 호출 한 번만 쓰고 글이나 알림을 만들지 않는다
@@ -147,3 +147,10 @@ Feature: 주제 판정
       | situation                                    | message                      |
       | OpenRouter 키가 없고 주제 "OTT"가 켜져 있다 | OpenRouter 키가 설정되지 않았습니다 |
       | 켜진 주제가 하나도 없다                      | 켜진 주제가 없습니다         |
+
+  @TPC-15 @new
+  Scenario: 키워드가 맞은 주제가 없으면 LLM을 호출하지 않고 그 이유를 보여 준다
+    Given 주제 "OTT"가 켜져 있다
+    When 제목 "Spring gardening tips"로 판별을 시험한다
+    Then LLM 호출은 일어나지 않는다
+    And 결과에 "키워드가 맞은 주제가 없어서 LLM을 호출하지 않았습니다"가 표시된다

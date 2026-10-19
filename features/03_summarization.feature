@@ -153,25 +153,27 @@ Feature: 제목 번역과 요약
   # 주제를 판별해도 LLM 호출은 늘지 않는다. 켜진 주제의 번호와 설명을 같은 요청에 넣어서 한 번에 받는다.
 
   @SUM-15 @new
-  Scenario: 켜진 주제의 번호와 설명이 요청에 들어간다
+  Scenario: 키워드가 맞은 주제만 번호와 설명이 요청에 들어간다
+    # 키워드가 먼저 후보를 거르고, LLM은 그 후보만 확인한다. 후보가 아닌 주제는 묻지 않는다
     Given 주제 "OTT"(설명 "스트리밍 소식")와 주제 "게임"이 켜져 있다
     And 꺼진 주제 "보안"이 있다
-    And 영문 글이 수집되어 있다
+    And 제목이 "Netflix announces a new drama"인 영문 글이 수집되어 있다
     And LLM이 제목과 요약만 있고 "topics"가 없는 JSON으로 답한다
     When 요약 작업을 실행한다
-    Then 요청에 "1. OTT: 스트리밍 소식"과 "2. 게임"이 들어 있다
+    Then 요청에 "1. OTT: 스트리밍 소식"이 들어 있다
+    And 요청에 키워드가 맞지 않은 주제 "2. 게임"은 들어 있지 않다
     And 요청에 꺼진 주제 "보안"은 들어 있지 않다
     And LLM 호출은 1번이다
 
-  @SUM-16 @new
-  Scenario: LLM이 고른 주제 번호가 글에 기록되고, 알 수 없는 번호는 걸러진다
+@SUM-16 @new
+  Scenario: LLM이 고른 후보 주제 번호가 글에 기록되고, 알 수 없는 번호는 걸러진다
     Given 주제 "OTT"(설명 "스트리밍 소식")와 주제 "게임"이 켜져 있다
-    And 영문 글이 수집되어 있다
+    And 제목이 "Netflix game adaptation on Steam"인 영문 글이 수집되어 있다
     And LLM이 주제 번호로 1, 99, "2", true를 답한다
     When 요약 작업을 실행한다
     Then 글의 주제 판정은 "OTT"와 "게임"이다
 
-  @SUM-17 @new
+@SUM-17 @new
   Scenario: 켜진 주제가 없으면 요청에 주제 항목을 넣지 않는다
     Given 영문 글이 수집되어 있다
     And LLM이 제목 "애플, 새 폰 공개"과 요약 "애플이 새 폰을 공개했다."로 답한다
@@ -179,3 +181,28 @@ Feature: 제목 번역과 요약
     Then 요청에 "topics"가 들어 있지 않다
     And 글의 상태는 "ready"이다
 
+@SUM-18 @new
+  Scenario: 키워드가 하나도 맞지 않으면 요청에 주제 항목을 넣지 않고 주제 판정도 없다
+    Given 주제 "OTT"(설명 "스트리밍 소식")와 주제 "게임"이 켜져 있다
+    And 영문 글이 수집되어 있다
+    And LLM이 주제 번호로 1, 2를 답한다
+    When 요약 작업을 실행한다
+    Then 요청에 "Candidate topics"가 들어 있지 않다
+    And 글의 주제 판정은 없음으로 기록된다
+
+@SUM-19 @new
+  Scenario: LLM이 후보가 아닌 주제를 골라도 무시한다
+    Given 주제 "OTT"(설명 "스트리밍 소식")와 주제 "게임"이 켜져 있다
+    And 제목이 "Netflix announces a new drama"인 영문 글이 수집되어 있다
+    And LLM이 주제 번호로 1, 2를 답한다
+    When 요약 작업을 실행한다
+    Then 글의 주제 판정은 "OTT"뿐이다
+
+@SUM-20 @new
+  Scenario: 키워드가 없는 주제는 LLM만으로 정하므로 항상 물어본다
+    Given 키워드가 없는 주제 "보안"(설명 "보안 소식")이 켜져 있다
+    And 영문 글이 수집되어 있다
+    And LLM이 주제 번호로 1을 답한다
+    When 요약 작업을 실행한다
+    Then 요청에 "1. 보안: 보안 소식"이 들어 있다
+    And 글의 주제 판정은 "보안"뿐이다

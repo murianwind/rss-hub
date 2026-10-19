@@ -293,3 +293,78 @@ def test_replacing_a_feed_keeps_the_count_but_still_rebuilds(env):
     _, replacement_url = env.add_feed(77)
     env.fetcher.serve(replacement_url, [])
     assert env.service.run_slot().schedule_rebuilt is True
+
+
+# ---------- 첫 점검 때 최근 글을 뷰어용으로 보관 ----------
+
+
+def archived(env):
+    return env.articles.list_by_status("archived")
+
+
+def test_the_first_check_archives_the_five_newest_entries_for_the_viewer(env):
+    feed_id, url = env.add_feed(status=STATUS_BASELINE)
+    items = today(30)
+    env.fetcher.serve(url, items)
+    report = env.collect(feed_id)
+    newest = {e["id"] for e in sorted(items, key=lambda e: e["published"], reverse=True)[:5]}
+    assert {a.guid for a in archived(env)} == newest
+    assert env.collected() == [] and report.baseline_recorded == 30  # 알림 대상은 없다
+
+
+def test_the_number_of_archived_entries_is_a_setting(env):
+    env.settings.update({"baseline_archive_count": "2"})
+    feed_id, url = env.add_feed(status=STATUS_BASELINE)
+    env.fetcher.serve(url, today(10))
+    env.collect(feed_id)
+    assert len(archived(env)) == 2
+
+
+def test_zero_means_nothing_is_archived(env):
+    env.settings.update({"baseline_archive_count": "0"})
+    feed_id, url = env.add_feed(status=STATUS_BASELINE)
+    env.fetcher.serve(url, today(10))
+    env.collect(feed_id)
+    assert archived(env) == []
+
+
+def test_a_feed_with_fewer_entries_than_the_setting_archives_all_of_them(env):
+    feed_id, url = env.add_feed(status=STATUS_BASELINE)
+    env.fetcher.serve(url, today(3))
+    env.collect(feed_id)
+    assert len(archived(env)) == 3
+
+
+def test_entries_of_any_date_are_archived_and_undated_ones_count_as_now(env):
+    feed_id, url = env.add_feed(status=STATUS_BASELINE)
+    env.fetcher.serve(url, [*yesterday(2), entry(published=None)])
+    env.collect(feed_id)
+    assert len(archived(env)) == 3
+    undated = next(a for a in archived(env) if a.published_raw == "")
+    assert undated.published_dt == env.clock.now()
+
+
+def test_only_entries_within_the_feed_limit_are_considered(env):
+    feed_id, url = env.add_feed(status=STATUS_BASELINE, max_entries=3)
+    env.fetcher.serve(url, today(30))
+    env.collect(feed_id)
+    assert len(archived(env)) == 3
+
+
+def test_archived_entries_are_not_collected_again_and_later_new_ones_are_normal(env):
+    feed_id, url = env.add_feed(status=STATUS_BASELINE)
+    items = today(10)
+    env.fetcher.serve(url, items)
+    env.collect(feed_id)
+    new_entry = entry(published="2026-10-16T13:00:00+09:00")
+    env.fetcher.serve(url, [new_entry, *items])
+    report = env.collect(feed_id)
+    assert report.added == 1 and [a.guid for a in env.collected()] == [new_entry["id"]]
+    assert len(archived(env)) == 5
+
+
+def test_a_feed_that_is_already_active_archives_nothing(env):
+    feed_id, url = env.add_feed()
+    env.fetcher.serve(url, today(10))
+    env.collect(feed_id)
+    assert archived(env) == []

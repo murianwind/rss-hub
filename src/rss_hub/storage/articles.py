@@ -12,6 +12,8 @@ from rss_hub.storage.database import Database
 STATUS_COLLECTED = "collected"
 STATUS_READY = "ready"  # 요약(또는 원문 발췌)이 끝나서 발송할 수 있다
 STATUS_DELIVERED = "delivered"  # 모든 목적지로 보냈다
+STATUS_ARCHIVED = "archived"  # 첫 점검 때 뷰어에만 보이도록 보관한 글(요약도 알림도 하지 않는다)
+VIEWABLE_STATUSES = (STATUS_COLLECTED, STATUS_READY, STATUS_DELIVERED, STATUS_ARCHIVED)
 SEEN_DELIVERED = "delivered"
 MODEL_FALLBACK = "fallback-final"  # 요약에 끝까지 실패해서 원문 발췌로 확정한 글
 SEEN_BASELINE = "baseline"
@@ -124,6 +126,48 @@ class ArticleRepository:
                 ),
             )
             return int(cursor.lastrowid or 0)
+
+    def add_archived(self, article: NewArticle) -> int | None:
+        """첫 점검 때 뷰어에서 볼 최근 글을 보관한다. 이미 있는 글이면 None.
+
+        요약과 알림의 대상이 아니다(status가 archived). 본 글 기록은 baseline으로 남긴다.
+        """
+        now = _iso(self._clock.now())
+        with self._db.connect() as conn:
+            if conn.execute("SELECT 1 FROM articles WHERE guid = ?", (article.guid,)).fetchone():
+                return None
+            conn.execute(
+                "INSERT OR IGNORE INTO seen_guids(guid, reason, first_seen_at) VALUES(?, ?, ?)",
+                (article.guid, SEEN_BASELINE, now),
+            )
+            cursor = conn.execute(
+                "INSERT INTO articles(feed_id, guid, title, link, content_html, published_raw, "
+                "published_dt, published_date, discovered_at, status) "
+                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    article.feed_id,
+                    article.guid,
+                    article.title,
+                    article.link,
+                    article.content_html,
+                    article.published_raw,
+                    _iso(article.published_dt),
+                    article.published_date,
+                    now,
+                    STATUS_ARCHIVED,
+                ),
+            )
+            return int(cursor.lastrowid or 0)
+
+    def delete_older_than(self, cutoff: datetime) -> int:
+        """저장한 지 cutoff보다 오래된 글을 지운다(발송 기록과 주제 소속도 함께). 지운 개수.
+
+        본 글 기록(seen_guids)은 남겨서 같은 글이 다시 수집되지 않게 한다.
+        """
+        with self._db.connect() as conn:
+            return conn.execute(
+                "DELETE FROM articles WHERE discovered_at < ?", (_iso(cutoff),)
+            ).rowcount
 
     def get(self, article_id: int) -> Article | None:
         with self._db.connect() as conn:

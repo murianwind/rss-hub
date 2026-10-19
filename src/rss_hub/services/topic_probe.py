@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 
 from rss_hub.domain.keywords import find_keywords, split_keywords
 from rss_hub.domain.prompts import build_summary_prompt, summary_excerpt
-from rss_hub.domain.topics import match_topic
+from rss_hub.domain.topics import is_candidate
 from rss_hub.domain.validation import validate_summary
 from rss_hub.services.clock import Clock
 from rss_hub.services.llm_gateway import BudgetBlocked, LlmGateway, LlmNotConfigured, LlmOutage
@@ -26,9 +26,10 @@ MAX_BODY_LENGTH = 5000
 @dataclass(frozen=True)
 class ProbeRow:
     name: str
-    chosen: bool  # LLM이 이 주제를 골랐는가
-    keyword_hits: tuple[str, ...]  # 제목과 본문에서 일치한 키워드(LLM과 무관하게)
-    matched: bool  # 최종적으로 해당하는가(LLM이 골랐고 키워드 규칙도 통과)
+    asked: bool  # 키워드가 맞아서(또는 키워드가 없는 주제라서) LLM에게 물었는가
+    chosen: bool  # LLM이 이 주제를 골랐는가(물었을 때만 의미가 있다)
+    keyword_hits: tuple[str, ...]  # 제목과 본문에서 일치한 키워드
+    matched: bool  # 최종적으로 해당하는가(물었고 LLM이 골랐다)
     webhook_id: int | None
 
 
@@ -38,6 +39,7 @@ class ProbeResult:
     title_ko: str = ""
     summary_ko: str = ""
     model: str = ""
+    llm_called: bool = False  # 후보가 하나도 없으면 LLM을 호출하지 않는다
     error: str = ""  # 비어 있지 않으면 시험하지 못했다
 
 
@@ -70,12 +72,19 @@ class TopicProbe:
         topics = self._topics.list_enabled()
         if not topics:
             return ProbeResult(error="켜진 주제가 없습니다. 주제를 추가하거나 켜 주세요")
+        hits = {t.id: find_keywords(title, body, split_keywords(t.keywords)) for t in topics}
+        candidates = [t for t in topics if is_candidate(t, title, body)]
+        if not candidates:  # 키워드가 맞은 주제가 없으면 LLM에게 물을 것이 없다(호출 0회)
+            rows = tuple(
+                ProbeRow(t.name, False, False, hits[t.id], False, t.webhook_id) for t in topics
+            )
+            return ProbeResult(rows=rows)
         now = self._clock.now()
         if self._last_call is not None and now - self._last_call < MIN_INTERVAL:
             return ProbeResult(error="방금 시험했습니다. 잠시 뒤에 다시 시도하세요")
 
         self._last_call = now
-        prompt = build_summary_prompt(title, summary_excerpt(body), topics)
+        prompt = build_summary_prompt(title, summary_excerpt(body), candidates)
         try:
             answer = self._gateway.complete(prompt)
         except LlmNotConfigured:
@@ -86,24 +95,30 @@ class TopicProbe:
             return ProbeResult(error=_outage_reason({kind for _, kind in outage.failures}))
 
         checked = validate_summary(
-            answer.content, answer.finish_reason, valid_topic_ids={t.id for t in topics}
+            answer.content, answer.finish_reason, valid_topic_ids={t.id for t in candidates}
         )
         if not checked.ok or checked.draft is None:
             return ProbeResult(
                 error=f"모델의 응답을 사용할 수 없습니다({checked.reason})", model=answer.model
             )
         draft = checked.draft
+        asked = {t.id for t in candidates}
         chosen = set(draft.topics)
         rows = tuple(
             ProbeRow(
                 name=topic.name,
+                asked=topic.id in asked,
                 chosen=topic.id in chosen,
-                keyword_hits=find_keywords(title, body, split_keywords(topic.keywords)),
-                matched=match_topic(topic, chosen, title, body) is not None,
+                keyword_hits=hits[topic.id],
+                matched=topic.id in chosen,
                 webhook_id=topic.webhook_id,
             )
             for topic in topics
         )
         return ProbeResult(
-            rows=rows, title_ko=draft.title_ko, summary_ko=draft.summary_ko, model=answer.model
+            rows=rows,
+            title_ko=draft.title_ko,
+            summary_ko=draft.summary_ko,
+            model=answer.model,
+            llm_called=True,
         )

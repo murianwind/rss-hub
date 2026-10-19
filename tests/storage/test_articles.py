@@ -179,3 +179,70 @@ def test_ready_articles_are_listed_oldest_published_first(env):
     for article_id in ids:
         articles.mark_ready(article_id, title_ko="t", summary_ko="s", topics=[], model="m")
     assert [a.guid for a in articles.list_by_status(STATUS_READY)] == ["early", "late"]
+
+
+# ---------- 보관 글(첫 점검 때 뷰어용으로 저장)과 보관 기간 정리 ----------
+
+
+def test_an_archived_article_is_stored_as_archived_and_remembered_as_seen(env):
+    articles, _, feed_a, _ = env
+    article_id = articles.add_archived(new(feed_a, "old-1"))
+    article = articles.get(article_id)
+    assert article.status == "archived" and article.title == "제목"
+    assert articles.is_seen("old-1") is True
+    assert articles.list_by_status("collected") == [] and articles.list_by_status("ready") == []
+
+
+def test_an_article_that_already_exists_is_not_archived_again(env):
+    articles, _, feed_a, _ = env
+    articles.add(new(feed_a, "g1"))
+    assert articles.add_archived(new(feed_a, "g1")) is None
+    assert articles.add_archived(new(feed_a, "g2")) is not None
+    assert articles.add_archived(new(feed_a, "g2")) is None
+    assert articles.count_by_status() == {"collected": 1, "archived": 1}
+
+
+def test_an_archived_guid_is_never_collected_as_a_new_article_later(env):
+    articles, _, feed_a, _ = env
+    articles.add_archived(new(feed_a, "g1"))
+    assert articles.add(new(feed_a, "g1")) is None
+
+
+def test_old_articles_are_deleted_and_recent_ones_stay(env):
+    from datetime import timedelta
+
+    articles, clock, feed_a, _ = env
+    old_id = articles.add(new(feed_a, "old"))
+    clock.advance(days=100)
+    recent_id = articles.add(new(feed_a, "recent"))
+    assert articles.delete_older_than(clock.now() - timedelta(days=90)) == 1
+    assert articles.get(old_id) is None and articles.get(recent_id) is not None
+
+
+def test_the_cutoff_itself_is_kept(env):
+    articles, clock, feed_a, _ = env
+    article_id = articles.add(new(feed_a, "edge"))
+    assert articles.delete_older_than(clock.now()) == 0
+    assert articles.get(article_id) is not None
+
+
+def test_deleted_articles_stay_remembered_so_they_are_not_collected_again(env):
+    from datetime import timedelta
+
+    articles, clock, feed_a, _ = env
+    articles.add(new(feed_a, "old"))
+    clock.advance(days=100)
+    articles.delete_older_than(clock.now() - timedelta(days=90))
+    assert articles.is_seen("old") is True and articles.add(new(feed_a, "old")) is None
+
+
+def test_every_status_is_cleaned_up_after_the_retention_period(env):
+    from datetime import timedelta
+
+    articles, clock, feed_a, _ = env
+    ids = [articles.add(new(feed_a, f"g{n}")) for n in range(3)]
+    articles.add_archived(new(feed_a, "arch"))
+    articles.mark_ready(ids[0], title_ko="t", summary_ko="s", topics=[], model="m")
+    clock.advance(days=100)
+    assert articles.delete_older_than(clock.now() - timedelta(days=90)) == 4
+    assert articles.count_by_status() == {}

@@ -37,6 +37,7 @@ class CollectReport:
     added: int
     baseline_recorded: int
     failed: tuple[tuple[int, str], ...]
+    archived: int = 0
     slot: int | None = None
     schedule_rebuilt: bool = False
 
@@ -141,12 +142,39 @@ class CollectService:
             recorded = self._articles.mark_seen(
                 (select_guid(entry) for entry, _ in examined), SEEN_BASELINE
             )
+            self._archive_recent(feed, examined, config.baseline_archive_count, local)
         else:
             added = self._store_todays_articles(feed, examined, today)
         self._feeds.record_success(
             feed.id, etag=result.etag, last_modified=result.last_modified, activate=True
         )
         return added, recorded
+
+    def _archive_recent(
+        self,
+        feed: Feed,
+        examined: Sequence[tuple[object, datetime | None]],
+        count: int,
+        local: datetime,
+    ) -> None:
+        """첫 점검 때 가장 최근 글 count개를 뷰어용으로 보관한다. 알림도 요약도 하지 않는다."""
+        oldest = datetime.min.replace(tzinfo=local.tzinfo)
+        newest = sorted(examined, key=lambda item: item[1] or oldest, reverse=True)
+        for entry, moment in newest[:count]:
+            published = moment or local
+            fields = extract_article_fields(entry)  # type: ignore[arg-type]
+            self._articles.add_archived(
+                NewArticle(
+                    feed_id=feed.id,
+                    guid=select_guid(entry),  # type: ignore[arg-type]
+                    title=fields.title,
+                    link=fields.link,
+                    content_html=fields.content_html,
+                    published_raw=fields.published_raw,
+                    published_dt=published,
+                    published_date=published.date().isoformat(),
+                )
+            )
 
     def _store_todays_articles(
         self, feed: Feed, examined: Sequence[tuple[object, datetime | None]], today: date

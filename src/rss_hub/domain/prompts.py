@@ -9,8 +9,8 @@ CONTENT_LIMIT = 1500
 
 _TASK = "Translate the title to Korean and summarize the article in Korean in 2-3 sentences."
 _TOPIC_TASK = (
-    " Also decide which of the following topics the article is primarily about,"
-    " using the topic numbers."
+    " Also check the candidate topics below, which were suggested by keywords found in the article."
+    " Decide which of them the article is primarily about, using the topic numbers."
 )
 _RULES = """Rules:
 - No markdown code fences, no explanations, no reasoning text.
@@ -29,12 +29,12 @@ def summary_excerpt(content_html: str | None) -> str:
 
 
 def build_summary_prompt(title: str, excerpt: str, topics: Sequence[Topic] = ()) -> str:
-    """요약 요청. 켜진 주제가 있으면 번호와 설명을 함께 보내서 한 번의 호출로 주제까지 판별한다."""
+    """요약 요청. 키워드가 맞은 후보 주제가 있으면 번호와 설명을 함께 보내서 한 번의 호출로 확인한다."""
     if topics:
         listing = "\n".join(
             f"{t.id}. {t.name}" + (f": {t.description}" if t.description else "") for t in topics
         )
-        task = f"{_TASK}{_TOPIC_TASK}\n\nTopics:\n{listing}"
+        task = f"{_TASK}{_TOPIC_TASK}\n\nCandidate topics:\n{listing}"
         shape = _SHAPE_WITH_TOPICS
     else:
         task, shape = _TASK, _SHAPE

@@ -31,6 +31,7 @@ from rss_hub.storage.feeds import FeedRepository
 from rss_hub.storage.import_staging import ImportStagingRepository
 from rss_hub.storage.job_runs import JobRunRepository
 from rss_hub.storage.llm_usage import LlmUsageRepository
+from rss_hub.storage.reader import ReaderRepository
 from rss_hub.storage.topics import TopicRepository
 from rss_hub.version import get_version
 from rss_hub.web.admin import build_admin_router
@@ -39,6 +40,7 @@ from rss_hub.web.categories import build_category_router
 from rss_hub.web.feeds import build_feed_router
 from rss_hub.web.health import data_dir_is_writable
 from rss_hub.web.importer import build_import_router
+from rss_hub.web.reader import build_reader_router
 from rss_hub.web.security import SAFE_METHODS, SECURITY_HEADERS, request_is_same_origin
 from rss_hub.web.topics import build_topic_router
 
@@ -90,6 +92,16 @@ def create_app(
         )
     )
     app.include_router(build_article_router(articles))
+    app.include_router(
+        build_reader_router(
+            reader=ReaderRepository(database),
+            feeds=feeds,
+            topics=topics,
+            articles=articles,
+            settings=service,
+            templates=templates,
+        )
+    )
     importer = ImportService(
         feeds=feeds, staging=ImportStagingRepository(database, app_clock), clock=app_clock
     )

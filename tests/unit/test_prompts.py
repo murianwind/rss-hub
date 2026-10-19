@@ -28,7 +28,7 @@ def test_prompt_asks_for_one_json_object_with_the_two_fields_when_there_are_no_t
     prompt = build_summary_prompt("t", "c")
     for field in ('"title_ko"', '"summary_ko"'):
         assert field in prompt
-    assert '"topics"' not in prompt and "is_ott" not in prompt and "Topics:" not in prompt
+    assert '"topics"' not in prompt and "is_ott" not in prompt and "Candidate topics:" not in prompt
     assert "ONLY one JSON object" in prompt
     assert "Chinese characters" in prompt
 
@@ -39,7 +39,7 @@ def test_prompt_lists_the_topics_with_numbers_and_descriptions_and_asks_for_the_
         Topic(7, "게임", "", (), None, True),
     ]
     prompt = build_summary_prompt("t", "c", topics)
-    assert "Topics:\n1. OTT: 스트리밍 소식\n7. 게임\n" in prompt
+    assert "Candidate topics:\n1. OTT: 스트리밍 소식\n7. 게임\n" in prompt
     assert '"topics": [' in prompt and "using the topic numbers" in prompt
     assert "ONLY one JSON object" in prompt
 

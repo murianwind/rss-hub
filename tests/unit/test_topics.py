@@ -151,3 +151,34 @@ def test_the_word_rules_of_the_old_ott_check_still_apply(title, matched):
 def test_the_default_ott_keywords_work_as_a_topic():
     words = (*DEFAULT_OTT_KEYWORDS.ko, *DEFAULT_OTT_KEYWORDS.en)
     assert match_topic(topic(words), {1}, "스트리밍 서비스 요금", "") == ("스트리밍",)
+
+
+# ---------- 키워드가 먼저 거른다(후보) ----------
+
+from rss_hub.domain.topics import is_candidate  # noqa: E402
+
+
+def test_a_topic_is_a_candidate_when_its_keywords_match():
+    assert is_candidate(topic(), "New Netflix drama", "") is True
+    assert is_candidate(topic(), "Weekend picks", "<p>A new 드라마 tonight</p>") is True
+
+
+def test_a_topic_is_not_a_candidate_without_a_keyword_match():
+    assert is_candidate(topic(), "Spring gardening", "<p>roses</p>") is False
+    assert is_candidate(topic(), "Weekend picks", '<img src="x/netflix.jpg">') is False
+
+
+def test_a_topic_without_keywords_is_always_a_candidate():
+    assert is_candidate(topic(()), "Anything at all", "") is True
+
+
+def test_a_disabled_topic_is_never_a_candidate():
+    assert is_candidate(topic(enabled=False), "New Netflix drama", "") is False
+    assert is_candidate(topic((), enabled=False), "Anything", "") is False
+
+
+def test_candidates_follow_the_same_word_rules_as_the_final_check():
+    candidate = topic(("ott", "disney+"))
+    assert is_candidate(candidate, "A bottle of water", "") is False
+    assert is_candidate(candidate, "OTT 서비스", "") is True
+    assert is_candidate(candidate, "Disney+ announces", "") is True

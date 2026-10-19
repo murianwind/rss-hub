@@ -2,7 +2,8 @@
 
 주제는 이름, 설명, 키워드, 웹훅으로 이루어진다. 글이 주제에 해당하려면 LLM이 그 주제를 골랐고,
 키워드가 등록되어 있다면 제목이나 본문에 키워드가 하나라도 있어야 한다("LLM 확인 + 키워드 보완").
-키워드는 LLM이 근거 없이 주제를 고르는 것(환각)을 걸러 준다.
+키워드가 먼저 후보를 거르고(`is_candidate`), LLM은 그 후보만 확인한다. LLM이 후보가 아닌 주제를
+고르는 것(환각)은 구조적으로 불가능하다.
 """
 
 import re
@@ -72,6 +73,15 @@ def validate_topic_fields(name: str, description: str, keywords_text: str) -> To
     if len(description) > MAX_DESCRIPTION_LENGTH:
         raise TopicInputError(f"설명은 {MAX_DESCRIPTION_LENGTH}자까지")
     return TopicFields(name=name, description=description, keywords=parse_keywords(keywords_text))
+
+
+def is_candidate(topic: Topic, title: str, content_html: str) -> bool:
+    """LLM에게 물어볼 후보인가: 켜져 있고, 키워드가 맞거나 키워드가 없는(LLM만으로 정하는) 주제."""
+    if not topic.enabled:
+        return False
+    if not topic.keywords:
+        return True
+    return bool(find_keywords(title, content_html, split_keywords(topic.keywords)))
 
 
 def match_topic(

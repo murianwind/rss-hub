@@ -1,0 +1,38 @@
+<nav aria-label="구독 목록">
+  <details open class="group">
+    <summary>RSS</summary>
+    <ul>
+      <li><a href="/reader" {% if scope.kind == 'all' %}aria-current="page"{% endif %}>전체</a></li>
+      {% for f in side_feeds %}
+      <li><a href="/reader/feed/{{ f.id }}" {% if scope.kind == 'feed' and scope.ident == f.id %}aria-current="page"{% endif %}>{{ f.name }}</a></li>
+      {% endfor %}
+    </ul>
+  </details>
+  <details open class="group">
+    <summary>카테고리</summary>
+    {% for c in side_categories %}
+    <details {% if scope.kind == 'category' and scope.ident == c.id %}open{% endif %} class="sub">
+      <summary><a href="/reader/category/{{ c.id }}" {% if scope.kind == 'category' and scope.ident == c.id %}aria-current="page"{% endif %}>{{ c.name }}</a></summary>
+      <ul>
+        {% for f in c.feeds %}
+        <li><a href="/reader/feed/{{ f.id }}" {% if scope.kind == 'feed' and scope.ident == f.id %}aria-current="page"{% endif %}>{{ f.name }}</a></li>
+        {% else %}
+        <li class="hint">피드 없음</li>
+        {% endfor %}
+      </ul>
+    </details>
+    {% else %}
+    <p class="hint">카테고리가 없습니다</p>
+    {% endfor %}
+  </details>
+  <details open class="group">
+    <summary>주제</summary>
+    <ul>
+      {% for t in side_topics %}
+      <li><a href="/reader/topic/{{ t.id }}" {% if scope.kind == 'topic' and scope.ident == t.id %}aria-current="page"{% endif %}>{{ t.name }}</a></li>
+      {% else %}
+      <li class="hint">주제가 없습니다</li>
+      {% endfor %}
+    </ul>
+  </details>
+</nav>

@@ -14,7 +14,7 @@ def env(tmp_path):
 
 def test_one_tick_carries_a_new_article_from_the_feed_to_discord(env):
     env.serve_new_article(title="Apple unveils new phone")
-    assert env.runner.tick() == ["collect", "summarize", "deliver"]
+    assert env.runner.tick() == ["collect", "summarize", "deliver", "retention"]
     article = env.articles.list_by_status("delivered")[0]
     (message,) = env.sender.to("rss")
     assert "**애플, 새 폰 공개**" in message and f"({BASE_URL}/a/{article.id})" in message
@@ -28,6 +28,7 @@ def test_every_job_leaves_a_successful_record(env):
         "collect": "ok",
         "summarize": "ok",
         "deliver": "ok",
+        "retention": "ok",
     }
     assert runs["collect"].last_slot is not None
 

@@ -128,7 +128,7 @@ def test_status_and_health_never_contain_secrets(env):
 
 def test_a_article_link_redirects_to_the_original_address(env):
     article_id = env.article("https://example.com/original")
-    response = env.client.get(f"/a/{article_id}")
+    response = env.client.get(f"/a/{article_id}/original")
     assert (
         response.status_code == 302
         and response.headers["location"] == "https://example.com/original"
@@ -136,6 +136,7 @@ def test_a_article_link_redirects_to_the_original_address(env):
 
 
 def test_an_unknown_article_gives_404(env):
+    assert env.client.get("/a/999999/original").status_code == 404
     assert env.client.get("/a/999999").status_code == 404
 
 
@@ -155,12 +156,13 @@ def test_an_unknown_article_gives_404(env):
 )
 def test_links_that_are_not_http_or_https_are_not_followed(env, link):
     article_id = env.article(link)
-    response = env.client.get(f"/a/{article_id}")
+    response = env.client.get(f"/a/{article_id}/original")
     assert response.status_code == 404 and "location" not in response.headers
 
 
 def test_a_non_numeric_article_id_is_rejected(env):
     assert env.client.get("/a/abc").status_code == 422
+    assert env.client.get("/a/abc/original").status_code == 422
 
 
 # ---------- 시작과 종료 ----------

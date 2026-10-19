@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ heading }} · RSS Hub{% endblock %}
+{% block body %}
+<div class="reader">
+  <aside class="side">{% include "_sidebar.html" %}</aside>
+  <section>
+    <details class="menu-mobile"><summary>메뉴</summary>{% include "_sidebar.html" %}</details>
+    <h1>{{ heading }}</h1>
+    {% if page is none %}
+    <p class="hint">찾을 수 없는 목록입니다. 왼쪽 목록에서 다시 골라 주세요.</p>
+    {% elif not page.items %}
+      {% if scope.kind == 'topic' %}<p class="hint">이 주제에 해당한 글이 아직 없습니다.</p>
+      {% elif scope.kind == 'category' %}<p class="hint">이 카테고리의 피드에서 수집된 글이 아직 없습니다.</p>
+      {% elif scope.kind == 'feed' %}<p class="hint">이 사이트에서 수집된 글이 아직 없습니다.</p>
+      {% else %}<p class="hint">아직 글이 없습니다. 피드를 추가하면 첫 점검 뒤에 최근 글이 나타나고, 새 글은 올라오는 대로 쌓입니다.</p>{% endif %}
+    {% else %}
+    {% for item in page.items %}
+    <article class="item">
+      <a class="title" href="/a/{{ item.id }}">{{ item.title }}</a>
+      <div class="meta">{{ item.feed_name }} · {{ times[item.id] }}{% for name in item.topics %} <span class="badge">{{ name }}</span>{% endfor %}</div>
+      {% if snippets[item.id] %}<p class="snippet">{{ snippets[item.id] }}</p>{% endif %}
+    </article>
+    {% endfor %}
+    <div class="pager">
+      {% if page.page > 1 %}<a href="{{ base_path }}?page={{ page.page - 1 }}">← 이전</a>{% else %}<span></span>{% endif %}
+      {% if page.has_next %}<a href="{{ base_path }}?page={{ page.page + 1 }}">다음 →</a>{% endif %}
+    </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

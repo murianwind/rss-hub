@@ -19,6 +19,7 @@ from rss_hub.services.collect import CollectService
 from rss_hub.services.deliver import DeliveryService
 from rss_hub.services.llm_gateway import LlmGateway
 from rss_hub.services.ports import FeedFetcher, LlmClient, WebhookSender
+from rss_hub.services.retention import RetentionService
 from rss_hub.services.settings import SettingsService
 from rss_hub.services.summarize import SummarizeService
 from rss_hub.storage.alerts import AlertRepository
@@ -33,6 +34,8 @@ from rss_hub.storage.topics import TopicRepository
 JOB_COLLECT = "collect"
 JOB_SUMMARIZE = "summarize"
 JOB_DELIVER = "deliver"
+JOB_RETENTION = "retention"
+RETENTION_INTERVAL_SECONDS = 6 * 3600  # 보관 기간 정리는 6시간마다
 
 
 @dataclass(frozen=True)
@@ -101,6 +104,7 @@ def build_runner(
     summarizer = SummarizeService(
         articles=articles, gateway=gateway, settings=settings, topics=topics, clock=clock
     )
+    retention = RetentionService(articles=articles, settings=settings, clock=clock)
     deliverer = DeliveryService(
         articles=articles,
         feeds=feeds,
@@ -122,6 +126,7 @@ def build_runner(
         IntervalJob(
             JOB_DELIVER, deliverer.run, lambda: settings.snapshot().deliver_interval_seconds
         ),
+        IntervalJob(JOB_RETENTION, retention.run, lambda: RETENTION_INTERVAL_SECONDS),
     ]
     return JobRunner(
         jobs=jobs,

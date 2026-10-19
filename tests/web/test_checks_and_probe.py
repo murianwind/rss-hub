@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
+from rss_hub.domain.topics import TopicFields
 from rss_hub.services.ports import KeyCheck, SendResult
 from rss_hub.storage.llm_usage import LlmUsageRepository
 from rss_hub.web.app import create_app
@@ -146,15 +147,11 @@ def probe(parts, title="Netflix announces a new drama", body=""):
 
 def test_the_probe_shows_each_topic_with_the_llm_choice_keywords_and_result(parts):
     parts.settings.set_openrouter_key(KEY)
-    parts.topics.add(
-        __import__("rss_hub.domain.topics", fromlist=["TopicFields"]).TopicFields(
-            "게임", "", ("steam",)
-        )
-    )
+    parts.topics.add(TopicFields("게임", "", ("steam",)))
     html = probe(parts).text
     assert "넷플릭스 신작" in html and "요약입니다." in html
     assert "OTT" in html and "LLM 선택" in html and "netflix" in html and "해당" in html
-    assert "게임" in html and "LLM 선택 안 함" in html and "해당 안 함" in html
+    assert "게임" in html and "LLM에 묻지 않음" in html and "해당 안 함" in html
 
 
 def test_the_probe_uses_one_call_and_keeps_the_typed_input(parts):
@@ -181,11 +178,11 @@ def test_model_output_and_input_are_escaped(parts):
     parts.llm.default = reply(
         "<script>alert(1)</script>", "<img src=x onerror=alert(1)>", topics=[1]
     )
-    html = probe(parts, title="<b>제목</b>").text
+    html = probe(parts, title="<b>Netflix</b>").text
     assert (
         "<script>alert(1)</script>" not in html
         and "<img src=x" not in html
-        and "<b>제목</b>" not in html
+        and "<b>Netflix</b>" not in html
     )
     assert "&lt;script&gt;" in html
 
@@ -193,6 +190,13 @@ def test_model_output_and_input_are_escaped(parts):
 def test_an_empty_title_is_refused_without_a_call(parts):
     parts.settings.set_openrouter_key(KEY)
     assert "제목을 입력하세요" in probe(parts, title="").text and parts.llm.calls == []
+
+
+def test_a_title_without_any_keyword_match_makes_no_call_and_says_so(parts):
+    parts.settings.set_openrouter_key(KEY)
+    html = probe(parts, title="Spring gardening tips").text
+    assert "키워드가 맞은 주제가 없어서 LLM을 호출하지 않았습니다" in html
+    assert parts.llm.calls == [] and "LLM에 묻지 않음" in html
 
 
 # ---------- 보안 ----------

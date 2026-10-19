@@ -6,14 +6,17 @@
 """
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 
 from rss_hub.domain.budget import BudgetBlock
+from rss_hub.domain.keywords import find_keywords, split_keywords
 from rss_hub.domain.korean import is_korean
 from rss_hub.domain.prompts import build_summary_prompt, summary_excerpt
 from rss_hub.domain.summary import summary_order
 from rss_hub.domain.text import fallback_excerpt, strip_html
+from rss_hub.domain.topics import Topic, is_candidate
 from rss_hub.domain.validation import validate_summary
 from rss_hub.services.clock import Clock
 from rss_hub.services.llm_gateway import BudgetBlocked, LlmGateway, LlmNotConfigured, LlmOutage
@@ -114,7 +117,12 @@ class SummarizeService:
 
     def _summarize(self, article: Article) -> str:
         plain = strip_html(article.content_html)
-        topics = self._topics.list_enabled()
+        # 키워드로 먼저 거른다. 후보가 아닌 주제는 묻지 않고, 후보가 없으면 주제 항목도 없다
+        topics = [
+            t
+            for t in self._topics.list_enabled()
+            if is_candidate(t, article.title, article.content_html)
+        ]
         prompt = build_summary_prompt(article.title, summary_excerpt(article.content_html), topics)
         answer = self._gateway.complete(prompt)
 
@@ -132,7 +140,23 @@ class SummarizeService:
             topics=result.draft.topics,
             model=answer.model,
         )
+        self._record_topic_matches(article, topics, result.draft.topics)
         return "ready"
+
+    def _record_topic_matches(
+        self, article: Article, candidates: Sequence[Topic], confirmed: Sequence[int]
+    ) -> None:
+        """뷰어의 주제별 목록이 알림과 무관하게 동작하도록 요약 직후에 주제 소속을 기록한다."""
+        chosen = set(confirmed)
+        matches = {
+            topic.id: find_keywords(
+                article.title, article.content_html, split_keywords(topic.keywords)
+            )
+            for topic in candidates
+            if topic.id in chosen
+        }
+        if matches:
+            self._topics.record_matches(article.id, matches)
 
     def _register_failure(self, article: Article) -> str:
         """불량 응답이나 예외를 재시도 1회로 센다.

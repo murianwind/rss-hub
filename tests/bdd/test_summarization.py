@@ -15,7 +15,7 @@ from tests.fakes.llm_client import failure as llm_failure
 from tests.fakes.llm_client import good, reply
 from tests.fakes.llm_env import LlmEnv
 
-bind(globals(), "03_summarization.feature", [f"SUM-{n:02d}" for n in range(1, 18)])
+bind(globals(), "03_summarization.feature", [f"SUM-{n:02d}" for n in range(1, 21)])
 
 
 @pytest.fixture
@@ -82,6 +82,11 @@ def _english_article(env, ctx, title):
 @given("영문 글이 수집되어 있다")
 def _english_article_plain(env, ctx):
     ctx.article_id = env.add_article()
+
+
+@given(parsers.re(r'제목이 "(?P<title>[^"]+)"인 영문 글이 수집되어 있다'))
+def _english_article_titled(env, ctx, title):
+    ctx.article_id = env.add_article(title=title)
 
 
 @given(parsers.parse('한국어 글 "{title}"가 수집되어 있다'))
@@ -362,10 +367,37 @@ def _llm_topic_numbers(env):
     env.client.default = reply("제목", "요약", topics=[1, 99, "2", True])
 
 
-@then(parsers.parse('요청에 "{first}"과 "{second}"이 들어 있다'))
-def _prompt_has_topics(env, first, second):
-    prompt = env.client.calls[0].prompt
-    assert first in prompt and second in prompt
+@given("LLM이 주제 번호로 1, 2를 답한다")
+def _llm_topic_one_and_two(env):
+    env.client.default = reply("제목", "요약", topics=[1, 2])
+
+
+@given("LLM이 주제 번호로 1을 답한다")
+def _llm_topic_one(env):
+    env.client.default = reply("제목", "요약", topics=[1])
+
+
+@given(
+    parsers.re(r'키워드가 없는 주제 "(?P<name>[^"]+)"\(설명 "(?P<description>[^"]+)"\)이 켜져 있다')
+)
+def _keywordless_topic(env, name, description):
+    env.topics.add(TopicFields(name, description, ()))
+
+
+@then(parsers.re(r'글의 주제 판정은 "(?P<name>[^"]+)"뿐이다'))
+def _only_topic(env, ctx, name):
+    names = {t.id: t.name for t in env.topics.list_all()}
+    assert [names[i] for i in article(env, ctx).llm_topics] == [name]
+
+
+@then(parsers.re(r'요청에 "(?P<text>[^"]+)"이 들어 있다'))
+def _prompt_has(env, text):
+    assert text in env.client.calls[0].prompt
+
+
+@then(parsers.re(r'요청에 키워드가 맞지 않은 주제 "(?P<text>[^"]+)"은 들어 있지 않다'))
+def _prompt_lacks_unmatched(env, text):
+    assert text not in env.client.calls[0].prompt
 
 
 @then(parsers.parse('요청에 꺼진 주제 "{name}"은 들어 있지 않다'))

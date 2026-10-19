@@ -28,7 +28,15 @@ SETTING_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "주기",
         ("collect_interval_minutes", "summarize_interval_seconds", "deliver_interval_seconds"),
     ),
-    ("수집", ("slot_batch_size", "default_max_entries")),
+    (
+        "수집과 보관",
+        (
+            "slot_batch_size",
+            "default_max_entries",
+            "baseline_archive_count",
+            "article_retention_days",
+        ),
+    ),
     (
         "LLM",
         (
@@ -74,7 +82,7 @@ def _local(moment: datetime | None, zone: tzinfo) -> str:
     return "" if moment is None else moment.astimezone(zone).strftime("%m-%d %H:%M:%S")
 
 
-JOB_LABELS = {"collect": "수집", "summarize": "요약", "deliver": "발송"}
+JOB_LABELS = {"collect": "수집", "summarize": "요약", "deliver": "발송", "retention": "정리"}
 
 
 def build_admin_router(

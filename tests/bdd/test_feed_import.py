@@ -496,7 +496,8 @@ def _thirty_seen(env, ctx):
 
 @then("Discord로 나가는 메시지는 없다")
 def _nothing_to_send(env):
-    assert env.articles.count_by_status() == {}  # 발송할 글이 만들어지지 않았다
+    # 요약하거나 발송할 글은 만들어지지 않았다(뷰어에서만 보이는 보관 글은 있을 수 있다)
+    assert set(env.articles.count_by_status()) <= {"archived"}
 
 
 @when("그 뒤에 새 글이 올라와서 다음 점검을 한다")

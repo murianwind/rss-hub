@@ -25,11 +25,15 @@
   <div class="banner error" role="alert">{{ probe.error }}</div>
   {% else %}
   <div class="panel">
+    {% if probe.llm_called %}
     <p><strong>{{ probe.title_ko }}</strong> <span class="hint">모델 {{ probe.model }}</span><br>{{ probe.summary_ko }}</p>
+    {% else %}
+    <p class="note">키워드가 맞은 주제가 없어서 LLM을 호출하지 않았습니다(호출 0회).</p>
+    {% endif %}
     <ul class="checks">
     {% for row in probe.rows %}
       <li class="check"><span class="label">{{ row.name }}
-        <span class="hint">LLM {{ '선택' if row.chosen else '선택 안 함' }} · 키워드 {{ row.keyword_hits | join(', ') if row.keyword_hits else '없음' }}
+        <span class="hint">키워드 {{ row.keyword_hits | join(', ') if row.keyword_hits else '없음' }} · {% if not row.asked %}LLM에 묻지 않음{% elif row.chosen %}LLM 선택{% else %}LLM 선택 안 함{% endif %}
         {% if row.matched and row.webhook_id %} · 웹훅 {{ webhook_names.get(row.webhook_id, '') }}{% endif %}</span></span>
         <span class="state {{ 'ok' if row.matched else 'todo' }}">{{ '해당' if row.matched else '해당 안 함' }}</span></li>
     {% endfor %}

@@ -204,7 +204,7 @@ collected ──(요약 성공 또는 원문 발췌 확정)──▶ ready ─�
 ## 7. LLM 호출
 
 ### 7-1. 요청/응답 계약
-- 프롬프트는 영어 지시문, 출력은 JSON 한 개: `{"title_ko": str, "summary_ko": str}`. 켜진 주제가 있으면 주제 번호와 설명을 요청에 넣고 `"topics": [번호, ...]`도 받는다.
+- 프롬프트는 영어 지시문, 출력은 JSON 한 개: `{"title_ko": str, "summary_ko": str}`. 키워드가 맞은 후보 주제(키워드가 없는 주제 포함)가 있으면 그 번호와 설명만 요청에 넣고 `"topics": [번호, ...]`도 받는다(`docs/12` §8).
 - 한국어 글은 `title_ko`를 무시하고 원제목을 쓴다.
 - 입력 본문은 HTML 제거 후 앞 1500자.
 - `max_tokens`와 추론 비활성화: **스파이크 S1에서 확인했다**(`docs/07-spike-s1-result.md`). 추론 토큰이 `max_tokens=350`을 먼저 소진한다는 가설이 맞았고, `reasoning: {"effort": "none"}`으로 해결된다. 호출 방식 확정안은 §7-5에 적었다.
@@ -236,7 +236,7 @@ JSON 아님 · 필수 항목 누락 · 제목/요약 비어 있음 · 한자 포
 
 ### 7-5. 호출 방식 (스파이크 S1 결과 반영)
 근거와 수치는 `docs/07-spike-s1-result.md`.
-- **프롬프트**: JSON 객체 하나(`title_ko`, `summary_ko`, 켜진 주제가 있으면 `topics`)를 요청한다.
+- **프롬프트**: JSON 객체 하나(`title_ko`, `summary_ko`, 후보 주제가 있으면 `topics`)를 요청한다.
 - **추론 끄기**: 모델의 `supported_parameters`에 `reasoning`이 있으면 항상 `reasoning: {"effort": "none"}`을 보낸다. S1에서 두 모델 모두 이 값으로 추론 토큰이 0이 되었고 통과율이 100%였다.
 - **JSON 강제**: 모델이 `response_format`을 지원하면 `{"type": "json_object"}`와 `provider.require_parameters: true`를 보낸다. 지원하지 않거나 4xx로 거부하면 이 옵션을 빼고 한 번 다시 시도하고, 그 모델의 "옵션 거부" 기록을 메모리에 남겨서 반복하지 않는다(제공자가 줄어드는 위험을 피하려는 것이다).
 - **`max_tokens`**: 500. 추론을 끈 응답의 출력은 90~161토큰이었다. 추론이 켜져 있으면 200~600토큰을 먼저 쓰기 때문에 350, 700은 모두 부족했다.
