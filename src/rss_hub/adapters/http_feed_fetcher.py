@@ -7,11 +7,12 @@ import requests
 
 from rss_hub.adapters.guarded_http import ForbiddenAddress, build_guarded_session
 from rss_hub.domain.network import is_forbidden_ip
-from rss_hub.services.ports import FetchError, FetchResult
+from rss_hub.services.ports import FetchError, FetchResult, PageResult
 from rss_hub.version import get_version
 
 DEFAULT_TIMEOUT = (4.0, 12.0)  # (연결, 읽기) 초
 DEFAULT_MAX_BYTES = 5_000_000
+MAX_PAGE_BYTES = 1_000_000  # 웹페이지는 피드보다 작게 제한한다
 CHUNK_SIZE = 65_536
 
 
@@ -57,14 +58,44 @@ class RequestsFeedFetcher:
         parsed = feedparser.parse(body)
         if not parsed.version:  # HTML 페이지 같은 피드가 아닌 응답
             raise FetchError("NotAFeed")
-        return FetchResult(200, tuple(parsed.entries), new_etag, new_last_modified)
+        return FetchResult(
+            200,
+            tuple(parsed.entries),
+            new_etag,
+            new_last_modified,
+            title=str(parsed.feed.get("title") or "").strip(),
+            site_url=str(parsed.feed.get("link") or "").strip(),
+        )
 
-    def _read_limited(self, response: requests.Response) -> bytes:
+    def fetch_page(self, url: str) -> PageResult:
+        """웹페이지를 가져온다(피드 자동 탐색용). 같은 연결 검사를 거치고 1MB까지만 읽는다."""
+        headers = {"User-Agent": self._user_agent, "Accept": "text/html,application/xhtml+xml"}
+        try:
+            with self._session.get(
+                url, headers=headers, timeout=self.timeout, allow_redirects=True, stream=True
+            ) as response:
+                if not 200 <= response.status_code < 300:
+                    raise FetchError(f"HTTP {response.status_code}")
+                body = self._read_limited(response, MAX_PAGE_BYTES)
+                final_url = str(response.url)
+                declared = response.encoding or "utf-8"
+        except ForbiddenAddress as error:
+            raise FetchError("ForbiddenAddress") from error
+        except requests.exceptions.RequestException as error:
+            raise FetchError(type(error).__name__) from error
+        try:
+            text = body.decode("utf-8")
+        except UnicodeDecodeError:
+            text = body.decode(declared, errors="replace")
+        return PageResult(text=text, final_url=final_url)
+
+    def _read_limited(self, response: requests.Response, limit: int | None = None) -> bytes:
+        maximum = self._max_bytes if limit is None else limit
         chunks: list[bytes] = []
         total = 0
         for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
             total += len(chunk)
-            if total > self._max_bytes:
+            if total > maximum:
                 raise FetchError("TooLarge")
             chunks.append(chunk)
         return b"".join(chunks)

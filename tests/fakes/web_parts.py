@@ -12,12 +12,18 @@ from tests.fakes.llm_client import FakeLlmClient, reply
 BASE = "https://rss.example.com"
 
 
-def start_app(tmp_path):
+def start_app(tmp_path, *, feed_fetcher=None):
     """(부품 묶음, 실행 중인 클라이언트). 클라이언트는 with로 열어서 서버 시작 절차를 돌린다."""
     clock = FakeClock()
     sender = FakeWebhookSender()
     llm = FakeLlmClient(default=reply("넷플릭스 신작", "요약입니다.", topics=[]))
-    app = create_app(data_dir=tmp_path, clock=clock, webhook_sender=sender, llm_client=llm)
+    app = create_app(
+        data_dir=tmp_path,
+        clock=clock,
+        webhook_sender=sender,
+        llm_client=llm,
+        feed_fetcher=feed_fetcher,
+    )
     client = TestClient(app, base_url=BASE, follow_redirects=False)
     parts = SimpleNamespace(
         client=client,

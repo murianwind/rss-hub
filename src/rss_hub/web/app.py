@@ -15,12 +15,14 @@ from fastapi.responses import PlainTextResponse
 from fastapi.templating import Jinja2Templates
 
 from rss_hub.adapters.discord_webhook import RequestsWebhookSender
+from rss_hub.adapters.http_feed_fetcher import RequestsFeedFetcher
 from rss_hub.adapters.openrouter_client import OpenRouterClient
 from rss_hub.jobs.runner import JobRunner
 from rss_hub.runtime import build_llm_services
 from rss_hub.services.clock import Clock, SystemClock
+from rss_hub.services.feed_registration import FeedRegistrationService
 from rss_hub.services.importer import ImportService
-from rss_hub.services.ports import LlmClient, WebhookSender
+from rss_hub.services.ports import DiscoveryFetcher, LlmClient, WebhookSender
 from rss_hub.services.settings import SettingsService
 from rss_hub.services.topic_probe import TopicProbe
 from rss_hub.storage.articles import ArticleRepository
@@ -57,6 +59,7 @@ def create_app(
     runner_factory: Callable[[Database, Clock], JobRunner] | None = None,
     webhook_sender: WebhookSender | None = None,
     llm_client: LlmClient | None = None,
+    feed_fetcher: DiscoveryFetcher | None = None,
 ) -> FastAPI:
     # 인증 없이 외부에 열리는 서비스라서 API 문서 화면과 스키마는 내놓지 않는다
     app = FastAPI(title="RSS Hub", docs_url=None, redoc_url=None, openapi_url=None)
@@ -119,7 +122,10 @@ def create_app(
     probe = TopicProbe(gateway=llm.gateway, topics=topics, clock=app_clock)
     app.include_router(build_topic_router(topics, service, templates, probe))
     app.include_router(build_category_router(feeds, service, templates))
-    app.include_router(build_feed_router(feeds, service, templates))
+    registration = FeedRegistrationService(
+        fetcher=feed_fetcher or RequestsFeedFetcher(), feeds=feeds
+    )
+    app.include_router(build_feed_router(feeds, service, templates, registration))
 
     @app.middleware("http")
     async def protect(

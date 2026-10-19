@@ -2,17 +2,60 @@
 {% block title %}피드 · RSS Hub{% endblock %}
 {% block content %}
 <h1>피드</h1>
-<p class="note">웹훅을 지정한 피드의 알림은 그 웹훅으로 가고 기본 웹훅에서는 빠집니다. 카테고리에 속한 피드는 카테고리의 웹훅을 따르며, 피드마다 웹훅을 지정할 수 없습니다. 카테고리에서 빼면 다시 지정할 수 있습니다.</p>
 
 {% if notice %}<div class="banner" role="status">{{ notice }}</div>{% endif %}
 {% if error %}<div class="banner error" role="alert">{{ error }}</div>{% endif %}
+
+<h2>피드 추가</h2>
+<form method="post" action="/feeds/discover" class="panel">
+  <p class="note">피드 주소나 웹사이트 주소를 넣으면 확인합니다. 웹사이트 주소면 그 페이지가 알려 준 피드를 찾아서 보여 줍니다. 사설망(192.168.x.x, localhost 등) 주소는 허용하지 않습니다.</p>
+  <div class="field">
+    <label for="discover_url">주소</label>
+    <input id="discover_url" name="url" value="{{ discover_url }}" placeholder="https://example.com/ 또는 https://example.com/feed.xml" maxlength="2048">
+  </div>
+  <div class="row"><button type="submit" class="primary">확인</button></div>
+</form>
+
+{% if discovery and discovery.candidates %}
+<h3>찾은 피드</h3>
+{% for c in discovery.candidates %}
+<form method="post" action="/feeds/register" class="panel">
+  <input type="hidden" name="url" value="{{ c.url }}">
+  <p><strong>{{ c.title }}</strong><br><span class="hint">{{ c.url }}</span></p>
+  <div class="field">
+    <label for="reg_name_{{ loop.index }}">이름</label>
+    <input id="reg_name_{{ loop.index }}" name="name" value="{{ c.title }}" maxlength="200">
+  </div>
+  <div class="field">
+    <label for="reg_cat_{{ loop.index }}">카테고리</label>
+    <select id="reg_cat_{{ loop.index }}" name="category_id">
+      <option value="">없음</option>
+      {% for cat in categories %}<option value="{{ cat.id }}">{{ cat.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="reg_wh_{{ loop.index }}">웹훅 <span class="hint">카테고리가 없을 때만</span></label>
+    <select id="reg_wh_{{ loop.index }}" name="webhook_id">
+      <option value="">지정 안 함(기본 웹훅)</option>
+      {% for w in webhooks %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="row"><button type="submit" class="primary">등록</button></div>
+</form>
+{% endfor %}
+{% endif %}
+
+<h2>구독 목록 <span class="hint">{{ feeds | length }}개</span></h2>
+<p class="note">웹훅을 지정한 피드의 알림은 그 웹훅으로 가고 기본 웹훅에서는 빠집니다. 카테고리에 속한 피드는 카테고리의 웹훅을 따르며, 피드마다 웹훅을 지정할 수 없습니다. 카테고리에서 빼면 다시 지정할 수 있습니다.</p>
+<p><a href="/feeds/export.opml">OPML로 내보내기</a> · <a href="/import">OPML 가져오기</a></p>
 
 {% for f in feeds %}
 <div class="panel">
   <p><strong>{{ f.name }}</strong>
     {% if f.status == 'baseline_pending' %}<span class="hint">첫 점검 대기</span>{% endif %}
     {% if f.fail_count %}<span class="hint">연속 실패 {{ f.fail_count }}회{% if f.last_error %}: {{ f.last_error }}{% endif %}</span>{% endif %}
-    <br><span class="hint">{{ f.url }}</span></p>
+    <br><span class="hint">{{ f.url }}</span>
+    {% if f.id in checked %}<br><span class="hint">마지막 점검 {{ checked[f.id] }}</span>{% endif %}</p>
   <form method="post" action="/feeds/{{ f.id }}/category" class="field">
     <label for="cat_{{ f.id }}">카테고리</label>
     <select id="cat_{{ f.id }}" name="category_id">
@@ -33,8 +76,29 @@
     <button type="submit">저장</button>
   </form>
   {% endif %}
+  <details>
+    <summary>편집, 삭제</summary>
+    <form method="post" action="/feeds/{{ f.id }}/edit">
+      <div class="field"><label for="name_{{ f.id }}">이름</label>
+        <input id="name_{{ f.id }}" name="name" value="{{ f.name }}" maxlength="200"></div>
+      <div class="field"><label for="emoji_{{ f.id }}">머리말 이모지</label>
+        <input id="emoji_{{ f.id }}" name="emoji" value="{{ f.emoji }}" maxlength="8"></div>
+      <div class="field"><label for="prio_{{ f.id }}">점검 우선순위</label>
+        <select id="prio_{{ f.id }}" name="priority">
+          <option value="normal" {% if f.poll_priority == 'normal' %}selected{% endif %}>보통</option>
+          <option value="every_slot" {% if f.poll_priority == 'every_slot' %}selected{% endif %}>매 슬롯</option>
+        </select></div>
+      <div class="field"><label for="max_{{ f.id }}">최대 검사 항목 수 <span class="hint">비워 두면 기본값 {{ default_max_entries }}</span></label>
+        <input id="max_{{ f.id }}" name="max_entries" value="{{ f.max_entries if f.max_entries else '' }}" maxlength="3"></div>
+      <div class="row"><button type="submit" class="primary">저장</button></div>
+    </form>
+    <form method="post" action="/feeds/{{ f.id }}/delete" class="row">
+      <label class="check-row"><input type="checkbox" name="confirm" value="yes">이 피드와 수집한 글을 삭제합니다</label>
+      <button type="submit" class="danger">삭제</button>
+    </form>
+  </details>
 </div>
 {% else %}
-<p class="hint">등록된 피드가 없습니다. <a href="/import">피드 가져오기</a>로 추가하세요.</p>
+<p class="hint">등록된 피드가 없습니다. 위에서 추가하거나 <a href="/import">OPML 가져오기</a>를 이용하세요.</p>
 {% endfor %}
 {% endblock %}

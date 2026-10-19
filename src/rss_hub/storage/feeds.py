@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from rss_hub.domain.activity import FeedMeasurement
+from rss_hub.domain.feed_edit import FeedEdit
 from rss_hub.domain.feed_url import feed_url_key
 from rss_hub.domain.schedule import PRIORITY_NORMAL, Activity
 from rss_hub.services.clock import Clock
@@ -250,10 +251,23 @@ class FeedRepository:
             rows = conn.execute("SELECT * FROM feeds ORDER BY id").fetchall()
         return [_feed(row) for row in rows]
 
-    def delete(self, feed_id: int) -> None:
-        """피드와 그 통계, 글을 지운다. 본 글 기록(seen_guids)은 남겨서 되살아나지 않게 한다."""
+    def delete(self, feed_id: int) -> bool:
+        """피드와 그 통계, 글을 지운다. 본 글 기록(seen_guids)은 남겨서 되살아나지 않게 한다.
+
+        지울 피드가 없으면 False.
+        """
         with self._db.connect() as conn:
-            conn.execute("DELETE FROM feeds WHERE id = ?", (feed_id,))
+            return conn.execute("DELETE FROM feeds WHERE id = ?", (feed_id,)).rowcount > 0
+
+    def update_feed(self, feed_id: int, edit: FeedEdit) -> bool:
+        """이름, 머리말 이모지, 점검 우선순위, 최대 검사 항목 수를 고친다. 피드가 없으면 False."""
+        with self._db.connect() as conn:
+            cursor = conn.execute(
+                "UPDATE feeds SET name = ?, emoji = ?, poll_priority = ?, max_entries = ? "
+                "WHERE id = ?",
+                (edit.name, edit.emoji, edit.poll_priority, edit.max_entries, feed_id),
+            )
+            return cursor.rowcount > 0
 
     def set_poll_priority(self, feed_id: int, priority: str) -> None:
         with self._db.connect() as conn:

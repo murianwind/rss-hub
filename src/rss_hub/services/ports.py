@@ -14,6 +14,8 @@ class FetchResult:
     entries: tuple[Mapping[str, Any], ...]
     etag: str | None
     last_modified: str | None
+    title: str = ""  # 피드가 알려 준 제목(개별 등록 때 이름으로 쓴다)
+    site_url: str = ""  # 피드가 알려 준 사이트 주소
 
 
 class FetchError(Exception):
@@ -28,6 +30,24 @@ class FeedFetcher(Protocol):
     def fetch(self, url: str, *, etag: str | None, last_modified: str | None) -> FetchResult:
         """피드를 가져온다. 실패하면 FetchError를 올린다."""
         ...
+
+
+@dataclass(frozen=True)
+class PageResult:
+    """웹페이지 한 장. final_url은 리다이렉트를 거친 뒤의 주소(상대 주소를 풀 때 쓴다)."""
+
+    text: str
+    final_url: str
+
+
+class PageFetcher(Protocol):
+    def fetch_page(self, url: str) -> PageResult:
+        """웹페이지(HTML)를 가져온다. 실패하면 FetchError를 올린다."""
+        ...
+
+
+class DiscoveryFetcher(FeedFetcher, PageFetcher, Protocol):
+    """피드와 웹페이지를 모두 가져올 수 있는 수집기(개별 등록의 피드 자동 탐색에 쓴다)."""
 
 
 # ---------- LLM ----------

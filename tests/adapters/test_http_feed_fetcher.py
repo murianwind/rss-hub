@@ -186,3 +186,91 @@ def test_the_default_timeouts_are_a_few_seconds():
     connect, read = RequestsFeedFetcher().timeout
     assert 0 < connect <= 10 and 0 < read <= 30
     assert timedelta(seconds=read) > timedelta(0)
+
+
+# ---------- 피드 제목, 사이트 주소 ----------
+
+
+def test_the_feed_title_and_site_address_are_reported(fetcher, server):
+    server.serve("/feed", body=fixture("rss_basic.xml"))
+    result = fetch(fetcher, server)
+    assert result.title and result.site_url.startswith("http")
+
+
+def test_a_feed_without_a_title_reports_empty_strings(fetcher, server):
+    server.serve("/feed", body=b'<?xml version="1.0"?><rss version="2.0"><channel></channel></rss>')
+    result = fetch(fetcher, server)
+    assert (result.title, result.site_url) == ("", "")
+
+
+# ---------- 웹페이지(피드 자동 탐색용) ----------
+
+PAGE = "<html><head><title>블로그</title></head><body>한글 본문</body></html>"
+
+
+def test_a_page_is_fetched_as_text_with_its_final_address(fetcher, server):
+    server.serve("/old", status=302, headers={"Location": "/new/"})
+    server.serve(
+        "/new/", body=PAGE.encode("utf-8"), headers={"Content-Type": "text/html; charset=utf-8"}
+    )
+    page = fetcher.fetch_page(server.url("/old"))
+    assert "한글 본문" in page.text and page.final_url == server.url("/new/")
+
+
+def test_a_page_in_a_legacy_charset_is_decoded_with_the_declared_one(fetcher, server):
+    server.serve(
+        "/euckr", body=PAGE.encode("euc-kr"), headers={"Content-Type": "text/html; charset=euc-kr"}
+    )
+    assert "한글 본문" in fetcher.fetch_page(server.url("/euckr")).text
+
+
+def test_undecodable_bytes_are_replaced_instead_of_failing(fetcher, server):
+    server.serve(
+        "/bad", body=b"<html>\xff\xfe broken</html>", headers={"Content-Type": "text/html"}
+    )
+    assert "broken" in fetcher.fetch_page(server.url("/bad")).text
+
+
+@pytest.mark.parametrize("status", [404, 500])
+def test_an_error_status_is_a_failure(fetcher, server, status):
+    server.serve("/page", status=status)
+    with pytest.raises(FetchError) as info:
+        fetcher.fetch_page(server.url("/page"))
+    assert info.value.reason == f"HTTP {status}"
+
+
+def test_a_page_over_one_megabyte_is_refused(fetcher, server):
+    server.serve("/big", body=b"x" * 1_100_000)
+    with pytest.raises(FetchError) as info:
+        fetcher.fetch_page(server.url("/big"))
+    assert info.value.reason == "TooLarge"
+
+
+def test_a_feed_size_limit_does_not_apply_to_pages(server):
+    small_feed_limit = RequestsFeedFetcher(
+        timeout=(1.0, 1.0), max_bytes=100, forbid_address=allow_all
+    )
+    server.serve("/page", body=PAGE.encode("utf-8"))
+    assert "한글 본문" in small_feed_limit.fetch_page(server.url("/page")).text
+
+
+def test_pages_are_refused_for_private_addresses_by_default(server):
+    server.serve("/page", body=PAGE.encode("utf-8"))
+    guarded = RequestsFeedFetcher(timeout=(1.0, 1.0))
+    with pytest.raises(FetchError) as info:
+        guarded.fetch_page(server.url("/page"))
+    assert info.value.reason == "ForbiddenAddress" and server.requests == []
+
+
+def test_a_page_fetch_names_itself_and_asks_for_html(fetcher, server):
+    server.serve("/page", body=PAGE.encode("utf-8"))
+    fetcher.fetch_page(server.url("/page"))
+    headers = server.requests[0].headers
+    assert headers["user-agent"].startswith("RSS Hub/") and "text/html" in headers["accept"]
+
+
+def test_a_connection_failure_is_reported_by_kind():
+    refused = RequestsFeedFetcher(timeout=(0.5, 0.5), forbid_address=allow_all)
+    with pytest.raises(FetchError) as info:
+        refused.fetch_page("http://127.0.0.1:1/")
+    assert info.value.reason == "ConnectionError"

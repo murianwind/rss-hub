@@ -82,16 +82,17 @@ tests/
 | `01_scheduling.feature` | 15 | 44 | 슬롯 배치, 수집 주기, 점검 횟수, 재생성, 겹침 방지 |
 | `02_collection.feature` | 24 | 38 | 날짜 필터, GUID, 중복, 기준선, 오류 격리 |
 | `03_summarization.feature` | 17 | 29 | 요약 계약, 검증, 재시도, 폴백, 장애 구분 |
-| `04_topic_judgement.feature` | 11 | 23 | 주제 판정(LLM 확인 + 키워드 보완) |
+| `04_topic_judgement.feature` | 14 | 27 | 주제 판정(LLM 확인 + 키워드 보완) |
 | `05_delivery.feature` | 23 | 32 | 라우팅, 메시지, 길이 제한, 실패 처리, 서비스 주소 |
 | `06_llm_budget.feature` | 17 | 17 | 모델 체인, 예산, 알림 쿨다운, 설정 즉시 반영 |
 | `07_feed_import.feature` | 19 | 44 | OPML 업로드, 미리보기, 확정, 보안, 프리셋, 사설망 차단 |
 | `08_service_endpoints.feature` | 8 | 10 | 상태 확인, 임시 링크, 종료 |
 | `09_settings.feature` | 19 | 49 | 설정 화면, 검증, 비밀 값, 주기 변경, 요청 출처 확인 |
 | `10_topics_and_categories.feature` | 14 | 18 | 기본 주제, 주제 입력 규칙, 카테고리 웹훅 |
-| **합계** | **167** | **304** | (Scenario Outline 39개 포함) |
+| `11_feed_management.feature` | 14 | 26 | M2: 개별 등록, 자동 탐색, 편집, 삭제, OPML 내보내기 |
+| **합계** | **184** | **334** | (Scenario Outline 43개 포함) |
 
-**BDD 연결 현황(7단계 완료 시점)**: 167개 중 165개를 `.feature` 그대로 실행한다. 연결하지 못한 것은 설정 화면의 웹훅 시험 전송(SET-13)과 OpenRouter 키 확인(SET-14) 2개다(해당 화면 기능이 아직 없다).
+**BDD 연결 현황(M2 완료 시점)**: 184개 시나리오를 모두 `.feature` 그대로 실행한다(연결하지 못한 것 없음). 웹훅 시험 전송(SET-13), OpenRouter 키 확인(SET-14), 주제 판별 시험(TPC-12~14), 구독 관리(FED-01~14)가 이번에 더해졌다.
 
 ### 태그 규약
 | 태그 | 의미 | 검증 방법 |

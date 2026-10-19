@@ -348,3 +348,39 @@ def test_deleting_a_webhook_clears_it_from_the_feeds_that_used_it(feeds, db, clo
     feed_id = feeds.add(URL, "A", webhook_id=webhook_id)
     SettingsService(db, clock).delete_webhook(webhook_id)
     assert feeds.get(feed_id).webhook_id is None
+
+
+# ---------- 피드 편집과 삭제(M2) ----------
+
+
+def test_a_feed_can_be_edited_and_the_rest_stays(feeds):
+    from rss_hub.domain.feed_edit import FeedEdit
+
+    feed_id = feeds.add(URL, "A", html_url="https://a.example.com")
+    assert feeds.update_feed(feed_id, FeedEdit("새 이름", "🧪", "every_slot", 120)) is True
+    feed = feeds.get(feed_id)
+    assert (feed.name, feed.emoji, feed.poll_priority, feed.max_entries) == (
+        "새 이름",
+        "🧪",
+        "every_slot",
+        120,
+    )
+    assert (feed.url, feed.html_url, feed.status) == (
+        URL,
+        "https://a.example.com",
+        "baseline_pending",
+    )
+    assert feeds.update_feed(feed_id, FeedEdit("새 이름", "🧪", "normal", None)) is True
+    assert feeds.get(feed_id).max_entries is None
+
+
+def test_editing_an_unknown_feed_reports_it(feeds):
+    from rss_hub.domain.feed_edit import FeedEdit
+
+    assert feeds.update_feed(999, FeedEdit("x", "📢", "normal", None)) is False
+
+
+def test_deleting_reports_whether_a_feed_was_removed(feeds):
+    feed_id = feeds.add(URL, "A")
+    assert feeds.delete(feed_id) is True
+    assert feeds.delete(feed_id) is False

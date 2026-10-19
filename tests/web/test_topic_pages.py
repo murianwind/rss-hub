@@ -333,7 +333,10 @@ def test_the_feed_page_lists_feeds_with_category_and_webhook_controls(client, ap
 
 
 def test_without_feeds_the_page_points_to_the_import(client):
-    assert "피드 가져오기" in client.get("/feeds").text
+    assert (
+        'href="/import"' in client.get("/feeds").text
+        and "등록된 피드가 없습니다" in client.get("/feeds").text
+    )
 
 
 def test_a_feed_webhook_can_be_set_from_the_page(client, app, feeds):
