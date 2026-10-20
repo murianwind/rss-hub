@@ -91,18 +91,19 @@ def test_the_cycle_filter_keeps_only_feeds_checked_that_many_times_per_hour(seed
     ("last", "names"),
     [
         ("day", {"하루 전 글"}),
-        ("week", {"하루 전 글", "주 단위 글"}),
-        ("month", {"하루 전 글", "주 단위 글", "달 단위 글"}),
-        ("year", {"하루 전 글", "주 단위 글", "달 단위 글", "해 단위 글"}),
+        ("week", {"주 단위 글"}),  # 하루 초과 1주일 이하
+        ("month", {"달 단위 글"}),  # 1주일 초과 1달 이하
+        ("year", {"해 단위 글"}),  # 1달 초과 1년 이하
         ("older", {"오래된 글", "기록 없음 글"} | EXTRA),
     ],
 )
-def test_the_last_published_filter_keeps_feeds_that_posted_within_the_period(seeded, last, names):
+def test_the_last_published_filter_keeps_only_the_feeds_in_that_band(seeded, last, names):
     assert shown(seeded, f"?last={last}") == names
 
 
 def test_both_filters_and_the_search_work_together(seeded):
-    assert shown(seeded, "?cycle=1&last=week") == {"하루 전 글"}
+    assert shown(seeded, "?cycle=2&last=week") == {"주 단위 글"}
+    assert shown(seeded, "?cycle=1&last=week") == set()
     assert shown(seeded, "?cycle=1&last=year&q=해 단위") == {"해 단위 글"}
     assert shown(seeded, "?cycle=2&last=day") == set()
 
@@ -257,18 +258,26 @@ def test_a_feed_without_an_assigned_cycle_matches_only_when_no_cycle_is_chosen()
     [
         (timedelta(days=1), "day", True),
         (timedelta(days=1, seconds=1), "day", False),
+        (timedelta(hours=-1), "day", True),  # 시계 차이로 조금 미래여도 하루 이내
+        (timedelta(days=1), "week", False),
+        (timedelta(days=1, seconds=1), "week", True),
         (timedelta(days=7), "week", True),
         (timedelta(days=7, seconds=1), "week", False),
+        (timedelta(days=7), "month", False),
+        (timedelta(days=7, seconds=1), "month", True),
         (timedelta(days=30), "month", True),
         (timedelta(days=30, seconds=1), "month", False),
+        (timedelta(days=30), "year", False),
+        (timedelta(days=30, seconds=1), "year", True),
         (timedelta(days=365), "year", True),
         (timedelta(days=365, seconds=1), "year", False),
         (timedelta(days=365), "older", False),
         (timedelta(days=365, seconds=1), "older", True),
         (timedelta(days=2), "", True),
+        (timedelta(days=2), "bogus", False),
     ],
 )
-def test_the_last_published_boundaries(ago, wanted, expected):
+def test_the_last_published_band_boundaries(ago, wanted, expected):
     assert _last_matches(NOW - ago, NOW, wanted) is expected
 
 
@@ -289,3 +298,89 @@ def test_the_chip_address_builder_skips_empty_values_and_encodes_the_rest():
         _feeds_url(state="ok", q="한 글/글", cycle="2", last="")
         == "/feeds?state=ok&q=%ED%95%9C+%EA%B8%80%2F%EA%B8%80&cycle=2"
     )
+
+
+# ---------- 위쪽은 고정하고 카드만 스크롤 ----------
+
+
+def test_the_top_part_is_fixed_and_only_the_cards_are_in_the_scroll_area(world):
+    html = world.get("/feeds").text
+    fixed = html.split('<div class="feed-fixed">')[1].split('<div class="feed-scroll">')[0]
+    scroll = html.split('<div class="feed-scroll">')[1]
+    for part in (
+        "<h1>피드 관리</h1>",
+        'role="search"',
+        'aria-label="상태로 거르기"',
+        "OPML 가져오기",
+        "OPML 내보내기",
+        "카테고리 관리",
+        'class="note"',
+    ):
+        assert part in fixed, part
+    assert '<ul class="feed-list">' in scroll and "feed-row" in scroll
+    assert all(
+        part not in scroll
+        for part in ('role="search"', "OPML 가져오기", 'aria-label="상태로 거르기"')
+    )
+    assert '<ul class="feed-list">' not in fixed
+
+
+def test_the_notice_and_the_error_banners_stay_in_the_fixed_part(world):
+    html = world.get("/feeds?saved=1").text
+    assert "저장했습니다." in html.split('<div class="feed-scroll">')[0]
+
+
+def test_only_the_feed_page_uses_the_fixed_scroll_layout(world):
+    assert 'class="scroll scroll-fixed"' in world.get("/feeds").text
+    for path in ("/settings", "/topics", "/categories", "/import", "/reader"):
+        assert "scroll-fixed" not in world.get(path).text, path
+
+
+def test_the_style_fills_the_height_and_scrolls_only_the_card_area(world):
+    css = world.client.get("/static/app.css").text
+    assert ".scroll.scroll-fixed { display: flex; flex-direction: column; overflow: hidden;" in css
+    assert (
+        ".scroll-fixed > .page { display: flex; flex: 1; flex-direction: column; min-height: 0;"
+        in css
+    )
+    assert ".feed-fixed { flex: none; max-height: 60%; overflow-y: auto; }" in css
+    assert ".feed-scroll { flex: 1; min-height: 0; overflow-y: auto;" in css
+
+
+def test_the_fixed_part_and_the_scroll_part_are_siblings_not_nested(world):
+    """고정 영역이 닫히지 않아 카드가 그 안에 들어가면 고정 영역이 카드와 함께 커진다."""
+    from html.parser import HTMLParser
+
+    class Tree(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.stack, self.parent_of = [], {}
+            self.void = {"input", "br", "img", "meta", "link", "hr", "use", "path", "circle"}
+
+        def handle_starttag(self, tag, attrs):
+            name = dict(attrs).get("class") or ""
+            for mark in ("feed-fixed", "feed-scroll"):
+                if mark in name.split():
+                    self.parent_of[mark] = list(self.stack)
+            if tag not in self.void:
+                self.stack.append(f"{tag}.{name}")
+
+        def handle_endtag(self, tag):
+            if tag not in self.void and self.stack:
+                self.stack.pop()
+
+    tree = Tree()
+    tree.feed(world.get("/feeds").text)
+    assert tree.parent_of["feed-fixed"] == tree.parent_of["feed-scroll"]  # 같은 부모 아래의 형제
+
+
+def test_each_last_published_option_names_its_band(world):
+    form = world.get("/feeds").text.split('role="search">')[1].split("</form>")[0]
+    labels = re.findall(r'<option value="(day|week|month|year|older)"[^>]*>([^<]+)</option>', form)
+    assert labels == [
+        ("day", "하루 이내"),
+        ("week", "1주일 이내(하루 초과)"),
+        ("month", "1달 이내(1주일 초과)"),
+        ("year", "1년 이내(1달 초과)"),
+        ("older", "1년 넘게 없음"),
+    ]

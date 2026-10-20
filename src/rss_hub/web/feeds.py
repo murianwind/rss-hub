@@ -48,11 +48,13 @@ def _id_or_none(value: object) -> int | None:
 
 STATE_FILTERS = ("ok", "error", "never")
 CYCLE_FILTERS = (("1", "시간당 1회"), ("2", "시간당 2회"), ("3", "시간당 3회"))  # 3은 3회 이상
+_DAY = timedelta(days=1)
+# 마지막 게시 필터는 서로 겹치지 않는 구간이다: (키, 이름, 이 길이 초과, 이 길이 이하)
 LAST_FILTERS = (
-    ("day", "하루 이내", timedelta(days=1)),
-    ("week", "1주일 이내", timedelta(days=7)),
-    ("month", "1달 이내", timedelta(days=30)),
-    ("year", "1년 이내", timedelta(days=365)),
+    ("day", "하루 이내", timedelta(0), _DAY),
+    ("week", "1주일 이내(하루 초과)", _DAY, timedelta(days=7)),
+    ("month", "1달 이내(1주일 초과)", timedelta(days=7), timedelta(days=30)),
+    ("year", "1년 이내(1달 초과)", timedelta(days=30), timedelta(days=365)),
 )
 LAST_OLDER = "older"  # 1년 넘게 게시가 없거나 게시 기록이 없는 피드
 
@@ -67,13 +69,21 @@ def _cycle_matches(cycle: FeedCycle | None, wanted: str) -> bool:
 
 
 def _last_matches(published: datetime | None, now: datetime, wanted: str) -> bool:
-    """마지막 게시 필터: 하루, 1주일, 1달, 1년 이내 또는 1년 넘게 없음(게시 기록 없음 포함)."""
+    """마지막 게시 필터: 고른 구간에 든 피드만. 1달 이내는 1주일 초과 1달 이하다.
+
+    "1년 넘게 없음"은 1년을 넘었거나 게시 기록이 없는 피드다.
+    """
     if not wanted:
         return True
     if wanted == LAST_OLDER:
         return published is None or now - published > timedelta(days=365)
-    span = next(span for key, _, span in LAST_FILTERS if key == wanted)
-    return published is not None and now - published <= span
+    if published is None:
+        return False
+    age = now - published
+    for key, _, over, up_to in LAST_FILTERS:
+        if key == wanted:
+            return over < age <= up_to if over > timedelta(0) else age <= up_to
+    return False
 
 
 def _feeds_url(**params: str) -> str:
@@ -170,7 +180,7 @@ def build_feed_router(
             "cycle": cycle,
             "last": last,
             "cycle_options": CYCLE_FILTERS,
-            "last_options": [(key, label) for key, label, _ in LAST_FILTERS]
+            "last_options": [(key, label) for key, label, *_ in LAST_FILTERS]
             + [(LAST_OLDER, "1년 넘게 없음")],
             "filtered": bool(q.strip() or cycle or last),
             "chips": {

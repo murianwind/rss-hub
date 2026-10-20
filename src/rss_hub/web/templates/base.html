@@ -17,7 +17,7 @@
   <div class="mobilebar"><button type="button" class="icon-btn" data-action="open-drawer" aria-label="메뉴 열기">{{ icon('menu') }}</button><b>RSS Hub</b></div>
   {% if ui_toast %}<div class="toast" role="status" data-toast><span>{{ ui_toast }}</span><button type="button" class="icon-btn" data-action="close-toast" aria-label="닫기">{{ icon('x') }}</button></div>{% endif %}
   <div id="panel-slot" class="panel-slot" hidden></div>
-  {% block main %}<div class="scroll"><div class="page{% block page_class %}{% endblock %}">
+  {% block main %}<div class="scroll{% block scroll_class %}{% endblock %}"><div class="page{% block page_class %}{% endblock %}">
 {% block content %}{% endblock %}
   </div></div>{% endblock %}
 </div>

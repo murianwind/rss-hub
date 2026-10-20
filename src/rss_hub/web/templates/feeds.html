@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% block title %}피드 관리 · RSS Hub{% endblock %}
+{% block scroll_class %} scroll-fixed{% endblock %}
 {% block page_class %} page-wide{% endblock %}
 {% block content %}
+<div class="feed-fixed">
 <h1>피드 관리</h1>
 
 {% if notice %}<div class="banner" role="status">{{ notice }}</div>{% endif %}
@@ -36,6 +38,9 @@
   </span>
 </div>
 
+</div>
+
+<div class="feed-scroll">
 <ul class="feed-list">
 {% for r in rows %}
   {% set f = r.feed %}
@@ -70,4 +75,5 @@
   <li class="empty">{% if q %}"{{ q }}"에 맞는 피드가 없습니다.{% elif filtered %}이 조건에 맞는 피드가 없습니다.{% elif state %}이 상태의 피드가 없습니다.{% else %}등록된 피드가 없습니다. 사이드바의 RSS 피드 <b>+</b>로 추가하거나 <a href="/import">OPML 가져오기</a>를 이용하세요.{% endif %}</li>
 {% endfor %}
 </ul>
+</div>
 {% endblock %}

@@ -18,7 +18,7 @@ from tests.fakes.feed_fetcher import FakeFeedFetcher
 from tests.fakes.viewer_world import World
 from tests.fakes.web_parts import start_app
 
-bind(globals(), "17_feed_management.feature", [f"FMG-{n:02d}" for n in range(1, 12)])
+bind(globals(), "17_feed_management.feature", [f"FMG-{n:02d}" for n in range(1, 13)])
 
 BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 FRAGMENT = {"x-panel": "1"}
@@ -426,3 +426,25 @@ def _cards(world, ctx):
     )
     assert 'class="page page-wide"' in ctx.response.text
     assert f'title="{html_module.escape(ctx.long_name)}"' in ctx.response.text
+
+
+@then(
+    "위쪽 영역에는 제목과 검색, 필터, 상태 칩, 세 버튼이 있고 카드 목록은 따로 스크롤되는 영역에 있다"
+)
+def _fixed_top(ctx):
+    html = ctx.response.text
+    fixed = html.split('<div class="feed-fixed">')[1].split('<div class="feed-scroll">')[0]
+    scroll = html.split('<div class="feed-scroll">')[1]
+    assert all(
+        x in fixed
+        for x in (
+            "<h1>피드 관리</h1>",
+            'role="search"',
+            'name="cycle"',
+            'name="last"',
+            "상태로 거르기",
+            "OPML 가져오기",
+            "카테고리 관리",
+        )
+    )
+    assert '<ul class="feed-list">' in scroll and 'role="search"' not in scroll
