@@ -16,21 +16,21 @@ Feature: 웹페이지 구독: RSS가 없는 사이트의 글 목록 페이지를
 
     Examples:
       | count | result                                                              |
-      | 5     | 후보 "웹페이지 구독"에 글 5개와 앞의 제목 3개가 보인다                    |
-      | 3     | 후보 "웹페이지 구독"에 글 3개와 앞의 제목 3개가 보인다                    |
+      | 5     | 후보 "웹페이지 구독"에 글 5개와 최근 글 5개가 한 줄에 하나씩 목록으로 보인다   |
+      | 3     | 후보 "웹페이지 구독"에 글 3개와 최근 글 3개가 한 줄에 하나씩 목록으로 보인다   |
       | 2     | "이 주소에서 피드를 찾지 못했습니다"가 보인다                            |
 
   @WPS-02 @new
   Scenario: 메뉴, 푸터, 쪽 번호, 태그와 분류, 다른 사이트의 링크는 글로 세지 않는다
     Given 피드가 없는 사이트의 글 목록 페이지에 글이 4개 있고 메뉴와 푸터와 쪽 번호와 태그와 다른 사이트 링크도 있다
     When 그 주소를 피드 추가에서 확인한다
-    Then 후보 "웹페이지 구독"에 글 4개와 앞의 제목 3개가 보인다
+    Then 후보 "웹페이지 구독"에 글 4개와 최근 글 4개가 한 줄에 하나씩 목록으로 보인다
 
   @WPS-03 @new
   Scenario: 목록의 날짜와 분류 이름은 제목에서 떼어 내고 앞부분이 잘린 제목은 더 완전한 것을 고른다
     Given 날짜와 분류 이름이 앞에 붙은 글 목록 페이지가 있다
     When 그 주소를 피드 추가에서 확인한다
-    Then 후보의 예시 제목은 "The Slow Death of Age and Gender", "Summer Signals: Reading Guide to the Season That Was", "The New Front Door to Financial Decision Making"이다
+    Then 후보의 최근 글 목록은 "The Slow Death of Age and Gender", "Summer Signals: Reading Guide to the Season That Was", "The New Front Door to Financial Decision Making"이다
 
   @WPS-04 @new
   Scenario: 등록하면 첫 점검은 기록만 하고 이후 올라온 새 글만 본문과 함께 저장한다
@@ -84,4 +84,9 @@ Feature: 웹페이지 구독: RSS가 없는 사이트의 글 목록 페이지를
     When 피드 설정의 "변경"에서 그 주소를 확인한다
     Then 후보에는 "선택" 버튼만 있고 이름, 카테고리, 웹훅, 등록 칸은 없으며 구독은 늘지 않는다
     And 스크립트는 "선택"을 누르면 주소 칸에 그 주소를 넣고 저장 전에는 아무것도 바꾸지 않는다
+
+  @WPS-10 @new
+  Scenario: 피드 설정의 주소 칸은 읽기 전용이고 "변경" 버튼으로만 바꾼다
+    When 피드 "자유 블로그"의 설정 패널을 연다
+    Then 주소 칸은 읽기 전용이고 "변경" 버튼이 있으며 안내에 "변경" 버튼으로 바꾼다고 적혀 있다
 

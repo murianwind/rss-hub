@@ -338,7 +338,7 @@ def test_a_page_without_feed_links_but_with_a_post_list_offers_a_web_page_subscr
         candidate.title == "예제 블로그 - 소식"
         and candidate.site_url == "https://blog.example.com/"
     )
-    assert candidate.sample[0].startswith("새 소식 1번") and len(candidate.sample) == 3
+    assert candidate.sample[0].startswith("새 소식 1번") and len(candidate.sample) == 4
 
 
 def test_a_page_with_too_few_posts_is_still_nothing_found(env):
@@ -492,3 +492,13 @@ def test_three_links_with_only_two_usable_titles_are_not_offered_as_a_web_page_s
     )
     env.fetcher.page(LIST_PAGE, html)
     assert env.service.discover(LIST_PAGE).error == NOTHING_FOUND
+
+
+def test_a_web_page_candidate_shows_at_most_five_recent_posts(env):
+    with_posts(env, count=8)
+    (candidate,) = env.service.discover(LIST_PAGE).candidates
+    assert (
+        candidate.count == 8
+        and len(candidate.sample) == 5
+        and candidate.sample[4].startswith("새 소식 5번")
+    )

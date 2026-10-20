@@ -51,8 +51,8 @@
       <span class="count{% if f.unread %} unread{% endif %}" data-count="feed:{{ f.id }}"{% if not f.unread %} hidden{% endif %}>{% if f.unread %}{{ f.unread }}{% endif %}</span>
       <span class="row-actions feed-actions">
         <button type="button" class="icon-btn mini" data-refresh="{{ f.id }}" title="지금 다시 읽기" aria-label="지금 다시 읽기">{{ icon('refresh') }}</button>
-        <a class="icon-btn mini" href="/panel/settings/feed/{{ f.id }}?next=%2Ffeeds" data-panel title="설정" aria-label="설정">{{ icon('gear') }}</a>
-        <form method="post" action="/feeds/{{ f.id }}/delete" class="inline-del" data-confirm="‘{{ f.name }}’ {{ delete_notes['feed'] }}"><input type="hidden" name="confirm" value="yes"><input type="hidden" name="next" value="/feeds"><button type="submit" class="icon-btn mini" title="삭제" aria-label="‘{{ f.name }}’ 삭제">{{ icon('minus') }}</button></form>
+        <a class="icon-btn mini" href="/panel/settings/feed/{{ f.id }}?next={{ here | qs }}" data-panel title="설정" aria-label="설정">{{ icon('gear') }}</a>
+        <form method="post" action="/feeds/{{ f.id }}/delete" class="inline-del" data-confirm="‘{{ f.name }}’ {{ delete_notes['feed'] }}"><input type="hidden" name="confirm" value="yes"><input type="hidden" name="next" value="{{ here }}"><button type="submit" class="icon-btn mini" title="삭제" aria-label="‘{{ f.name }}’ 삭제">{{ icon('minus') }}</button></form>
       </span>
     </div>
     <dl class="facts">

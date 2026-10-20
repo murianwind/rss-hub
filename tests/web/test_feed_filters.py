@@ -384,3 +384,174 @@ def test_each_last_published_option_names_its_band(world):
         ("year", "1년 이내(1달 초과)"),
         ("older", "1년 넘게 없음"),
     ]
+
+
+# ---------- 작업을 해도 필터가 유지된다 ----------
+
+BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
+
+
+def post(world, path, **data):
+    return world.client.post(path, data=data, headers=BROWSER)
+
+
+def test_the_panel_links_and_delete_forms_carry_the_current_filters(seeded):
+    html = html_module.unescape(seeded.get("/feeds?cycle=1&last=day").text)
+    here = "/feeds?cycle=1&last=day"
+    assert "next=%2Ffeeds%3Fcycle%3D1%26last%3Dday" in html  # 카드의 설정 링크(값의 /도 인코딩)
+    assert f'name="next" value="{here}"' in html  # 카드의 삭제 폼
+    assert 'name="next" value="/feeds"' not in html  # 사이드바의 폼도 필터를 지킨다
+
+
+def test_the_sidebar_forms_on_the_feed_page_keep_every_filter_and_nothing_else(seeded):
+    html = html_module.unescape(
+        seeded.get("/feeds?state=ok&q=%EA%B8%80&cycle=2&last=week&junk=1&page=3").text
+    )
+    assert 'name="next" value="/feeds?state=ok&q=%EA%B8%80&cycle=2&last=week"' in html
+    assert "junk" not in html.split("<main")[0] if "<main" in html else True
+
+
+def test_without_filters_the_return_address_is_the_plain_page(seeded):
+    html = seeded.get("/feeds").text
+    assert '?next=%2Ffeeds"' in html and 'name="next" value="/feeds"' in html
+
+
+@pytest.mark.parametrize(
+    "values", ["?cycle=2", "?last=week", "?q=%EA%B8%80&cycle=2&last=week&state=ok", "?state=error"]
+)
+def test_saving_a_feed_setting_returns_to_the_same_filtered_view(seeded, values):
+    feed = seeded.feeds.list_all()[0].id
+    response = post(
+        seeded,
+        f"/feeds/{feed}/settings",
+        name="이름",
+        emoji="📢",
+        max_entries="",
+        category_id="",
+        webhook_id="",
+        url=seeded.feeds.get(feed).url,
+        next="/feeds" + values,
+    )
+    assert (
+        response.status_code == 303
+        and response.headers["location"] == f"/feeds{values}&toast=saved"
+    )
+
+
+def test_deleting_a_feed_returns_to_the_same_filtered_view(seeded):
+    feed = seeded.feeds.list_all()[0].id
+    response = post(seeded, f"/feeds/{feed}/delete", confirm="yes", next="/feeds?cycle=2&last=week")
+    assert response.headers["location"] == "/feeds?cycle=2&last=week&toast=deleted"
+
+
+def test_an_error_screen_keeps_the_filters_and_the_list(seeded):
+    feed = seeded.feeds.list_all()[0].id
+    response = post(
+        seeded,
+        f"/feeds/{feed}/settings",
+        name="",
+        emoji="📢",
+        max_entries="",
+        category_id="",
+        webhook_id="",
+        url="https://x.example.com/rss",
+        next="/feeds?cycle=2&last=week",
+    )
+    html = response.text
+    assert (
+        response.status_code == 400
+        and re.search(r'<option value="2" selected>', html)
+        and re.search(r'<option value="week" selected>', html)
+    )
+    assert (
+        "주 단위 글" in html.split('<ul class="feed-list">')[1]
+        and "하루 전 글" not in html.split('<ul class="feed-list">')[1]
+    )
+
+
+def test_an_error_screen_of_a_delete_without_confirmation_keeps_the_filters_too(seeded):
+    feed = seeded.feeds.list_all()[0].id
+    html = post(seeded, f"/feeds/{feed}/delete", next="/feeds?cycle=3").text
+    assert re.search(r'<option value="3" selected>', html)
+
+
+@pytest.mark.security
+@pytest.mark.parametrize(
+    "nxt",
+    [
+        "/feeds?cycle=<script>&last=%27",
+        "https://evil.example.com/feeds?cycle=2",
+        "//evil.example.com/feeds",
+        "/settings?cycle=2",
+        "javascript:alert(1)",
+    ],
+)
+def test_a_hostile_return_address_is_never_followed_or_trusted(seeded, nxt):
+    feed = seeded.feeds.list_all()[0].id
+    ok = post(
+        seeded,
+        f"/feeds/{feed}/settings",
+        name="이름",
+        emoji="📢",
+        max_entries="",
+        category_id="",
+        webhook_id="",
+        url=seeded.feeds.get(feed).url,
+        next=nxt,
+    )
+    assert ok.status_code == 303 and not ok.headers["location"].startswith(
+        ("http", "//", "javascript")
+    )
+    bad = post(
+        seeded,
+        f"/feeds/{feed}/settings",
+        name="",
+        emoji="📢",
+        max_entries="",
+        category_id="",
+        webhook_id="",
+        url="https://x.example.com/rss",
+        next=nxt,
+    )
+    assert bad.status_code == 400 and "<script>" not in bad.text.replace("<script src", "").replace(
+        "</script>", ""
+    )
+
+
+def test_the_filters_in_the_return_address_are_validated_like_the_query(seeded):
+    feed = seeded.feeds.list_all()[0].id
+    html = post(
+        seeded,
+        f"/feeds/{feed}/settings",
+        name="",
+        emoji="📢",
+        max_entries="",
+        category_id="",
+        webhook_id="",
+        url="https://x.example.com/rss",
+        next="/feeds?cycle=9&last=bogus&state=zzz",
+    ).text
+    assert not re.search(r'<option value="9" selected>', html) and 'value="zzz"' not in html
+
+
+@pytest.mark.parametrize(
+    ("next_value", "expected"),
+    [
+        (
+            "/feeds?q=a&state=ok&cycle=2&last=week",
+            {"q": "a", "state": "ok", "cycle": "2", "last": "week"},
+        ),
+        ("/feeds", {"q": "", "state": "", "cycle": "", "last": ""}),
+        ("/feeds?cycle=2&junk=1", {"q": "", "state": "", "cycle": "2", "last": ""}),
+        (
+            "/settings?cycle=2&q=a",
+            {"q": "", "state": "", "cycle": "", "last": ""},
+        ),  # 다른 화면의 조건은 이어받지 않는다
+        ("", {"q": "", "state": "", "cycle": "", "last": ""}),
+        ("//evil.example.com/feeds?cycle=2", {"q": "", "state": "", "cycle": "", "last": ""}),
+    ],
+)
+def test_only_the_feed_page_conditions_are_carried_from_the_return_address(next_value, expected):
+    from rss_hub.web.feeds import _carried
+
+    assert _carried(next_value) == expected

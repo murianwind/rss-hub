@@ -30,6 +30,7 @@ PAGE_HAS_FEEDS = (
     "이 주소는 피드가 아니라 웹페이지이고, 이 페이지가 피드를 알려 주고 있습니다. "
     "'변경' 버튼으로 찾아서 고르세요"
 )
+SAMPLE_SIZE = 5  # 웹페이지 구독 후보에 보여 줄 최근 글 수
 NO_PAGE_ITEMS = (
     "글 목록을 찾지 못했습니다. 글 목록 페이지 주소가 맞는지, "
     "사이트 구조가 바뀌지 않았는지 확인하세요"
@@ -85,7 +86,7 @@ def _page_candidate(url: str, final_url: str, listing: PageListing) -> Candidate
         site_of(final_url),
         kind=KIND_PAGE,
         count=len(listing.items),
-        sample=tuple(item.title for item in listing.items[:3]),
+        sample=tuple(item.title for item in listing.items[:SAMPLE_SIZE]),
     )
 
 

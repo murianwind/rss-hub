@@ -261,7 +261,10 @@ def model_usage_view(
 def _current(request: Request) -> str:
     """지금 화면의 주소(패널 폼이 일을 마치고 돌아갈 곳). 알려진 쿼리만 남긴다."""
     params = request.query_params
-    keep = {key: params[key] for key in ("page", "q", "only") if params.get(key)}
+    names: tuple[str, ...] = ("page", "q", "only")
+    if request.url.path == "/feeds":  # 피드 관리의 필터(상태, 수집 주기, 마지막 게시)도 지킨다
+        names = ("state", "q", "cycle", "last")
+    keep = {key: params[key] for key in names if params.get(key)}
     if request.url.path.startswith("/a/") and safe_path(params.get("back"), ""):
         keep["back"] = params["back"]
     query = urlencode(keep)

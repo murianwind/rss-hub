@@ -5,7 +5,7 @@
 """
 
 from datetime import datetime, timedelta
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode, urlsplit
 
 from fastapi import APIRouter, Request, Response
 from fastapi.concurrency import run_in_threadpool
@@ -57,6 +57,14 @@ LAST_FILTERS = (
     ("year", "1년 이내(1달 초과)", timedelta(days=30), timedelta(days=365)),
 )
 LAST_OLDER = "older"  # 1년 넘게 게시가 없거나 게시 기록이 없는 피드
+
+
+def _carried(next_value: str) -> dict[str, str]:
+    """돌아갈 주소(next)에 담긴 검색과 필터 조건. 오류로 화면을 다시 그릴 때 이어받는다."""
+    parts = urlsplit(next_value)
+    ours = parts.path == "/feeds" and not parts.scheme and not parts.netloc
+    values = dict(parse_qsl(parts.query)) if ours else {}
+    return {key: values.get(key, "") for key in ("q", "state", "cycle", "last")}
 
 
 def _cycle_matches(cycle: FeedCycle | None, wanted: str) -> bool:
@@ -168,6 +176,9 @@ def build_feed_router(
         last: str = "",
     ) -> HTMLResponse:
         config = settings.snapshot()
+        carried = _carried(getattr(request.state, "feeds_next", ""))  # 작업 뒤에도 필터를 지킨다
+        q, state = q or carried["q"], state or carried["state"]
+        cycle, last = cycle or carried["cycle"], last or carried["last"]
         state = state if state in STATE_FILTERS else ""
         cycle = cycle if cycle in dict(CYCLE_FILTERS) else ""
         last = last if last in {key for key, *_ in LAST_FILTERS} | {LAST_OLDER} else ""
@@ -177,6 +188,7 @@ def build_feed_router(
             "counts": counts,
             "state": state,
             "q": q.strip()[:100],
+            "here": _feeds_url(state=state, q=q.strip()[:100], cycle=cycle, last=last),
             "cycle": cycle,
             "last": last,
             "cycle_options": CYCLE_FILTERS,
@@ -247,6 +259,7 @@ def build_feed_router(
     @router.post("/feeds/discover", response_class=HTMLResponse)
     async def discover(request: Request) -> Response:
         form = await request.form()
+        request.state.feeds_next = str(form.get("next", ""))  # 오류 화면도 같은 필터로
         url = str(form.get("url", ""))
         result = registration.discover(url)
         if form.get("pick"):  # 피드 설정의 주소 "변경": 후보만 조각으로 돌려준다(등록하지 않는다)
@@ -263,6 +276,7 @@ def build_feed_router(
     @router.post("/feeds/register", response_class=HTMLResponse)
     async def register(request: Request) -> Response:
         form = await request.form()
+        request.state.feeds_next = str(form.get("next", ""))  # 오류 화면도 같은 필터로
         url = str(form.get("url", ""))
         result = registration.register(
             url,
@@ -290,6 +304,7 @@ def build_feed_router(
         바꾸기 전에 입력과 규칙을 모두 확인해서, 규칙에 어긋나면 아무것도 바꾸지 않는다.
         """
         form = await request.form()
+        request.state.feeds_next = str(form.get("next", ""))  # 오류 화면도 같은 필터로
         feed = feeds.get(feed_id)
         if feed is None:
             return page(request, error="피드를 찾을 수 없음", status_code=404)
@@ -341,6 +356,7 @@ def build_feed_router(
     @router.post("/feeds/{feed_id}/edit", response_class=HTMLResponse)
     async def edit(request: Request, feed_id: int) -> Response:
         form = await request.form()
+        request.state.feeds_next = str(form.get("next", ""))  # 오류 화면도 같은 필터로
         try:
             values = validate_feed_edit(
                 str(form.get("name", "")),
@@ -357,6 +373,7 @@ def build_feed_router(
     @router.post("/feeds/{feed_id}/delete", response_class=HTMLResponse)
     async def delete(request: Request, feed_id: int) -> Response:
         form = await request.form()
+        request.state.feeds_next = str(form.get("next", ""))  # 오류 화면도 같은 필터로
         if form.get("confirm") != "yes":
             return page(request, error=CONFIRM_MESSAGE, status_code=400)
         if not feeds.delete(feed_id):
@@ -368,6 +385,7 @@ def build_feed_router(
     @router.post("/feeds/{feed_id}/category", response_class=HTMLResponse)
     async def set_category(request: Request, feed_id: int) -> Response:
         form = await request.form()
+        request.state.feeds_next = str(form.get("next", ""))  # 오류 화면도 같은 필터로
         try:
             found = feeds.set_feed_category(feed_id, _id_or_none(form.get("category_id")))
         except FeedRuleError as error:
@@ -379,6 +397,7 @@ def build_feed_router(
     @router.post("/feeds/{feed_id}/webhook", response_class=HTMLResponse)
     async def set_webhook(request: Request, feed_id: int) -> Response:
         form = await request.form()
+        request.state.feeds_next = str(form.get("next", ""))  # 오류 화면도 같은 필터로
         try:
             found = feeds.set_feed_webhook(feed_id, _id_or_none(form.get("webhook_id")))
         except FeedRuleError as error:

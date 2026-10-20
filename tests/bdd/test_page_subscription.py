@@ -3,6 +3,7 @@
 # ruff: noqa: E501  (HTML 정규식과 견본은 한 줄이 읽기 쉽다)
 
 import html as html_module
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -16,7 +17,7 @@ from tests.fakes.page_html import BASE, COMSCORE_LIKE, article_html, listing, sa
 from tests.fakes.viewer_world import World
 from tests.fakes.web_parts import start_app
 
-bind(globals(), "20_page_subscription.feature", [f"WPS-{n:02d}" for n in range(1, 10)])
+bind(globals(), "20_page_subscription.feature", [f"WPS-{n:02d}" for n in range(1, 11)])
 
 BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 LIST_URL = f"{BASE}/news"
@@ -85,15 +86,22 @@ def _discover(world, ctx):
     ctx.response = post(world, "/feeds/discover", url=url, next="/feeds")
 
 
-@then(parsers.re(r'후보 "웹페이지 구독"에 글 (?P<count>\d+)개와 앞의 제목 3개가 보인다'))
-def _candidate(ctx, count):
+@then(
+    parsers.re(
+        r'후보 "웹페이지 구독"에 글 (?P<count>\d+)개와 최근 글 (?P<shown>\d+)개가 한 줄에 하나씩 목록으로 보인다'
+    )
+)
+def _candidate(ctx, count, shown):
     html = html_module.unescape(ctx.response.text)
     assert (
         ctx.response.status_code == 200
         and "웹페이지 구독" in html
         and f"글 {count}개를 찾았습니다" in html
     )
-    assert all(f"새 소식 {n}번" in html for n in (1, 2, 3)) and "새 소식 4번" not in html
+    items = re.findall(r"<li>(새 소식 \d번[^<]*)</li>", html)
+    assert (
+        len(items) == int(shown) and '<ol class="sample-list wide">' in html and "(예:" not in html
+    )
 
 
 @then('"이 주소에서 피드를 찾지 못했습니다"가 보인다')
@@ -104,11 +112,14 @@ def _nothing_found(ctx):
     )
 
 
-@then(parsers.re(r'후보의 예시 제목은 "(?P<a>[^"]+)", "(?P<b>[^"]+)", "(?P<c>[^"]+)"이다'))
+@then(parsers.re(r'후보의 최근 글 목록은 "(?P<a>[^"]+)", "(?P<b>[^"]+)", "(?P<c>[^"]+)"이다'))
 def _sample_titles(ctx, a, b, c):
     html = html_module.unescape(ctx.response.text)
-    assert f"(예: {a} / {b} / {c})" in html
-    assert "Blog:" not in html.split("(예:")[1].split(")")[0] and "29 jul" not in html
+    items = re.findall(
+        r"<li>([^<]+)</li>", html.split('class="sample-list wide"')[1].split("</ol>")[0]
+    )
+    assert items == [a, b, c]
+    assert not any(x.startswith("Blog:") or "29 jul" in x for x in items)
 
 
 # ---------- 등록과 점검 ----------
@@ -299,3 +310,22 @@ def _pick_script(world):
         0
     ]
     assert "post(" not in after and "submit" not in after  # 값만 넣고 서버로 보내지 않는다
+
+
+@when('피드 "자유 블로그"의 설정 패널을 연다')
+def _open_settings_panel(world, ctx):
+    ctx.response = world.client.get(
+        f"/panel/settings/feed/{world.f_free}", headers={"x-panel": "1"}
+    )
+
+
+@then('주소 칸은 읽기 전용이고 "변경" 버튼이 있으며 안내에 "변경" 버튼으로 바꾼다고 적혀 있다')
+def _readonly(ctx):
+    html = ctx.response.text
+    field = re.search(r'<input id="p_furl" name="url"[^>]*>', html).group(0)
+    assert (
+        " readonly" in field
+        and 'aria-readonly="true"' in field
+        and "data-finder-open>변경</button>" in html
+    )
+    assert '오른쪽 "변경" 버튼으로 바꿉니다' in html

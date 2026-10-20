@@ -18,7 +18,7 @@ from tests.fakes.feed_fetcher import FakeFeedFetcher
 from tests.fakes.viewer_world import World
 from tests.fakes.web_parts import start_app
 
-bind(globals(), "17_feed_management.feature", [f"FMG-{n:02d}" for n in range(1, 13)])
+bind(globals(), "17_feed_management.feature", [f"FMG-{n:02d}" for n in range(1, 14)])
 
 BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 FRAGMENT = {"x-panel": "1"}
@@ -448,3 +448,66 @@ def _fixed_top(ctx):
         )
     )
     assert '<ul class="feed-list">' in scroll and 'role="search"' not in scroll
+
+
+# ---------- 작업 뒤에도 필터가 유지된다 ----------
+
+KEPT = "/feeds?q=%EA%B8%80&cycle=2&last=week"
+
+
+@given('피드 관리에 수집 주기 "2"와 마지막 게시 "week" 필터와 검색어 "글"이 걸려 있다')
+def _kept_filters(world, ctx):
+    from datetime import timedelta
+
+    ctx.feed = make_feed(world, "주 단위 글", 2, timedelta(days=3))
+    ctx.other = make_feed(world, "지울 글", 2, timedelta(days=4))
+
+
+@when("그 화면에서 피드의 설정을 저장한다")
+def _save_here(world, ctx):
+    url = world.feeds.get(ctx.feed).url
+    ctx.response = post(
+        world,
+        f"/feeds/{ctx.feed}/settings",
+        name="주 단위 글",
+        emoji="📢",
+        max_entries="",
+        category_id="",
+        webhook_id="",
+        url=url,
+        next=KEPT,
+    )
+
+
+@when("그 화면에서 피드를 삭제한다")
+def _delete_here(world, ctx):
+    ctx.response = post(world, f"/feeds/{ctx.other}/delete", confirm="yes", next=KEPT)
+
+
+@then("같은 검색어와 필터가 걸린 피드 관리로 돌아온다")
+def _back_same(ctx):
+    location = ctx.response.headers["location"]
+    assert location.startswith(KEPT + "&toast=")
+    assert "q=%EA%B8%80" in location and "cycle=2" in location and "last=week" in location
+
+
+@when("입력이 잘못된 설정을 저장한다")
+def _bad_save(world, ctx):
+    ctx.response = post(
+        world,
+        f"/feeds/{ctx.feed}/settings",
+        name="",
+        emoji="📢",
+        max_entries="",
+        category_id="",
+        webhook_id="",
+        url=world.feeds.get(ctx.feed).url,
+        next=KEPT,
+    )
+
+
+@then("오류가 보이는 화면에도 같은 필터가 선택되어 있다")
+def _error_keeps(ctx):
+    html = ctx.response.text
+    assert ctx.response.status_code == 400 and 'name="q" value="글"' in html
+    assert '<option value="2" selected>' in html and '<option value="week" selected>' in html

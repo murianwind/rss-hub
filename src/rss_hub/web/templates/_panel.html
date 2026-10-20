@@ -26,7 +26,9 @@
       <input type="hidden" name="kind" value="{{ c.kind }}">
       <input type="hidden" name="next" value="{{ next }}">
       <p class="wide"><strong>{{ c.title }}</strong>{% if c.kind == 'page' %} <span class="kind-badge">웹페이지 구독</span>{% endif %}<br><span class="hint">{{ c.url }}</span></p>
-      {% if c.kind == 'page' %}<p class="hint wide">이 사이트는 RSS 피드를 제공하지 않아 글 목록 페이지에서 글 {{ c.count }}개를 찾았습니다{% if c.sample %}(예: {{ c.sample | join(' / ') }}){% endif %}. 사이트 구조가 바뀌어 글을 못 찾게 되면 피드 상태 점이 빨갛게 바뀝니다. 그때는 주소를 다시 확인해서 고쳐 주세요.</p>{% endif %}
+      {% if c.kind == 'page' %}<p class="hint wide">이 사이트는 RSS 피드를 제공하지 않아 글 목록 페이지에서 글 {{ c.count }}개를 찾았습니다. 최근 글:</p>
+      <ol class="sample-list wide">{% for title in c.sample %}<li>{{ title }}</li>{% endfor %}</ol>
+      <p class="hint wide">사이트 구조가 바뀌어 글을 못 찾게 되면 피드 상태 점이 빨갛게 바뀝니다. 그때는 주소를 다시 확인해서 고쳐 주세요.</p>{% endif %}
       <div class="field"><label for="reg_name_{{ loop.index }}">이름</label>
         <input id="reg_name_{{ loop.index }}" name="name" value="{{ c.title }}" maxlength="200"></div>
       <div class="field"><label for="reg_cat_{{ loop.index }}">카테고리</label>
@@ -63,8 +65,8 @@
       <input type="hidden" name="next" value="{{ next }}">
       <div class="field"><label for="p_fname">표시 이름</label><input id="p_fname" name="name" value="{{ f.name }}" maxlength="200" required></div>
       <div class="field"><label for="p_emoji">이모지</label><input id="p_emoji" name="emoji" value="{{ f.emoji }}" maxlength="8" required></div>
-      <div class="field wide"><label for="p_furl">{% if f.kind == 'page' %}목록 페이지 주소{% else %}피드 주소{% endif %} <span class="hint">바꾸면 저장할 때 RSS 피드가 있는지 확인하고, 없으면 글 목록 페이지(웹페이지 구독)로 확인합니다. 처음부터 다시 점검합니다(예전 글은 알림으로 보내지 않습니다)</span></label>
-        <div class="input-row"><input id="p_furl" name="url" value="{{ f.url }}" maxlength="2048" required><button type="button" class="button" data-finder-open>변경</button></div>
+      <div class="field wide"><label for="p_furl">{% if f.kind == 'page' %}목록 페이지 주소{% else %}피드 주소{% endif %} <span class="hint">오른쪽 "변경" 버튼으로 바꿉니다. 바꾸면 저장할 때 RSS 피드가 있는지 확인하고, 없으면 글 목록 페이지(웹페이지 구독)로 확인합니다. 처음부터 다시 점검합니다(예전 글은 알림으로 보내지 않습니다)</span></label>
+        <div class="input-row"><input id="p_furl" name="url" value="{{ f.url }}" maxlength="2048" required readonly aria-readonly="true"><button type="button" class="button" data-finder-open>변경</button></div>
         <p class="hint" data-picked hidden></p>
         <div class="finder" data-finder hidden>
           <h3 class="slide-sub">피드 주소 변경</h3>

@@ -52,12 +52,15 @@ def test_the_add_panel_offers_a_web_page_subscription_with_a_preview_of_the_foun
         and "웹페이지 구독" in html
         and 'name="kind" value="page"' in html
     )
-    assert (
-        "글 4개를 찾았습니다" in html
-        and "새 소식 1번" in html
-        and "새 소식 3번" in html
-        and "새 소식 4번" not in html
-    )  # 예시는 앞의 3개
+    assert "글 4개를 찾았습니다. 최근 글:" in html and "(예:" not in html
+    items = re.findall(r"<li>(새 소식 \d번[^<]*)</li>", html)  # 글마다 한 줄씩 목록으로
+    assert [i.split(":")[0] for i in items] == [
+        "새 소식 1번",
+        "새 소식 2번",
+        "새 소식 3번",
+        "새 소식 4번",
+    ]
+    assert '<ol class="sample-list wide">' in html
     assert "피드 상태 점이 빨갛게 바뀝니다" in html and "RSS 피드를 제공하지 않아" in html
 
 
@@ -376,3 +379,63 @@ def test_the_script_remembers_the_scroll_inside_each_sidebar_list_and_shows_the_
     )
     assert "body.scrollTop = saved.lists[id]" in js
     assert "if (body) showCurrent(body);" in js and "[aria-current=page]" in js
+
+
+def test_at_most_five_recent_posts_are_listed_one_per_line(world):
+    serve_list(world, count=8)
+    html = post(world, "/feeds/discover", url=LIST_URL, next="/feeds").text
+    assert (
+        "글 8개를 찾았습니다" in html
+        and len(re.findall(r"<li>새 소식 \d번", html)) == 5
+        and "새 소식 6번" not in html
+    )
+
+
+def test_the_pick_fragment_lists_the_recent_posts_one_per_line_too(world):
+    serve_list(world)
+    html = post(world, "/feeds/discover", url=LIST_URL, pick="1", next="/feeds").text
+    assert (
+        '<ol class="sample-list wide">' in html
+        and len(re.findall(r"<li>새 소식 \d번", html)) == 4
+        and "(예:" not in html
+    )
+
+
+def test_a_post_title_with_html_is_escaped_inside_the_list(world):
+    markup = "&lt;b onclick=alert(1)&gt;굵게&lt;/b&gt; 제목은 길게 씁니다"  # 글자로 적힌 태그
+    world.fetcher.page(
+        LIST_URL,
+        listing(
+            [
+                ("a", markup, None),
+                ("b", "둘째 글 제목입니다 길이는 충분합니다", None),
+                ("c", "셋째 글 제목입니다 길이는 충분합니다", None),
+            ]
+        ),
+    )
+    html = post(world, "/feeds/discover", url=LIST_URL, next="/feeds").text
+    assert "<b onclick=alert(1)>" not in html and "&lt;b onclick=alert(1)&gt;" in html
+
+
+# ---------- 피드 주소 칸은 읽기 전용(변경 버튼으로만 바꾼다) ----------
+
+
+def test_the_address_field_is_read_only_and_the_change_button_is_the_way_to_edit_it(world):
+    html = world.client.get(f"/panel/settings/feed/{world.f_free}", headers={"x-panel": "1"}).text
+    field = re.search(r'<input id="p_furl" name="url"[^>]*>', html).group(0)
+    assert (
+        " readonly" in field
+        and 'aria-readonly="true"' in field
+        and f'value="{world.feeds.get(world.f_free).url}"' in field
+    )
+    assert '오른쪽 "변경" 버튼으로 바꿉니다' in html and "data-finder-open" in html
+
+
+def test_a_read_only_value_is_still_submitted_and_a_picked_address_still_saves(world):
+    serve_list(world)
+    assert settings_post(world, world.f_free, name="자유 블로그", url=LIST_URL).status_code == 303
+    assert world.feeds.get(world.f_free).url == LIST_URL
+
+
+def test_the_read_only_field_has_its_own_look(world):
+    assert "input[readonly] { background: var(--panel);" in world.client.get("/static/app.css").text
