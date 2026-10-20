@@ -29,6 +29,7 @@ class FeedOverview:
     last_published: datetime | None
     total: int
     unread: int
+    kind: str = "feed"  # feed 또는 page(웹페이지 구독)
 
 
 def _parse(value: str | None) -> datetime | None:
@@ -75,6 +76,7 @@ class OverviewRepository:
                 last_published=_parse(r["last_published_dt"]),
                 total=r["total"],
                 unread=r["unread"],
+                kind=r["kind"],
             )
             for r in rows
         ]

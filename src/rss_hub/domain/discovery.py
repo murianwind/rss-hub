@@ -61,6 +61,8 @@ def describe_fetch_failure(reason: str) -> str:
         return "사설망·내부 주소는 허용하지 않음"
     if reason == "NotAFeed":
         return "피드가 아닙니다"
+    if reason == "NoItems":
+        return "글 목록을 찾지 못했습니다(사이트 구조가 바뀌었을 수 있습니다)"
     if reason == "TooLarge":
         return "응답이 너무 큽니다"
     if reason.startswith("HTTP "):

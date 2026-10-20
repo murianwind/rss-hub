@@ -32,8 +32,8 @@
   {% set f = r.feed %}
   <li class="feed-row">
     <div class="feed-head">
-      <span class="state-dot {{ f.state }}" data-state="{{ f.id }}" role="img" aria-label="{{ {'ok': '정상', 'error': '오류', 'never': '아직 수집 전'}[f.state] }}" title="{{ ('오류: ' ~ f.last_error) if f.state == 'error' else ('정상' if f.state == 'ok' else '아직 수집 전') }}"></span>
-      <a class="feed-name" href="/reader/feed/{{ f.id }}">{{ f.emoji }} {{ f.name }}</a>
+      <span class="state-dot {{ f.state }}" data-state="{{ f.id }}" role="img" aria-label="{{ {'ok': '정상', 'error': '오류', 'never': '아직 수집 전'}[f.state] }}" title="{{ ('오류: ' ~ (fail_notes.get(f.last_error, f.last_error))) if f.state == 'error' else ('정상' if f.state == 'ok' else '아직 수집 전') }}"></span>
+      <a class="feed-name" href="/reader/feed/{{ f.id }}">{{ f.emoji }} {{ f.name }}</a>{% if f.kind == 'page' %}<span class="kind-badge" title="RSS가 없는 사이트의 글 목록 페이지를 구독 중입니다">웹페이지</span>{% endif %}
       <span class="count{% if f.unread %} unread{% endif %}" data-count="feed:{{ f.id }}"{% if not f.unread %} hidden{% endif %}>{% if f.unread %}{{ f.unread }}{% endif %}</span>
       <span class="row-actions feed-actions">
         <button type="button" class="icon-btn mini" data-refresh="{{ f.id }}" title="지금 다시 읽기" aria-label="지금 다시 읽기">{{ icon('refresh') }}</button>
@@ -51,7 +51,7 @@
       <dd>오늘 {{ f.today_count }}개 · 최근 7일 {{ f.recent_count_7d }}개{% if f.last_published %} · 마지막 게시 {{ f.last_published | ago(ui_now, ui_zone) }}{% else %} · 게시 기록 없음{% endif %}</dd>
       <dt>마지막 점검</dt>
       <dd>{% if f.last_checked_at %}{{ f.last_checked_at | ago(ui_now, ui_zone) }}{% else %}아직 점검하지 않았습니다{% endif %}
-        {% if f.state == 'error' %}<span class="error-text"> · 연속 실패 {{ f.fail_count }}회: {{ f.last_error }}</span>{% elif f.state == 'ok' %} · 정상{% endif %}
+        {% if f.state == 'error' %}<span class="error-text"> · 연속 실패 {{ f.fail_count }}회: {{ fail_notes.get(f.last_error, f.last_error) }}</span>{% elif f.state == 'ok' %} · 정상{% endif %}
         {% if f.status == 'baseline_pending' %}<span class="hint"> · 첫 점검 대기(점검 뒤 새 글부터 알림이 갑니다)</span>{% endif %}</dd>
       <dt>분류와 알림</dt><dd>{{ f.category_name if f.category_name else '카테고리 없음' }} · {{ r.alert }}</dd>
       <dt>글</dt><dd>수집한 글 {{ f.total }}개{% if f.unread %}(읽지 않은 글 {{ f.unread }}개){% endif %} · 점검할 최대 항목 수 {{ f.max_entries if f.max_entries else default_max_entries ~ '(기본값)' }}</dd>

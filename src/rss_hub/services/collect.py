@@ -23,12 +23,15 @@ from rss_hub.domain.schedule import (
     slot_for,
 )
 from rss_hub.services.clock import Clock
+from rss_hub.services.page_source import PageFeedSource
 from rss_hub.services.ports import FeedFetcher, FetchError
 from rss_hub.services.settings import AppSettings, SettingsService
 from rss_hub.storage.articles import SEEN_BASELINE, ArticleRepository, NewArticle
-from rss_hub.storage.feeds import STATUS_BASELINE, Feed, FeedRepository
+from rss_hub.storage.feeds import KIND_PAGE, STATUS_BASELINE, Feed, FeedRepository
 
 logger = logging.getLogger(__name__)
+
+MAX_ENRICH_PER_RUN = 10  # 웹페이지 구독에서 한 번에 본문을 가져오는 새 글의 최대 수
 
 
 @dataclass(frozen=True)
@@ -51,7 +54,9 @@ class CollectService:
         fetcher: FeedFetcher,
         settings: SettingsService,
         clock: Clock,
+        pages: PageFeedSource | None = None,
     ) -> None:
+        self._pages = pages
         self._feeds = feeds
         self._articles = articles
         self._fetcher = fetcher
@@ -119,7 +124,12 @@ class CollectService:
 
     def _check(self, feed: Feed, config: AppSettings, local: datetime) -> tuple[int, int]:
         """피드 하나를 점검하고 (새로 저장한 글 수, 기준선으로 기록한 글 수)를 돌려준다."""
-        result = self._fetcher.fetch(feed.url, etag=feed.etag, last_modified=feed.last_modified)
+        if feed.kind == KIND_PAGE:  # 웹페이지 구독: 목록 페이지에서 글을 뽑는다
+            if self._pages is None:
+                raise FetchError("PageSourceUnavailable")
+            result = self._pages.fetch(feed.url)
+        else:
+            result = self._fetcher.fetch(feed.url, etag=feed.etag, last_modified=feed.last_modified)
         if result.status == 304:  # 변경 없음: 내용을 해석하지 않는다
             self._feeds.record_success(
                 feed.id, etag=feed.etag, last_modified=feed.last_modified, activate=False
@@ -180,16 +190,28 @@ class CollectService:
         self, feed: Feed, examined: Sequence[tuple[object, datetime | None]], today: date
     ) -> int:
         added = 0
+        enriched = 0
         for entry, moment in examined:
             if moment is None or moment.date() != today:
                 continue
             fields = extract_article_fields(entry)  # type: ignore[arg-type]
+            guid = select_guid(entry)  # type: ignore[arg-type]
+            content = fields.content_html
+            if (
+                feed.kind == KIND_PAGE
+                and not content
+                and self._pages is not None
+                and enriched < MAX_ENRICH_PER_RUN
+                and not self._articles.is_seen(guid)
+            ):
+                content = self._pages.read_article(fields.link)  # 요약은 본문이 있어야 잘 나온다
+                enriched += 1
             article = NewArticle(
                 feed_id=feed.id,
-                guid=select_guid(entry),  # type: ignore[arg-type]
+                guid=guid,
                 title=fields.title,
                 link=fields.link,
-                content_html=fields.content_html,
+                content_html=content,
                 published_raw=fields.published_raw,
                 published_dt=moment,
                 published_date=moment.date().isoformat(),

@@ -404,3 +404,15 @@ body:not(.sidebar-collapsed).sw-480 .sidebar { width: 480px; }
 .sb-body:has(#sec-rss[open]):has(#sec-topics[open]) { --share-rss: 0.65; --share-top: 0.35; }
 .sb-body:has(#sec-categories[open]):has(#sec-topics[open]) { --share-cat: 0.6; --share-top: 0.4; }
 .sb-body:has(#sec-rss[open]):has(#sec-categories[open]):has(#sec-topics[open]) { --share-rss: 0.42; --share-cat: 0.33; --share-top: 0.25; }
+
+
+/* ---------- 이름 정렬: RSS 사이트, 카테고리, 카테고리 안의 사이트가 같은 세로줄에서 시작한다 ---------- */
+#sec-categories > .sec-body { padding: 0; }  /* RSS 피드와 주제 목록(ul)처럼 안쪽 여백 없이 */
+.tree > summary { padding-left: 0; }
+.tree > summary .nav-item { padding-left: 1px; }
+.tree-body { margin: 0 0 4px; padding-left: 0; border-left: 0; }
+.tree-body .nav-row { padding-left: 18px; }  /* 손잡이(18px) 자리를 비워 점과 이름이 RSS 사이트와 맞는다 */
+
+
+/* ---------- 웹페이지 구독 표시 ---------- */
+.kind-badge { display: inline-block; margin-left: 6px; padding: 1px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--muted); font-size: 11px; font-weight: 600; vertical-align: middle; }

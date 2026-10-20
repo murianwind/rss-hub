@@ -13,6 +13,8 @@ from rss_hub.storage.database import Database
 
 STATUS_BASELINE = "baseline_pending"
 STATUS_ACTIVE = "active"
+KIND_FEED = "feed"  # RSS/Atom 피드
+KIND_PAGE = "page"  # RSS가 없는 사이트의 글 목록 페이지(웹페이지 구독)
 DEFAULT_EMOJI = "📢"
 
 
@@ -37,6 +39,7 @@ class Feed:
     etag: str | None
     last_modified: str | None
     last_checked_at: datetime | None
+    kind: str = "feed"  # feed(RSS/Atom) 또는 page(웹페이지 구독)
 
 
 RULE_CATEGORY_FEED_WEBHOOK = "카테고리에 속한 피드는 웹훅을 지정할 수 없음"
@@ -95,6 +98,7 @@ def _feed(row: sqlite3.Row) -> Feed:
         etag=row["etag"],
         last_modified=row["last_modified"],
         last_checked_at=_parse(row["last_checked_at"]),
+        kind=row["kind"],
     )
 
 
@@ -115,6 +119,7 @@ class FeedRepository:
         category_id: int | None = None,
         webhook_id: int | None = None,
         status: str = STATUS_BASELINE,
+        kind: str = KIND_FEED,
     ) -> int:
         if webhook_id is not None and category_id is not None:
             raise FeedRuleError(RULE_CATEGORY_FEED_WEBHOOK)
@@ -129,8 +134,8 @@ class FeedRepository:
             with self._db.connect() as conn:
                 cursor = conn.execute(
                     "INSERT INTO feeds(url, url_key, name, html_url, category_id, webhook_id, "
-                    "emoji, poll_priority, max_entries, status, created_at) "
-                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "emoji, poll_priority, max_entries, status, created_at, kind) "
+                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         url,
                         feed_url_key(url),
@@ -143,6 +148,7 @@ class FeedRepository:
                         max_entries,
                         status,
                         _iso(self._clock.now()),
+                        kind,
                     ),
                 )
                 return int(cursor.lastrowid or 0)

@@ -384,3 +384,36 @@ def test_deleting_reports_whether_a_feed_was_removed(feeds):
     feed_id = feeds.add(URL, "A")
     assert feeds.delete(feed_id) is True
     assert feeds.delete(feed_id) is False
+
+
+# ---------- 구독 종류(feed, page) ----------
+
+
+def test_the_subscription_kind_defaults_to_feed_and_page_is_remembered(tmp_path):
+    from rss_hub.storage.feeds import KIND_FEED, KIND_PAGE
+
+    db, clock = Database(tmp_path / "rss_hub.db"), FakeClock()
+    feeds = FeedRepository(db, clock)
+    plain = feeds.add("https://a.example.com/rss", "피드")
+    page = feeds.add("https://b.example.com/news", "페이지", kind=KIND_PAGE)
+    assert (feeds.get(plain).kind, feeds.get(page).kind) == (KIND_FEED, KIND_PAGE)
+    assert {f.id: f.kind for f in feeds.list_all()} == {plain: KIND_FEED, page: KIND_PAGE}
+
+
+def test_upgrading_from_the_previous_schema_keeps_old_feeds_as_plain_feeds(tmp_path):
+    import sqlite3
+
+    from rss_hub.storage.migrations import MIGRATIONS, apply_migrations
+
+    conn = sqlite3.connect(tmp_path / "old.db")
+    conn.row_factory = sqlite3.Row
+    for number, script in enumerate(MIGRATIONS[:13], start=1):  # 13번까지만 적용한 예전 DB
+        conn.executescript(script)
+        conn.execute(f"PRAGMA user_version = {number}")
+    conn.execute(
+        "INSERT INTO feeds(url, url_key, name, created_at) "
+        "VALUES('https://old.example.com/rss', 'old', '옛 피드', '2026-01-01T00:00:00+00:00')"
+    )
+    apply_migrations(conn)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS) >= 14
+    assert conn.execute("SELECT kind FROM feeds").fetchone()[0] == "feed"

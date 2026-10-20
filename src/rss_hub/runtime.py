@@ -7,7 +7,7 @@
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from rss_hub.adapters.discord_webhook import DiscordNotifier, RequestsWebhookSender
 from rss_hub.adapters.http_feed_fetcher import RequestsFeedFetcher
@@ -19,7 +19,8 @@ from rss_hub.services.collect import CollectService
 from rss_hub.services.deliver import DeliveryService
 from rss_hub.services.llm_gateway import LlmGateway
 from rss_hub.services.model_scan import ModelScanService
-from rss_hub.services.ports import FeedFetcher, LlmClient, WebhookSender
+from rss_hub.services.page_source import PageFeedSource
+from rss_hub.services.ports import FeedFetcher, LlmClient, PageFetcher, WebhookSender
 from rss_hub.services.retention import RetentionService
 from rss_hub.services.settings import SettingsService
 from rss_hub.services.summarize import SummarizeService
@@ -93,12 +94,14 @@ def build_runner(
     llm_client = client or OpenRouterClient(settings.get_openrouter_key)
     llm = build_llm_services(database, clock, settings, client=llm_client, sender=webhook_sender)
     alerts, gateway = llm.alerts, llm.gateway
+    feed_fetcher = fetcher or RequestsFeedFetcher()
     collector = CollectService(
         feeds=feeds,
         articles=articles,
-        fetcher=fetcher or RequestsFeedFetcher(),
+        fetcher=feed_fetcher,
         settings=settings,
         clock=clock,
+        pages=PageFeedSource(pages=cast(PageFetcher, feed_fetcher), clock=clock),
     )
     summarizer = SummarizeService(
         articles=articles, gateway=gateway, settings=settings, topics=topics, clock=clock

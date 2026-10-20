@@ -12,12 +12,24 @@ from urllib.parse import urlsplit
 from rss_hub.domain.discovery import describe_fetch_failure, find_feed_links
 from rss_hub.domain.feed_url import FeedUrlError, feed_url_key, validate_feed_url
 from rss_hub.domain.importing import MAX_NAME_LENGTH, MAX_URL_TEXT_LENGTH
+from rss_hub.domain.page_feed import MIN_ITEMS, PageListing, extract_page_items
+from rss_hub.services.page_source import site_of
 from rss_hub.services.ports import DiscoveryFetcher, FetchError, FetchResult
-from rss_hub.storage.feeds import DuplicateFeedError, FeedRepository, FeedRuleError
+from rss_hub.storage.feeds import (
+    KIND_FEED,
+    KIND_PAGE,
+    DuplicateFeedError,
+    FeedRepository,
+    FeedRuleError,
+)
 
 MAX_CANDIDATES = 5  # 웹페이지가 알려 준 피드 중 실제로 확인해서 보여 주는 최대 개수
 ALREADY_SUBSCRIBED = "이미 구독 중인 피드입니다"
 NOTHING_FOUND = "이 주소에서 피드를 찾지 못했습니다"
+NO_PAGE_ITEMS = (
+    "글 목록을 찾지 못했습니다. 글 목록 페이지 주소가 맞는지, "
+    "사이트 구조가 바뀌지 않았는지 확인하세요"
+)
 ALL_SUBSCRIBED = "이 주소가 알려 준 피드는 모두 이미 구독 중입니다"
 
 
@@ -26,6 +38,9 @@ class Candidate:
     url: str
     title: str  # 피드가 알려 준 제목. 없으면 사이트 이름(호스트)
     site_url: str
+    kind: str = KIND_FEED  # page면 RSS가 없어서 글 목록 페이지로 구독하는 후보
+    count: int = 0  # page일 때 목록에서 찾은 글 수
+    sample: tuple[str, ...] = ()  # page일 때 찾은 글 제목 몇 개(맞게 찾았는지 눈으로 확인용)
 
 
 @dataclass(frozen=True)
@@ -48,6 +63,17 @@ class RegistrationResult:
     feed_id: int | None = None
     name: str = ""
     error: str = ""
+
+
+def _page_candidate(url: str, final_url: str, listing: PageListing) -> Candidate:
+    return Candidate(
+        url,
+        listing.title or _host(url),
+        site_of(final_url),
+        kind=KIND_PAGE,
+        count=len(listing.items),
+        sample=tuple(item.title for item in listing.items[:3]),
+    )
 
 
 def _host(url: str) -> str:
@@ -110,9 +136,14 @@ class FeedRegistrationService:
             )
         if candidates:
             return DiscoveryResult(candidates=tuple(candidates))
-        return DiscoveryResult(error=ALL_SUBSCRIBED if skipped_as_subscribed else NOTHING_FOUND)
+        if skipped_as_subscribed:
+            return DiscoveryResult(error=ALL_SUBSCRIBED)
+        listing = extract_page_items(page.text, page.final_url)
+        if len(listing.items) >= MIN_ITEMS:  # 피드는 없지만 글 목록 페이지로는 구독할 수 있다
+            return DiscoveryResult(candidates=(_page_candidate(url, page.final_url, listing),))
+        return DiscoveryResult(error=NOTHING_FOUND)
 
-    def check(self, raw_url: str) -> FeedCheck:
+    def check(self, raw_url: str, kind: str = KIND_FEED) -> FeedCheck:
         """주소가 정상적인 피드인지 확인한다(등록과 같은 검사: 주소 규칙, 실제 가져오기, 피드 해석).
 
         피드 주소를 바꾸기 전에 쓴다. 저장은 하지 않는다.
@@ -121,6 +152,11 @@ class FeedRegistrationService:
             url = validate_feed_url(raw_url)
         except FeedUrlError as error:
             return FeedCheck(error=error.message)
+        if kind == KIND_PAGE:
+            listing, error_text = self._read_listing(url)
+            if listing is None:
+                return FeedCheck(error=error_text)
+            return FeedCheck(site_url=site_of(url)[:MAX_URL_TEXT_LENGTH], title=listing.title)
         try:
             result = self._fetcher.fetch(url, etag=None, last_modified=None)
         except FetchError as error:
@@ -129,6 +165,39 @@ class FeedRegistrationService:
             site_url=result.site_url[:MAX_URL_TEXT_LENGTH], title=_title(result, "", url)
         )
 
+    def _read_listing(self, url: str) -> tuple[PageListing | None, str]:
+        """글 목록 페이지를 가져와 글을 뽑는다. (목록, 오류 문구). 글이 적으면 오류."""
+        try:
+            page = self._fetcher.fetch_page(url)
+        except FetchError as error:
+            return None, describe_fetch_failure(error.reason)
+        listing = extract_page_items(page.text, page.final_url)
+        if len(listing.items) < MIN_ITEMS:
+            return None, NO_PAGE_ITEMS
+        return listing, ""
+
+    def _register_page(
+        self, url: str, name: str, category_id: int | None, webhook_id: int | None
+    ) -> RegistrationResult:
+        listing, error_text = self._read_listing(url)
+        if listing is None:
+            return RegistrationResult(error=error_text)
+        final_name = name or listing.title or _host(url)
+        try:
+            feed_id = self._feeds.add(
+                url,
+                final_name[:MAX_NAME_LENGTH],
+                html_url=site_of(url)[:MAX_URL_TEXT_LENGTH],
+                category_id=category_id,
+                webhook_id=webhook_id,
+                kind=KIND_PAGE,
+            )
+        except FeedRuleError as error:
+            return RegistrationResult(error=error.message)
+        except DuplicateFeedError:
+            return RegistrationResult(error=ALREADY_SUBSCRIBED)
+        return RegistrationResult(feed_id=feed_id, name=final_name)
+
     def register(
         self,
         raw_url: str,
@@ -136,8 +205,9 @@ class FeedRegistrationService:
         name: str = "",
         category_id: int | None = None,
         webhook_id: int | None = None,
+        kind: str = KIND_FEED,
     ) -> RegistrationResult:
-        """피드를 등록한다. 등록 직전에 다시 가져와서 피드인지 확인한다."""
+        """피드(웹페이지 구독이면 글 목록)를 등록한다. 등록 직전에 다시 가져와서 확인한다."""
         try:
             url = validate_feed_url(raw_url)
         except FeedUrlError as error:
@@ -147,6 +217,8 @@ class FeedRegistrationService:
         name = name.strip()
         if len(name) > MAX_NAME_LENGTH:
             return RegistrationResult(error=f"이름은 {MAX_NAME_LENGTH}자까지")
+        if kind == KIND_PAGE:
+            return self._register_page(url, name, category_id, webhook_id)
         try:
             result = self._fetcher.fetch(url, etag=None, last_modified=None)
         except FetchError as error:

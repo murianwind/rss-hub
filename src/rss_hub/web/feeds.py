@@ -17,6 +17,8 @@ from rss_hub.services.clock import Clock
 from rss_hub.services.feed_registration import DiscoveryResult, FeedRegistrationService
 from rss_hub.services.settings import SettingsService
 from rss_hub.storage.feeds import (
+    KIND_FEED,
+    KIND_PAGE,
     RULE_FEED_WEBHOOK_BLOCKS_CATEGORY,
     DuplicateFeedError,
     FeedRepository,
@@ -189,6 +191,7 @@ def build_feed_router(
             name=str(form.get("name", "")),
             category_id=_id_or_none(form.get("category_id")),
             webhook_id=_id_or_none(form.get("webhook_id")),
+            kind=KIND_PAGE if form.get("kind") == KIND_PAGE else KIND_FEED,
         )
         if result.error:
             return add_panel(
@@ -231,9 +234,10 @@ def build_feed_router(
             return page(request, error="이미 구독 중인 피드입니다", status_code=400)
         new_site: str | None = None
         if url_changed:  # 새 주소가 정상적인 피드인지 등록할 때와 같게 확인한다(바꾸기 전에)
-            checked = await run_in_threadpool(registration.check, url)
+            checked = await run_in_threadpool(registration.check, url, feed.kind)
             if checked.error:
-                message = f"새 피드 주소를 확인하지 못했습니다: {checked.error}"
+                what = "목록 페이지" if feed.kind == KIND_PAGE else "피드"
+                message = f"새 {what} 주소를 확인하지 못했습니다: {checked.error}"
                 return page(request, error=message, status_code=400)
             new_site = checked.site_url
         try:
@@ -315,6 +319,7 @@ def build_feed_router(
                 f.name, f.url, f.html_url, names.get(f.category_id) if f.category_id else None
             )
             for f in sorted(feeds.list_all(), key=lambda f: f.name.lower())
+            if f.kind == KIND_FEED  # 웹페이지 구독은 피드가 아니라서 내보내지 않는다
         ]
         return Response(
             build_opml(items),

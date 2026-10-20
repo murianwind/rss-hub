@@ -240,6 +240,10 @@ MIGRATIONS: tuple[str, ...] = (
     ALTER TABLE articles ADD COLUMN full_status TEXT;
     ALTER TABLE articles ADD COLUMN full_error TEXT;
     """,
+    # 14: 구독 종류. feed(RSS/Atom 피드)와 page(RSS가 없는 사이트의 글 목록 페이지)
+    """
+    ALTER TABLE feeds ADD COLUMN kind TEXT NOT NULL DEFAULT 'feed';
+    """,
 )
 
 

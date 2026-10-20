@@ -141,6 +141,10 @@ DELETE_NOTES = {
         "지워지고 글은 남습니다. 삭제할까요?"
     ),
 }
+FAIL_NOTES = {
+    "NoItems": "글 목록을 찾지 못했습니다(사이트 구조가 바뀌었을 수 있습니다)",
+    "PageSourceUnavailable": "웹페이지 구독을 처리할 수 없습니다",
+}  # 피드 관리 화면에서 실패 분류를 사람이 읽을 문구로 바꾼다
 _OWN_LIST = re.compile(r"^/reader/(feed|category|topic)/(\d+)")
 
 
@@ -226,7 +230,7 @@ def model_usage_view(
 
     값은 OpenRouter가 알려 주는 오늘의 무료 모델 호출 수(같은 키를 쓰는 모든 프로그램의 합계)다.
     서버를 매번 부르지 않도록 1분 동안 재사용하되, 이 서비스가 모델을 부른 기록(llm_usage)이 늘면
-    바로 다시 묻는다(호출 이후 갱신). 서버에 닿지 못하면 이 서비스의 호출 기록과 내부 상한을 쓴다.
+    바로 다시 묻는다(호출 이후 갱신). 서버에서 값을 받지 못하면 표시하지 않는다(None).
     """
     cache = _ServerUsageCache()
     lock = threading.Lock()
@@ -245,9 +249,9 @@ def model_usage_view(
                     server = None
                 cache.at, cache.count, cache.server = now, local, server
             server = cache.server
-        if server is not None:
-            return {"remaining": max(0, server.remaining), "cap": server.limit}
-        return {"remaining": max(0, config.llm_daily_cap - local), "cap": config.llm_daily_cap}
+        if server is None:
+            return None  # 서버에서 값을 받지 못하면 틀린 값 대신 보여 주지 않는다
+        return {"remaining": max(0, server.remaining), "cap": server.limit}
 
     return view
 

@@ -177,35 +177,37 @@ def model_text(html):
 
 
 def test_the_remaining_model_usage_is_shown_only_when_a_model_is_configured(world):
-    assert model_text(world.get("/reader").text) is None
+    server_says(world, 33)
+    assert (
+        model_text(world.get("/reader").text) is None
+    )  # 모델(키)이 없으면 서버 값이 있어도 표시하지 않는다
     assert world.get("/ui/state").json()["model_usage"] is None
-    post(world, "/settings/openrouter-key", openrouter_key=KEY, next="/settings")
-    assert model_text(world.get("/reader").text) == "700/700"
-    assert world.get("/ui/state").json()["model_usage"] == {"remaining": 700, "cap": 700}
+    configure_model(world)
+    assert model_text(world.get("/reader").text) == "967/1000"
+    assert world.get("/ui/state").json()["model_usage"] == {"remaining": 967, "cap": 1000}
 
 
 def test_every_model_call_lowers_the_remaining_number_wherever_it_came_from(world):
-    post(world, "/settings/openrouter-key", openrouter_key=KEY, next="/settings")
     from rss_hub.storage.llm_usage import LlmUsageRepository
 
+    configure_model(world)
+    server_says(world, 33)
+    assert model_text(world.get("/reader").text) == "967/1000"
     usage = LlmUsageRepository(world.parts.db, world.parts.clock)
+    usage.record(model="m/free", outcome="success", status=200)
     usage.record(
-        model="m/free", outcome="success", status=200
-    )  # 요약이나 설정 화면의 벤치마크나 같다
-    usage.record(model="m/free", outcome="rate_limit", status=429)  # 실패한 호출도 한 번으로 센다
-    assert model_text(world.get("/reader").text) == "698/700"
-    assert world.get("/ui/state").json()["model_usage"]["remaining"] == 698
+        model="m/free", outcome="rate_limit", status=429
+    )  # 실패한 호출도 서버는 한 번으로 센다
+    server_says(world, 35)
+    assert model_text(world.get("/reader").text) == "965/1000"
+    assert world.get("/ui/state").json()["model_usage"]["remaining"] == 965
 
 
-def test_the_remaining_number_never_goes_below_zero_and_follows_the_cap_setting(world):
-    post(world, "/settings/openrouter-key", openrouter_key=KEY, next="/settings")
+def test_the_internal_cap_setting_does_not_change_the_server_numbers(world):
+    configure_model(world)
     post(world, "/settings", llm_daily_cap="100", next="/settings")
-    from rss_hub.storage.llm_usage import LlmUsageRepository
-
-    usage = LlmUsageRepository(world.parts.db, world.parts.clock)
-    for _ in range(103):
-        usage.record(model="m/free", outcome="success", status=200)
-    assert model_text(world.get("/reader").text) == "0/100"
+    server_says(world, 33)
+    assert model_text(world.get("/reader").text) == "967/1000"  # 분모는 서버가 알려 준 한도다
 
 
 def test_the_refresh_json_and_the_script_keep_the_model_usage_current(world):
@@ -478,23 +480,25 @@ def test_the_server_is_asked_at_most_once_per_interval_and_never_when_no_model_i
     assert world.parts.llm.usage_queries == 1
 
 
-def test_when_the_server_cannot_be_reached_the_local_count_and_the_internal_cap_are_used(world):
+def test_when_the_server_cannot_be_reached_nothing_is_shown_and_it_returns_when_it_can(world):
     configure_model(world)
     world.parts.llm.usage = None
-    assert model_text(world.get("/reader").text) == "700/700"
+    assert model_text(world.get("/reader").text) is None  # 틀린 값 대신 표시하지 않는다
+    assert world.get("/ui/state").json()["model_usage"] is None
     server_says(world, 33)
     world.parts.clock.advance(minutes=2)
     assert model_text(world.get("/reader").text) == "967/1000"
 
 
-def test_a_server_that_raises_never_breaks_the_page(world):
+def test_a_server_that_raises_never_breaks_the_page_and_shows_nothing(world):
     configure_model(world)
 
     def boom():
         raise RuntimeError("서버 오류")
 
     world.parts.llm.server_usage = boom
-    assert model_text(world.get("/reader").text) == "700/700"
+    response = world.get("/reader")
+    assert response.status_code == 200 and model_text(response.text) is None
 
 
 def test_the_remaining_number_is_never_negative_even_if_the_server_says_over_the_limit(world):

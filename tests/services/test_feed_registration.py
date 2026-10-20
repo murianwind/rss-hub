@@ -318,3 +318,153 @@ def test_check_turns_a_fetch_failure_into_a_short_reason(env, reason, message):
     env.fetcher.fail("https://new.example.com/rss", reason)
     result = env.service.check("https://new.example.com/rss")
     assert message in result.error and result.site_url == ""
+
+
+# ---------- 웹페이지 구독(RSS가 없는 사이트) ----------
+
+LIST_PAGE = "https://blog.example.com/news"
+
+
+def with_posts(env, count=4, url=LIST_PAGE):
+    from tests.fakes.page_html import listing, sample_items
+
+    env.fetcher.page(url, listing(sample_items(count)))
+
+
+def test_a_page_without_feed_links_but_with_a_post_list_offers_a_web_page_subscription(env):
+    with_posts(env)
+    result = env.service.discover(LIST_PAGE)
+    assert result.error == ""
+    (candidate,) = result.candidates
+    assert (candidate.kind, candidate.url, candidate.count) == ("page", LIST_PAGE, 4)
+    assert (
+        candidate.title == "예제 블로그 - 소식"
+        and candidate.site_url == "https://blog.example.com/"
+    )
+    assert candidate.sample[0].startswith("새 소식 1번") and len(candidate.sample) == 3
+
+
+def test_a_page_with_too_few_posts_is_still_nothing_found(env):
+    with_posts(env, count=2)
+    assert env.service.discover(LIST_PAGE).error == NOTHING_FOUND
+
+
+def test_a_page_with_feed_links_offers_only_the_feeds_not_the_web_page(env):
+    with_posts(env)
+    env.fetcher.page(
+        LIST_PAGE,
+        env.fetcher.pages[LIST_PAGE].replace(
+            "<head>", f"<head>{link('https://blog.example.com/feed.xml')}"
+        ),
+    )
+    env.fetcher.feed("https://blog.example.com/feed.xml", "공식 피드", "https://blog.example.com")
+    kinds = [c.kind for c in env.service.discover(LIST_PAGE).candidates]
+    assert kinds == ["feed"]
+
+
+def test_when_every_found_feed_is_already_subscribed_the_web_page_is_not_offered(env):
+    with_posts(env)
+    env.fetcher.page(
+        LIST_PAGE,
+        env.fetcher.pages[LIST_PAGE].replace(
+            "<head>", f"<head>{link('https://a.example.com/feed')}"
+        ),
+    )
+    assert env.service.discover(LIST_PAGE).error == ALL_SUBSCRIBED
+
+
+def test_registering_a_web_page_subscription_checks_the_list_and_saves_it_as_a_page_feed(env):
+    with_posts(env)
+    result = env.service.register(LIST_PAGE, name="", kind="page")
+    assert result.error == "" and result.name == "예제 블로그 - 소식"
+    saved = env.feeds.get(result.feed_id)
+    assert (saved.kind, saved.url, saved.html_url, saved.status) == (
+        "page",
+        LIST_PAGE,
+        "https://blog.example.com/",
+        STATUS_BASELINE,
+    )
+
+
+def test_the_given_name_wins_over_the_page_title_and_long_names_are_cut(env):
+    with_posts(env)
+    assert (
+        env.service.register(LIST_PAGE, name="내가 정한 이름", kind="page").name == "내가 정한 이름"
+    )
+
+
+@pytest.mark.parametrize(
+    "mode", ["too_few", "fetch_error", "not_a_page_address", "subscribed", "long_name"]
+)
+def test_registering_a_web_page_subscription_refuses_bad_input_and_saves_nothing(env, mode):
+    before = len(env.feeds.existing_url_keys())
+    url, name = LIST_PAGE, ""
+    if mode == "too_few":
+        with_posts(env, count=2)
+        expected = "글 목록을 찾지 못했습니다"
+    elif mode == "fetch_error":
+        env.fetcher.fail(LIST_PAGE, "ReadTimeout")
+        expected = "시간 초과"
+    elif mode == "not_a_page_address":
+        url, expected = "ftp://x.example.com/news", "http"
+    elif mode == "subscribed":
+        url, expected = "https://a.example.com/feed", ALREADY_SUBSCRIBED
+    else:
+        with_posts(env)
+        name, expected = "가" * 500, "이름은"
+    result = env.service.register(url, name=name, kind="page")
+    assert expected in result.error and result.feed_id is None
+    assert len(env.feeds.existing_url_keys()) == before
+
+
+def test_check_for_a_page_feed_looks_for_posts_not_a_feed(env):
+    with_posts(env)
+    ok = env.service.check(LIST_PAGE, "page")
+    assert (ok.error, ok.site_url, ok.title) == (
+        "",
+        "https://blog.example.com/",
+        "예제 블로그 - 소식",
+    )
+    env.fetcher.page("https://blog.example.com/empty", "<html><body><p>글 없음</p></body></html>")
+    assert (
+        "글 목록을 찾지 못했습니다"
+        in env.service.check("https://blog.example.com/empty", "page").error
+    )
+    env.fetcher.fail("https://blog.example.com/down", "ConnectionError")
+    assert "연결하지 못했습니다" in env.service.check("https://blog.example.com/down", "page").error
+    assert env.service.check("javascript:alert(1)", "page").error
+
+
+def test_a_feed_registration_is_unchanged_and_saved_as_a_feed(env):
+    env.fetcher.feed("https://new.example.com/rss", "새 블로그", "https://new.example.com")
+    result = env.service.register("https://new.example.com/rss", name="")
+    assert env.feeds.get(result.feed_id).kind == "feed"
+
+
+def test_registering_a_web_page_with_both_a_category_and_a_webhook_is_refused(env):
+    with_posts(env)
+    result = env.service.register(LIST_PAGE, name="", kind="page", category_id=1, webhook_id=1)
+    assert "웹훅" in result.error and result.feed_id is None
+
+
+def test_a_web_page_subscription_that_was_added_in_the_meantime_is_reported_as_subscribed(
+    env, monkeypatch
+):
+    from rss_hub.storage.feeds import DuplicateFeedError
+
+    with_posts(env)
+
+    def duplicate(*args, **kwargs):
+        raise DuplicateFeedError
+
+    monkeypatch.setattr(env.feeds, "add", duplicate)
+    assert env.service.register(LIST_PAGE, name="", kind="page").error == ALREADY_SUBSCRIBED
+
+
+def test_three_links_with_only_two_usable_titles_are_not_offered_as_a_web_page_subscription(env):
+    html = (
+        '<body><a href="/news/a">진짜 제목 하나입니다 길게</a>'
+        '<a href="/news/b">진짜 제목 둘입니다 길게</a><a href="/news/c">Read more</a></body>'
+    )
+    env.fetcher.page(LIST_PAGE, html)
+    assert env.service.discover(LIST_PAGE).error == NOTHING_FOUND

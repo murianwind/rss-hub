@@ -29,6 +29,7 @@ from rss_hub.services.importer import ImportService
 from rss_hub.services.model_benchmark import BenchmarkRunner, BenchmarkService
 from rss_hub.services.model_chain import ModelChainService
 from rss_hub.services.model_scan import ModelScanService
+from rss_hub.services.page_source import PageFeedSource
 from rss_hub.services.ports import DiscoveryFetcher, LlmClient, PageFetcher, WebhookSender
 from rss_hub.services.settings import SettingsService
 from rss_hub.services.topic_probe import TopicProbe
@@ -61,6 +62,7 @@ from rss_hub.web.security import SAFE_METHODS, SECURITY_HEADERS, request_is_same
 from rss_hub.web.topics import build_topic_router
 from rss_hub.web.ui import (
     DELETE_NOTES,
+    FAIL_NOTES,
     ago,
     build_ui_context,
     icon,
@@ -100,7 +102,9 @@ def create_app(
     service = SettingsService(database, app_clock)
     app.state.settings_service = service
     templates = Jinja2Templates(directory=TEMPLATE_DIR)
-    templates.env.globals.update(icon=icon, sprite=sprite, delete_notes=DELETE_NOTES)
+    templates.env.globals.update(
+        icon=icon, sprite=sprite, delete_notes=DELETE_NOTES, fail_notes=FAIL_NOTES
+    )
     templates.env.filters["ago"] = ago
     templates.env.filters["qs"] = qs
     articles = ArticleRepository(database, app_clock)
@@ -221,8 +225,14 @@ def create_app(
     app.include_router(build_topic_router(topics, service, templates, probe))
     app.include_router(build_category_router(feeds, service, templates))
     registration = FeedRegistrationService(fetcher=fetcher, feeds=feeds)
+    page_source = PageFeedSource(pages=page_fetcher or fetcher, clock=app_clock)
     collector = CollectService(
-        feeds=feeds, articles=articles, fetcher=fetcher, settings=service, clock=app_clock
+        feeds=feeds,
+        articles=articles,
+        fetcher=fetcher,
+        settings=service,
+        clock=app_clock,
+        pages=page_source,
     )
     app.include_router(
         build_live_router(reader=reader, feeds=feeds, collector=collector, model_usage=model_usage)

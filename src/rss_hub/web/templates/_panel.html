@@ -15,7 +15,7 @@
       <input type="hidden" name="next" value="{{ next }}">
       <div class="field wide"><label for="p_url">피드 또는 웹사이트 주소</label>
         <input id="p_url" name="url" value="{{ panel.url }}" placeholder="https://example.com/ 또는 https://example.com/feed.xml" maxlength="2048" required></div>
-      <p class="hint wide">웹사이트 주소를 넣으면 그 페이지가 알려 준 피드를 찾아 보여 줍니다. 사설망(192.168.x.x, localhost 등) 주소는 허용하지 않습니다.</p>
+      <p class="hint wide">웹사이트 주소를 넣으면 그 페이지가 알려 준 피드를 찾아 보여 줍니다. RSS가 없는 사이트는 글 목록 페이지 주소를 넣으면 웹페이지로 구독할 수 있습니다. 사설망(192.168.x.x, localhost 등) 주소는 허용하지 않습니다.</p>
       <div class="row wide"><button type="submit" class="primary">확인</button><a class="button" href="{{ next }}" data-action="close-panel">취소</a></div>
     </form>
     {% if panel.discovery and panel.discovery.candidates %}
@@ -23,8 +23,10 @@
     {% for c in panel.discovery.candidates %}
     <form method="post" action="/feeds/register" class="slide-grid candidate">
       <input type="hidden" name="url" value="{{ c.url }}">
+      <input type="hidden" name="kind" value="{{ c.kind }}">
       <input type="hidden" name="next" value="{{ next }}">
-      <p class="wide"><strong>{{ c.title }}</strong><br><span class="hint">{{ c.url }}</span></p>
+      <p class="wide"><strong>{{ c.title }}</strong>{% if c.kind == 'page' %} <span class="kind-badge">웹페이지 구독</span>{% endif %}<br><span class="hint">{{ c.url }}</span></p>
+      {% if c.kind == 'page' %}<p class="hint wide">이 사이트는 RSS 피드를 제공하지 않아 글 목록 페이지에서 글 {{ c.count }}개를 찾았습니다{% if c.sample %}(예: {{ c.sample | join(' / ') }}){% endif %}. 사이트 구조가 바뀌어 글을 못 찾게 되면 피드 상태 점이 빨갛게 바뀝니다. 그때는 주소를 다시 확인해서 고쳐 주세요.</p>{% endif %}
       <div class="field"><label for="reg_name_{{ loop.index }}">이름</label>
         <input id="reg_name_{{ loop.index }}" name="name" value="{{ c.title }}" maxlength="200"></div>
       <div class="field"><label for="reg_cat_{{ loop.index }}">카테고리</label>
@@ -61,7 +63,7 @@
       <input type="hidden" name="next" value="{{ next }}">
       <div class="field"><label for="p_fname">표시 이름</label><input id="p_fname" name="name" value="{{ f.name }}" maxlength="200" required></div>
       <div class="field"><label for="p_emoji">이모지</label><input id="p_emoji" name="emoji" value="{{ f.emoji }}" maxlength="8" required></div>
-      <div class="field wide"><label for="p_furl">피드 주소 <span class="hint">바꾸면 저장할 때 정상적인 피드인지 확인하고, 처음부터 다시 점검합니다(예전 글은 알림으로 보내지 않습니다)</span></label>
+      <div class="field wide"><label for="p_furl">{% if f.kind == 'page' %}목록 페이지 주소 <span class="hint">바꾸면 저장할 때 글 목록이 보이는지 확인하고, 처음부터 다시 점검합니다(예전 글은 알림으로 보내지 않습니다)</span>{% else %}피드 주소 <span class="hint">바꾸면 저장할 때 정상적인 피드인지 확인하고, 처음부터 다시 점검합니다(예전 글은 알림으로 보내지 않습니다)</span>{% endif %}</label>
         <input id="p_furl" name="url" value="{{ f.url }}" maxlength="2048" required></div>
       <div class="field"><label for="p_max">최대 검사 항목 수 <span class="hint">비워 두면 기본값 {{ panel.default_max_entries }}</span></label>
         <input id="p_max" name="max_entries" value="{{ f.max_entries if f.max_entries else '' }}" maxlength="3"></div>
