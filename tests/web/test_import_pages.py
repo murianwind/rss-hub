@@ -63,7 +63,7 @@ def token_of(response):
 def test_the_import_page_has_a_multipart_form_and_is_linked_from_the_menu(client):
     html = client.get("/import").text
     assert 'enctype="multipart/form-data"' in html and 'type="file"' in html
-    assert 'href="/import"' in client.get("/").text
+    assert 'href="/import"' in client.get("/feeds").text  # 구독 & OPML 관리 화면에서 간다
 
 
 # ---------- 미리보기 ----------

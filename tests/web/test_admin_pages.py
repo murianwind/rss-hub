@@ -337,7 +337,7 @@ def test_secrets_do_not_leak_into_logs(client, caplog):
 
 def test_html_pages_declare_the_language_and_a_mobile_viewport(client):
     html = client.get("/settings").text
-    assert '<html lang="ko">' in html
+    assert '<html lang="ko" data-theme="system" data-font="normal">' in html
     assert re.search(r'<meta name="viewport" content="width=device-width', html)
 
 

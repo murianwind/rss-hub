@@ -1,0 +1,4 @@
+{% set current = ui_settings_tab %}
+<nav class="tabs" aria-label="환경 설정">
+  {% for href, label in ui_settings_items %}<a href="{{ href }}" {% if href == current %}aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+</nav>

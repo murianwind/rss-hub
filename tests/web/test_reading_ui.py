@@ -377,7 +377,7 @@ def test_the_section_of_the_current_list_starts_open_and_the_others_closed(world
 
 def test_a_feed_inside_a_category_opens_the_category_tree_and_is_marked_current(world):
     html = world.get(f"/reader/feed/{world.f_news}").text
-    assert re.search(r'<details class="tree" open>', html)
+    assert re.search(r'<details class="tree"[^>]* open>', html)
     assert re.search(rf'href="/reader/feed/{world.f_news}"[^>]*aria-current="page"', html)
 
 
@@ -400,11 +400,27 @@ def test_an_unknown_toast_key_shows_nothing_and_text_cannot_be_injected(world):
     assert "data-toast" in html and "모두 읽음으로 표시했습니다." in html
 
 
-def test_every_management_page_shows_the_same_sidebar_and_marks_itself(world):
-    for path in ("/settings", "/feeds", "/categories", "/topics", "/models", "/status", "/import"):
+def test_every_management_page_shows_the_same_sidebar_and_marks_its_tab(world):
+    tab = {
+        "/": "/status",
+        "/settings": "/settings/general",
+        "/import": "/feeds",
+        "/categories": "/feeds",
+        "/models": "/settings/llm",
+    }
+    paths = (
+        "/settings",
+        "/settings/general",
+        "/settings/notifications",
+        "/settings/llm",
+        "/settings/display",
+    )
+    for path in (*paths, "/feeds", "/categories", "/topics", "/models", "/status", "/import", "/"):
         html = world.get(path).text
         assert '<nav aria-label="구독 목록">' in html
-        assert re.search(rf'href="{path}"[^>]*aria-current="page"', html), path
+        expected = tab.get(path, path)
+        assert re.search(rf'href="{expected}"[^>]*aria-current="page"', html), path
+        assert '<nav class="tabs"' in html
 
 
 # ---------- 정적 파일과 보안 ----------

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}피드 · RSS Hub{% endblock %}
 {% block content %}
+{% include "_settings_tabs.html" %}
 <h1>피드</h1>
 
 {% if notice %}<div class="banner" role="status">{{ notice }}</div>{% endif %}
@@ -47,7 +48,7 @@
 
 <h2>구독 목록 <span class="hint">{{ feeds | length }}개</span></h2>
 <p class="note">웹훅을 지정한 피드의 알림은 그 웹훅으로 가고 기본 웹훅에서는 빠집니다. 카테고리에 속한 피드는 카테고리의 웹훅을 따르며, 피드마다 웹훅을 지정할 수 없습니다. 카테고리에서 빼면 다시 지정할 수 있습니다.</p>
-<p><a href="/feeds/export.opml">OPML로 내보내기</a> · <a href="/import">OPML 가져오기</a></p>
+<p><a href="/feeds/export.opml">OPML로 내보내기</a> · <a href="/import">OPML 가져오기</a> · <a href="/categories">카테고리 관리</a></p>
 
 {% for f in feeds %}
 <div class="panel">

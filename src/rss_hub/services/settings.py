@@ -41,6 +41,7 @@ class SettingDef:
     label: str
     default: str
     validate: Callable[[str], str]
+    choices: tuple[tuple[str, str], ...] = ()  # (값, 이름). 있으면 선택 상자로 그린다
 
 
 def _bounded(maximum: int) -> Callable[[str], str]:
@@ -49,6 +50,22 @@ def _bounded(maximum: int) -> Callable[[str], str]:
 
 def _bounded_from_zero(maximum: int) -> Callable[[str], str]:
     return lambda raw: str(parse_positive_int(raw, minimum=0, maximum=maximum))
+
+
+def _choice(options: tuple[tuple[str, str], ...]) -> Callable[[str], str]:
+    allowed = {value for value, _ in options}
+
+    def validate(raw: str) -> str:
+        value = raw.strip()
+        if value not in allowed:
+            raise SettingError("목록에 있는 값 중에서 고르세요")
+        return value
+
+    return validate
+
+
+THEME_CHOICES = (("system", "기기 설정 따르기"), ("light", "밝게"), ("dark", "어둡게"))
+FONT_CHOICES = (("normal", "보통"), ("large", "크게"))
 
 
 def _base_url(raw: str) -> str:
@@ -87,6 +104,8 @@ SETTING_DEFS: tuple[SettingDef, ...] = (
         "0",
         _bounded_from_zero(5),
     ),
+    SettingDef("ui_theme", "화면 테마", "system", _choice(THEME_CHOICES), THEME_CHOICES),
+    SettingDef("ui_font_size", "글자 크기", "normal", _choice(FONT_CHOICES), FONT_CHOICES),
     SettingDef(
         "article_retention_days",
         "글 보관 기간(일, 0이면 계속 보관)",
@@ -127,6 +146,8 @@ class AppSettings:
     slot_batch_size: int
     default_max_entries: int
     baseline_archive_count: int
+    ui_theme: str
+    ui_font_size: str
     topic_feedback_examples: int
     article_retention_days: int
     model_chain: tuple[str, ...]
@@ -194,6 +215,8 @@ class SettingsService:
             slot_batch_size=int(v["slot_batch_size"]),
             default_max_entries=int(v["default_max_entries"]),
             baseline_archive_count=int(v["baseline_archive_count"]),
+            ui_theme=v["ui_theme"],
+            ui_font_size=v["ui_font_size"],
             topic_feedback_examples=int(v["topic_feedback_examples"]),
             article_retention_days=int(v["article_retention_days"]),
             model_chain=tuple(v["model_chain"].split(",")),

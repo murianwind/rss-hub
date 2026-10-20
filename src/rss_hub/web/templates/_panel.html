@@ -1,0 +1,138 @@
+{% set kind_names = {'feed': 'RSS 피드', 'category': '카테고리', 'topic': '주제'} %}
+{% set target = panel.item.name if panel.item else '' %}
+<section class="slide{% if not request.headers.get('x-panel') %} static{% endif %}" id="slide-panel" aria-label="{{ kind_names[panel.kind] }}">
+  <div class="slide-inner">
+    <div class="slide-head">
+      <h2>
+        {% if panel.mode == 'add' %}{{ icon('plus') }} 새 {{ kind_names[panel.kind] }} 추가
+        {% elif panel.mode == 'delete' %}{{ icon('minus') }} {{ kind_names[panel.kind] }} 삭제: <span class="accent">{{ target }}</span>
+        {% else %}{{ icon('gear') }} <span class="accent">{{ target }}</span> {{ kind_names[panel.kind] }} 설정{% endif %}
+      </h2>
+      <a class="link-btn" href="{{ next }}" data-action="close-panel">{{ icon('x') }} 닫기</a>
+    </div>
+
+    {% if panel.mode == 'add' and panel.kind == 'feed' %}
+    <form method="post" action="/feeds/discover" class="slide-grid">
+      <div class="field wide"><label for="p_url">피드 또는 웹사이트 주소</label>
+        <input id="p_url" name="url" placeholder="https://example.com/ 또는 https://example.com/feed.xml" maxlength="2048" required></div>
+      <p class="hint wide">주소를 확인하면 다음 화면에서 찾은 피드를 고르고 카테고리와 웹훅을 정합니다. 사설망 주소는 허용하지 않습니다.</p>
+      <div class="row wide"><button type="submit" class="primary">확인</button><a class="button" href="{{ next }}" data-action="close-panel">취소</a></div>
+    </form>
+
+    {% elif panel.mode == 'add' and panel.kind == 'category' %}
+    <form method="post" action="/categories/add" class="slide-grid">
+      <input type="hidden" name="next" value="{{ next }}">
+      <div class="field wide"><label for="p_name">카테고리 이름</label><input id="p_name" name="name" maxlength="40" required></div>
+      <div class="row wide"><button type="submit" class="primary">{{ icon('check') }} 등록하기</button><a class="button" href="{{ next }}" data-action="close-panel">취소</a></div>
+    </form>
+
+    {% elif panel.mode == 'add' and panel.kind == 'topic' %}
+    <form method="post" action="/topics/add" class="slide-grid">
+      <input type="hidden" name="next" value="{{ next }}">
+      <div class="field"><label for="p_name">주제 이름</label><input id="p_name" name="name" maxlength="40" required></div>
+      <div class="field"><label for="p_desc">설명 <span class="hint">LLM이 주제를 이해하는 데 쓰입니다</span></label><input id="p_desc" name="description" maxlength="200"></div>
+      <div class="field wide"><label for="p_kw">키워드 <span class="hint">쉼표나 줄바꿈으로 구분</span></label><textarea id="p_kw" name="keywords" rows="2"></textarea></div>
+      <div class="field"><label for="p_wh">웹훅</label>
+        <select id="p_wh" name="webhook_id"><option value="">기본 웹훅</option>{% for w in webhooks %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}</select></div>
+      <label class="check-row"><input type="checkbox" name="enabled" value="yes" checked>사용</label>
+      <div class="row wide"><button type="submit" class="primary">{{ icon('check') }} 등록하기</button><a class="button" href="{{ next }}" data-action="close-panel">취소</a></div>
+    </form>
+
+    {% elif panel.mode == 'settings' and panel.kind == 'feed' %}
+    {% set f = panel.item %}
+    <div class="slide-cols">
+      <form method="post" action="/feeds/{{ f.id }}/edit" class="box">
+        <input type="hidden" name="next" value="{{ next }}">
+        <h3>{{ icon('gear') }} 이름과 수집</h3>
+        <div class="field"><label for="p_fname">표시 이름</label><input id="p_fname" name="name" value="{{ f.name }}" maxlength="200" required></div>
+        <div class="field"><label for="p_emoji">이모지</label><input id="p_emoji" name="emoji" value="{{ f.emoji }}" maxlength="8"></div>
+        <div class="field"><label for="p_prio">점검 우선순위</label>
+          <select id="p_prio" name="priority"><option value="normal" {% if f.poll_priority == 'normal' %}selected{% endif %}>보통</option><option value="every_slot" {% if f.poll_priority == 'every_slot' %}selected{% endif %}>매 슬롯</option></select></div>
+        <div class="field"><label for="p_max">최대 검사 항목 수 <span class="hint">비워 두면 기본값 {{ panel.default_max_entries }}</span></label>
+          <input id="p_max" name="max_entries" value="{{ f.max_entries if f.max_entries else '' }}" maxlength="3"></div>
+        <button type="submit" class="primary compact">저장</button>
+      </form>
+      <div class="box">
+        <h3>{{ icon('folder') }} 카테고리와 알림</h3>
+        {% if f.webhook_id %}
+        <p class="hint">이 피드에는 개별 웹훅이 있어서 카테고리에 넣을 수 없습니다. 웹훅을 해제하면 넣을 수 있습니다.</p>
+        {% else %}
+        <form method="post" action="/feeds/{{ f.id }}/category" class="field">
+          <input type="hidden" name="next" value="{{ next }}">
+          <label for="p_cat">소속 카테고리</label>
+          <div class="row"><select id="p_cat" name="category_id"><option value="">없음</option>{% for c in panel.categories %}<option value="{{ c.id }}" {% if f.category_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select><button type="submit" class="compact">저장</button></div>
+        </form>
+        {% endif %}
+        {% if f.category_id %}
+        <p class="hint">카테고리에 속한 피드는 개별 웹훅을 지정할 수 없습니다. 카테고리의 웹훅을 따릅니다.</p>
+        {% else %}
+        <form method="post" action="/feeds/{{ f.id }}/webhook" class="field">
+          <input type="hidden" name="next" value="{{ next }}">
+          <label for="p_fwh">개별 웹훅(Discord)</label>
+          <div class="row"><select id="p_fwh" name="webhook_id"><option value="">지정 안 함(기본 웹훅)</option>{% for w in webhooks %}<option value="{{ w.id }}" {% if f.webhook_id == w.id %}selected{% endif %}>{{ w.name }}</option>{% endfor %}</select><button type="submit" class="compact">저장</button></div>
+        </form>
+        {% endif %}
+      </div>
+      <div class="box danger-box">
+        <h3>{{ icon('minus') }} 피드 삭제 / 구독 해제</h3>
+        <p class="hint">{{ f.url }}</p>
+        <p class="hint">피드를 삭제하면 수집된 글과 발송 기록이 함께 지워집니다.</p>
+        <a class="button danger" href="/panel/delete/feed/{{ f.id }}?next={{ next | urlencode }}" data-panel>{{ icon('minus') }} 피드 삭제</a>
+      </div>
+    </div>
+
+    {% elif panel.mode == 'settings' and panel.kind == 'category' %}
+    {% set c = panel.item %}
+    <div class="slide-cols">
+      <form method="post" action="/categories/{{ c.id }}/rename" class="box">
+        <input type="hidden" name="next" value="{{ next }}">
+        <h3>{{ icon('gear') }} 이름 수정</h3>
+        <div class="field"><label for="p_cname">카테고리 이름</label><input id="p_cname" name="name" value="{{ c.name }}" maxlength="40" required></div>
+        <button type="submit" class="primary compact">저장</button>
+      </form>
+      <form method="post" action="/categories/{{ c.id }}/webhook" class="box">
+        <input type="hidden" name="next" value="{{ next }}">
+        <h3>{{ icon('folder') }} 알림 웹훅</h3>
+        <p class="hint">피드 {{ c.feed_count }}개. 지정하면 이 카테고리 피드의 알림이 그 웹훅으로 갑니다.</p>
+        <div class="field"><label for="p_cwh">웹훅</label>
+          <select id="p_cwh" name="webhook_id"><option value="">지정 안 함(기본 웹훅)</option>{% for w in webhooks %}<option value="{{ w.id }}" {% if c.webhook_id == w.id %}selected{% endif %}>{{ w.name }}</option>{% endfor %}</select></div>
+        <button type="submit" class="compact">저장</button>
+      </form>
+      <div class="box danger-box">
+        <h3>{{ icon('minus') }} 카테고리 삭제</h3>
+        <p class="hint">카테고리만 지워지고 안의 피드는 남습니다.</p>
+        <a class="button danger" href="/panel/delete/category/{{ c.id }}?next={{ next | urlencode }}" data-panel>{{ icon('minus') }} 카테고리 삭제</a>
+      </div>
+    </div>
+
+    {% elif panel.mode == 'settings' and panel.kind == 'topic' %}
+    {% set t = panel.item %}
+    <div class="slide-cols">
+      <form method="post" action="/topics/{{ t.id }}/update" class="box wide-box">
+        <input type="hidden" name="next" value="{{ next }}">
+        <h3>{{ icon('gear') }} 주제 설정</h3>
+        <div class="field"><label for="p_tname">이름</label><input id="p_tname" name="name" value="{{ t.name }}" maxlength="40" required></div>
+        <div class="field"><label for="p_tdesc">설명 <span class="hint">LLM이 주제를 이해하는 데 쓰입니다</span></label><input id="p_tdesc" name="description" value="{{ t.description }}" maxlength="200"></div>
+        <div class="field"><label for="p_tkw">키워드 <span class="hint">쉼표나 줄바꿈으로 구분</span></label><textarea id="p_tkw" name="keywords" rows="3">{{ t.keywords | join(', ') }}</textarea></div>
+        <div class="field"><label for="p_twh">웹훅</label>
+          <select id="p_twh" name="webhook_id"><option value="">기본 웹훅</option>{% for w in webhooks %}<option value="{{ w.id }}" {% if t.webhook_id == w.id %}selected{% endif %}>{{ w.name }}</option>{% endfor %}</select></div>
+        <label class="check-row"><input type="checkbox" name="enabled" value="yes" {% if t.enabled %}checked{% endif %}>사용</label>
+        <div class="row"><button type="submit" class="primary compact">저장</button><a class="button" href="/topics/{{ t.id }}/suggestions">키워드 개선 제안</a></div>
+      </form>
+      <div class="box danger-box">
+        <h3>{{ icon('minus') }} 주제 삭제</h3>
+        <p class="hint">주제와 그 주제에 모은 기록이 지워집니다. 글은 남습니다.</p>
+        <a class="button danger" href="/panel/delete/topic/{{ t.id }}?next={{ next | urlencode }}" data-panel>{{ icon('minus') }} 주제 삭제</a>
+      </div>
+    </div>
+
+    {% elif panel.mode == 'delete' %}
+    <form method="post" action="{{ {'feed': '/feeds/', 'category': '/categories/', 'topic': '/topics/'}[panel.kind] }}{{ panel.item.id }}/delete" class="slide-grid">
+      <input type="hidden" name="next" value="{{ panel.after or next }}">
+      <p class="wide">{{ panel.note }}</p>
+      <label class="check-row wide"><input type="checkbox" name="confirm" value="yes" required>위 내용을 확인했고 <b>{{ target }}</b>을(를) 삭제합니다</label>
+      <div class="row wide"><button type="submit" class="danger">{{ icon('minus') }} 삭제</button><a class="button" href="{{ next }}" data-action="close-panel">취소</a></div>
+    </form>
+    {% endif %}
+  </div>
+</section>

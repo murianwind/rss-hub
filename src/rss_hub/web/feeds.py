@@ -5,7 +5,7 @@
 """
 
 from fastapi import APIRouter, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from rss_hub.domain.feed_edit import FeedEditError, validate_feed_edit
@@ -13,6 +13,7 @@ from rss_hub.domain.opml_export import ExportFeed, build_opml
 from rss_hub.services.feed_registration import DiscoveryResult, FeedRegistrationService
 from rss_hub.services.settings import SettingsService
 from rss_hub.storage.feeds import FeedRepository, FeedRuleError
+from rss_hub.web.ui import done
 
 CONFIRM_MESSAGE = "삭제하려면 확인란을 선택해 주세요"
 
@@ -102,7 +103,7 @@ def build_feed_router(
         )
         if result.error:
             return page(request, error=result.error, status_code=400, discover_url=url)
-        return RedirectResponse("/feeds?added=1", status_code=303)
+        return done(form, "/feeds?added=1", "added")
 
     # ---------- 편집, 삭제 ----------
 
@@ -120,7 +121,7 @@ def build_feed_router(
             return page(request, error=error.message, status_code=400)
         if not feeds.update_feed(feed_id, values):
             return page(request, error="피드를 찾을 수 없음", status_code=404)
-        return RedirectResponse("/feeds?saved=1", status_code=303)
+        return done(form, "/feeds?saved=1", "saved")
 
     @router.post("/feeds/{feed_id}/delete", response_class=HTMLResponse)
     async def delete(request: Request, feed_id: int) -> Response:
@@ -129,7 +130,7 @@ def build_feed_router(
             return page(request, error=CONFIRM_MESSAGE, status_code=400)
         if not feeds.delete(feed_id):
             return page(request, error="피드를 찾을 수 없음", status_code=404)
-        return RedirectResponse("/feeds?deleted=1", status_code=303)
+        return done(form, "/feeds?deleted=1", "deleted")
 
     # ---------- 카테고리, 웹훅 ----------
 
@@ -142,7 +143,7 @@ def build_feed_router(
             return page(request, error=error.message, status_code=400)
         if not found:
             return page(request, error="피드를 찾을 수 없음", status_code=404)
-        return RedirectResponse("/feeds?saved=1", status_code=303)
+        return done(form, "/feeds?saved=1", "saved")
 
     @router.post("/feeds/{feed_id}/webhook", response_class=HTMLResponse)
     async def set_webhook(request: Request, feed_id: int) -> Response:
@@ -153,7 +154,7 @@ def build_feed_router(
             return page(request, error=error.message, status_code=400)
         if not found:
             return page(request, error="피드를 찾을 수 없음", status_code=404)
-        return RedirectResponse("/feeds?saved=1", status_code=303)
+        return done(form, "/feeds?saved=1", "saved")
 
     # ---------- 내보내기 ----------
 

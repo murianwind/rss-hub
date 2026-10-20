@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ko">
+<html lang="ko" data-theme="{{ ui_theme }}" data-font="{{ ui_font }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -15,6 +15,7 @@
 <div class="main">
   <div class="mobilebar"><button type="button" class="icon-btn" data-action="open-drawer" aria-label="메뉴 열기">{{ icon('menu') }}</button><b>RSS Hub</b></div>
   {% if ui_toast %}<div class="toast" role="status" data-toast><span>{{ ui_toast }}</span><button type="button" class="icon-btn" data-action="close-toast" aria-label="닫기">{{ icon('x') }}</button></div>{% endif %}
+  <div id="panel-slot" class="panel-slot" hidden></div>
   {% block main %}<div class="scroll"><div class="page">
 {% block content %}{% endblock %}
   </div></div>{% endblock %}

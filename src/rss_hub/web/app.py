@@ -37,6 +37,7 @@ from rss_hub.storage.import_staging import ImportStagingRepository
 from rss_hub.storage.job_runs import JobRunRepository
 from rss_hub.storage.llm_usage import LlmUsageRepository
 from rss_hub.storage.models import ModelRepository
+from rss_hub.storage.ordering import OrderRepository
 from rss_hub.storage.reader import ReaderRepository
 from rss_hub.storage.topics import TopicRepository
 from rss_hub.version import get_version
@@ -48,6 +49,8 @@ from rss_hub.web.feeds import build_feed_router
 from rss_hub.web.health import data_dir_is_writable
 from rss_hub.web.importer import build_import_router
 from rss_hub.web.models import build_model_router
+from rss_hub.web.ordering import build_ordering_router
+from rss_hub.web.panels import build_panel_router
 from rss_hub.web.reader import build_reader_router
 from rss_hub.web.reading import build_reading_router
 from rss_hub.web.security import SAFE_METHODS, SECURITY_HEADERS, request_is_same_origin
@@ -133,6 +136,10 @@ def create_app(
         build_ui_context(reader=reader, settings=service, clock=app_clock, version=get_version())
     )
     app.include_router(build_reading_router(articles=articles, reader=reader))
+    app.include_router(build_ordering_router(orders=OrderRepository(database), feeds=feeds))
+    app.include_router(
+        build_panel_router(feeds=feeds, topics=topics, settings=service, templates=templates)
+    )
     app.include_router(
         build_reader_router(
             reader=reader,

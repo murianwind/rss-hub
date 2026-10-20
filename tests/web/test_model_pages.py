@@ -79,8 +79,8 @@ def test_the_page_shows_the_current_chain_in_order_and_asks_for_a_first_scan(wor
     assert html.index("model-a") < html.index("model-b") and "아직 스캔하지 않았습니다" in html
 
 
-def test_the_top_menu_links_to_the_models_page(world):
-    assert 'href="/models"' in world.client.get("/").text
+def test_the_llm_tab_links_to_the_models_page(world):
+    assert 'href="/models"' in world.client.get("/settings/llm").text
 
 
 def test_a_scan_lists_the_free_models_without_any_llm_call(world):

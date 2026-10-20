@@ -205,6 +205,22 @@ class FeedRepository:
             ).fetchall()
         return [Category(r["id"], r["name"], r["webhook_id"], r["feed_count"]) for r in rows]
 
+    def rename_category(self, category_id: int, name: str) -> bool:
+        """카테고리 이름을 바꾼다. 같은 이름이 이미 있으면 FeedRuleError, 없는 카테고리면 False."""
+        with self._db.connect() as conn:
+            try:
+                cursor = conn.execute(
+                    "UPDATE categories SET name = ? WHERE id = ?", (name, category_id)
+                )
+            except sqlite3.IntegrityError as error:
+                raise FeedRuleError("같은 이름의 카테고리가 이미 있음") from error
+            return cursor.rowcount > 0
+
+    def delete_category(self, category_id: int) -> bool:
+        """카테고리를 지운다. 안에 있던 피드는 카테고리 없이 남는다(피드와 글은 지우지 않는다)."""
+        with self._db.connect() as conn:
+            return conn.execute("DELETE FROM categories WHERE id = ?", (category_id,)).rowcount > 0
+
     def set_category_webhook(self, category_id: int, webhook_id: int | None) -> bool:
         """카테고리의 웹훅을 지정하거나(None이면 해제) 한다. 그런 카테고리가 없으면 False."""
         with self._db.connect() as conn:

@@ -1,14 +1,16 @@
 {% extends "base.html" %}
 {% block title %}설정 · RSS Hub{% endblock %}
 {% block content %}
-<h1>설정</h1>
+{% include "_settings_tabs.html" %}
+<h1>{{ tab_title }}</h1>
 
 {% if notice %}<div class="banner" role="status">{{ notice }}</div>{% endif %}
 {% if test_result %}<div class="banner {{ 'error' if test_result[0] == 'error' else '' }}" role="status">{{ test_result[1] }}</div>{% endif %}
 {% if section_error %}<div class="banner error" role="alert">{{ section_error[1] }}</div>{% endif %}
 
-{% if suggestion %}
+{% if suggestion and 'suggestion' in show %}
 <form method="post" action="/settings" class="panel">
+  {% if tab_path %}<input type="hidden" name="next" value="{{ tab_path }}">{% endif %}
   <p>지금 접속한 주소를 서비스 주소로 쓸 수 있습니다.</p>
   <input type="hidden" name="service_base_url" value="{{ suggestion }}">
   <p><code>{{ suggestion }}</code></p>
@@ -16,24 +18,28 @@
 </form>
 {% endif %}
 
-<form method="post" action="/settings">
+{% if groups %}<form method="post" action="/settings">
+{% if tab_path %}<input type="hidden" name="next" value="{{ tab_path }}">{% endif %}
 {% for title, defs in groups %}
   <h2>{{ title }}</h2>
   {% for d in defs %}
   <div class="field">
     <label for="{{ d.key }}">{{ d.label }}</label>
-    <input type="text" id="{{ d.key }}" name="{{ d.key }}" value="{{ values[d.key] }}" autocomplete="off">
+    {% if d.choices %}<select id="{{ d.key }}" name="{{ d.key }}">{% for value, name in d.choices %}<option value="{{ value }}" {% if values[d.key] == value %}selected{% endif %}>{{ name }}</option>{% endfor %}</select>
+    {% else %}<input type="text" id="{{ d.key }}" name="{{ d.key }}" value="{{ values[d.key] }}" autocomplete="off">{% endif %}
     {% if errors.get(d.key) %}<p class="error">{{ errors[d.key] }}</p>{% endif %}
   </div>
   {% endfor %}
 {% endfor %}
   <button type="submit" class="primary">저장</button>
-</form>
+</form>{% endif %}
 
+{% if 'key' in show %}
 <h2>OpenRouter 키</h2>
 <div class="panel">
   <p>상태: <strong>{{ '설정됨' if has_key else '미설정' }}</strong> <span class="hint">(저장한 뒤에는 값을 다시 보여 주지 않습니다)</span></p>
   <form method="post" action="/settings/openrouter-key">
+  {% if tab_path %}<input type="hidden" name="next" value="{{ tab_path }}">{% endif %}
     <div class="field">
       <label for="openrouter_key">새 키</label>
       <input type="password" id="openrouter_key" name="openrouter_key" autocomplete="off">
@@ -42,15 +48,21 @@
   </form>
   {% if has_key %}
   <form method="post" action="/settings/openrouter-key/check" class="row">
+  {% if tab_path %}<input type="hidden" name="next" value="{{ tab_path }}">{% endif %}
     <button type="submit">키 확인</button>
   </form>
   <form method="post" action="/settings/openrouter-key/delete" class="row">
+  {% if tab_path %}<input type="hidden" name="next" value="{{ tab_path }}">{% endif %}
     <label class="check-row"><input type="checkbox" name="confirm" value="yes">삭제합니다</label>
     <button type="submit" class="danger">키 삭제</button>
   </form>
   {% endif %}
 </div>
 
+{% if tab == 'llm' %}<p><a class="button" href="/models">무료 모델 스캔, 벤치마크, 체인 교체 →</a></p>{% endif %}
+{% endif %}
+
+{% if 'webhooks' in show %}
 <h2>웹훅</h2>
 <div class="panel">
   {% if webhooks %}
@@ -58,9 +70,11 @@
     {% for w in webhooks %}
     <li class="check"><span class="label">{{ w.name }}</span>
       <form method="post" action="/settings/webhooks/{{ w.id }}/test" class="row">
+  {% if tab_path %}<input type="hidden" name="next" value="{{ tab_path }}">{% endif %}
         <button type="submit">시험 전송</button>
       </form>
       <form method="post" action="/settings/webhooks/{{ w.id }}/delete" class="row">
+  {% if tab_path %}<input type="hidden" name="next" value="{{ tab_path }}">{% endif %}
         <label class="check-row"><input type="checkbox" name="confirm" value="yes">삭제합니다</label>
         <button type="submit" class="danger">삭제</button>
       </form>
@@ -72,6 +86,7 @@
   {% endif %}
 
   <form method="post" action="/settings/webhooks">
+  {% if tab_path %}<input type="hidden" name="next" value="{{ tab_path }}">{% endif %}
     <div class="field">
       <label for="webhook_name">이름</label>
       <input type="text" id="webhook_name" name="name" value="{{ webhook_name }}" autocomplete="off">
@@ -85,9 +100,12 @@
   </form>
 </div>
 
-{% if webhooks %}
+{% endif %}
+
+{% if webhooks and 'roles' in show %}
 <h2>웹훅 역할</h2>
 <form method="post" action="/settings/webhook-roles" class="panel">
+  {% if tab_path %}<input type="hidden" name="next" value="{{ tab_path }}">{% endif %}
   {% for field, label in (('default_id', '기본'), ('system_id', '시스템 알림')) %}
   <div class="field">
     <label for="{{ field }}">{{ label }}</label>
@@ -103,6 +121,7 @@
 </form>
 {% endif %}
 
+{% if 'audit' in show %}
 <h2>변경 이력</h2>
 {% if audit %}
 <ul class="history">
@@ -110,5 +129,6 @@
 </ul>
 {% else %}
 <p class="note">아직 변경한 내용이 없습니다.</p>
+{% endif %}
 {% endif %}
 {% endblock %}

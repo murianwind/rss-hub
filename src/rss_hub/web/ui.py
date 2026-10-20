@@ -6,6 +6,7 @@ from datetime import datetime, tzinfo
 from urllib.parse import urlencode
 
 from fastapi import Request
+from fastapi.responses import RedirectResponse
 from markupsafe import Markup, escape
 
 from rss_hub.services.clock import Clock
@@ -40,6 +41,11 @@ ICONS: dict[str, str] = {
     "check": '<path d="m5 12 5 5 9-10"/>',
     "list": '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
     "external": '<path d="M14 4h6v6M20 4l-9 9M18 14v5H5V6h5"/>',
+    "grip": (
+        '<circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/>'
+        '<circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/>'
+        '<circle cx="15" cy="18" r="1"/>'
+    ),
     "inbox": '<path d="M3 13h5l1 3h6l1-3h5M5 5h14l2 8v6H3v-6z"/>',
 }
 
@@ -48,13 +54,41 @@ TOASTS = {
     "bookmarked": "북마크에 추가했습니다.",
     "unbookmarked": "북마크를 해제했습니다.",
     "marked_unread": "안 읽음으로 표시했습니다.",
+    "saved": "저장했습니다.",
+    "added": "추가했습니다.",
+    "deleted": "삭제했습니다.",
+    "moved": "옮겼습니다.",
 }
 
 SETTINGS_PATHS = ("/settings", "/feeds", "/categories", "/topics", "/models", "/status", "/import")
 SIDEBAR_COOKIE = "sidebar"
+SETTINGS_ITEMS = (
+    ("/settings/general", "일반 설정"),
+    ("/feeds", "구독 & OPML 관리"),
+    ("/settings/notifications", "알림 설정"),
+    ("/settings/llm", "LLM · 모델"),
+    ("/settings/display", "디스플레이 및 테마"),
+    ("/topics", "주제 관리"),
+    ("/status", "상태"),
+)
+# 같은 탭으로 묶이는 화면들
+SETTINGS_ALIASES = {
+    "/settings": "/settings/general",
+    "/": "/status",
+    "/import": "/feeds",
+    "/categories": "/feeds",
+    "/models": "/settings/llm",
+}
 
 _SAFE_PATH = re.compile(
     r"^/(?:reader(?:/(?:feed|category|topic)/\d+|/bookmarks)?|a/\d+|topics/\d+/suggestions)"
+    r"(?:\?[0-9A-Za-z_=&%+.\-]{0,300})?$"
+)
+
+
+_SAFE_RETURN = re.compile(
+    r"^/(?:reader(?:/(?:feed|category|topic)/\d+|/bookmarks)?|a/\d+|topics/\d+/suggestions"
+    r"|settings(?:/(?:general|notifications|llm|display))?|feeds|topics|categories|models|status|import)"
     r"(?:\?[0-9A-Za-z_=&%+.\-]{0,300})?$"
 )
 
@@ -80,6 +114,18 @@ def safe_path(value: object, default: str) -> str:
     """돌아갈 곳은 이 서비스의 읽기 화면 경로(쿼리는 영숫자와 일부 기호만)만 허용한다."""
     text = str(value or "")
     return text if _SAFE_PATH.fullmatch(text) else default
+
+
+def safe_return(value: object, default: str) -> str:
+    """관리 폼이 일을 마치고 돌아갈 곳: 읽기 화면과 관리 화면의 정해진 경로만 허용한다."""
+    text = str(value or "")
+    return text if _SAFE_RETURN.fullmatch(text) else default
+
+
+def done(form: object, default: str, toast: str) -> RedirectResponse:
+    """폼에 돌아갈 곳(next)이 있고 안전하면 거기로 토스트와 함께, 없으면 기본 화면으로 보낸다."""
+    target = safe_return(form.get("next"), "")  # type: ignore[attr-defined]
+    return RedirectResponse(with_toast(target, toast) if target else default, status_code=303)
 
 
 def with_toast(path: str, key: str) -> str:
@@ -114,6 +160,16 @@ def _open_sections(request: Request, scope_kind: str) -> set[str]:
     return {"feed": {"rss"}, "category": {"categories"}, "topic": {"topics"}}.get(scope_kind, set())
 
 
+def _current(request: Request) -> str:
+    """지금 화면의 주소(패널 폼이 일을 마치고 돌아갈 곳). 알려진 쿼리만 남긴다."""
+    params = request.query_params
+    keep = {key: params[key] for key in ("page", "q", "only") if params.get(key)}
+    if request.url.path.startswith("/a/") and safe_path(params.get("back"), ""):
+        keep["back"] = params["back"]
+    query = urlencode(keep)
+    return request.url.path + (f"?{query}" if query else "")
+
+
 def build_ui_context(
     *, reader: ReaderRepository, settings: SettingsService, clock: Clock, version: str
 ) -> Callable[[Request], dict[str, object]]:
@@ -123,15 +179,21 @@ def build_ui_context(
         scope = getattr(request.state, "scope", None)
         kind = "" if scope is None else scope.kind
         side = reader.sidebar()
+        config = settings.snapshot()
         return {
             "ui_side": side,
             "ui_scope": scope,
             "ui_open": _open_sections(request, kind),
             "ui_path": request.url.path,
+            "ui_settings_items": SETTINGS_ITEMS,
+            "ui_settings_tab": SETTINGS_ALIASES.get(request.url.path, request.url.path),
+            "ui_next": safe_return(_current(request), "/reader"),
             "ui_collapsed": request.cookies.get(SIDEBAR_COOKIE) == "collapsed",
             "ui_toast": TOASTS.get(request.query_params.get("toast", ""), ""),
             "ui_now": clock.now(),
-            "ui_zone": settings.snapshot().timezone,
+            "ui_zone": config.timezone,
+            "ui_theme": config.ui_theme,
+            "ui_font": config.ui_font_size,
             "ui_version": version,
         }
 

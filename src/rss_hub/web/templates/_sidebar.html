@@ -1,5 +1,8 @@
 {% set scope_kind = ui_scope.kind if ui_scope else '' %}
 {% set scope_id = ui_scope.ident if ui_scope else none %}
+{% macro actions(kind, item_id) %}<span class="row-actions"><a class="icon-btn mini" href="/panel/settings/{{ kind }}/{{ item_id }}?next={{ ui_next | urlencode }}" data-panel title="설정" aria-label="설정">{{ icon('gear') }}</a><a class="icon-btn mini" href="/panel/delete/{{ kind }}/{{ item_id }}?next={{ ui_next | urlencode }}" data-panel title="삭제" aria-label="삭제">{{ icon('minus') }}</a></span>{% endmacro %}
+{% macro grip() %}<span class="grip" aria-hidden="true" title="끌어서 순서 바꾸기">{{ icon('grip') }}</span>{% endmacro %}
+{% macro plus(kind, label) %}<a class="icon-btn" href="/panel/add/{{ kind }}?next={{ ui_next | urlencode }}" data-panel title="{{ label }} 추가" aria-label="{{ label }} 추가">{{ icon('plus') }}</a>{% endmacro %}
 {% macro badge(unread, total) %}{% if unread %}<span class="count unread" title="안 읽은 글 {{ unread }}개">{{ unread }}</span>{% elif total %}<span class="count" title="글 {{ total }}개">{{ total }}</span>{% endif %}{% endmacro %}
 <aside class="sidebar" id="sidebar" aria-label="주 메뉴">
   <div class="sb-head">
@@ -14,24 +17,24 @@
       </ul>
 
       <details class="sec" id="sec-rss" {% if 'rss' in ui_open %}open{% endif %}>
-        <summary title="RSS 피드">{{ icon('rss') }}<span class="sec-title">RSS 피드</span>
-          <span class="sec-actions"><a class="icon-btn" href="/feeds" title="RSS 피드 추가" aria-label="RSS 피드 추가">{{ icon('plus') }}</a>{{ icon('chevron-down', 'chev') }}</span></summary>
-        <ul class="sec-body">
+        <summary title="RSS 피드" data-drop-category="">{{ icon('rss') }}<span class="sec-title">RSS 피드</span>
+          <span class="sec-actions">{{ plus('feed', 'RSS 피드') }}{{ icon('chevron-down', 'chev') }}</span></summary>
+        <ul class="sec-body" data-reorder="feed">
           {% for f in ui_side.feeds %}
-          <li><a class="nav-item" href="/reader/feed/{{ f.id }}" {% if scope_kind == 'feed' and scope_id == f.id %}aria-current="page"{% endif %}><span class="sb-text">{{ f.name }}</span>{{ badge(f.unread, f.total) }}</a></li>
+          <li class="nav-row" draggable="true" data-drag-kind="feed" data-drag-id="{{ f.id }}">{{ grip() }}<a class="nav-item" href="/reader/feed/{{ f.id }}" {% if scope_kind == 'feed' and scope_id == f.id %}aria-current="page"{% endif %}><span class="sb-text">{{ f.name }}</span>{{ badge(f.unread, f.total) }}</a>{{ actions('feed', f.id) }}</li>
           {% else %}<li class="empty-note">등록된 피드가 없습니다.</li>{% endfor %}
         </ul>
       </details>
 
       <details class="sec" id="sec-categories" {% if 'categories' in ui_open %}open{% endif %}>
         <summary title="카테고리">{{ icon('folder') }}<span class="sec-title">카테고리</span>
-          <span class="sec-actions"><a class="icon-btn" href="/categories" title="카테고리 추가" aria-label="카테고리 추가">{{ icon('plus') }}</a>{{ icon('chevron-down', 'chev') }}</span></summary>
-        <div class="sec-body">
+          <span class="sec-actions">{{ plus('category', '카테고리') }}{{ icon('chevron-down', 'chev') }}</span></summary>
+        <div class="sec-body" data-reorder="category">
           {% for c in ui_side.categories %}
-          <details class="tree" {% if (scope_kind == 'category' and scope_id == c.id) or (scope_kind == 'feed' and c.feeds | selectattr('id', 'equalto', scope_id) | list) %}open{% endif %}>
-            <summary>{{ icon('chevron-right', 'chev') }}<a class="nav-item" href="/reader/category/{{ c.id }}" {% if scope_kind == 'category' and scope_id == c.id %}aria-current="page"{% endif %}><span class="sb-text">{{ c.name }}</span>{{ badge(c.unread, c.total) }}</a></summary>
+          <details class="tree" draggable="true" data-drag-kind="category" data-drag-id="{{ c.id }}" {% if (scope_kind == 'category' and scope_id == c.id) or (scope_kind == 'feed' and c.feeds | selectattr('id', 'equalto', scope_id) | list) %}open{% endif %}>
+            <summary data-drop-category="{{ c.id }}">{{ grip() }}{{ icon('chevron-right', 'chev') }}<a class="nav-item" href="/reader/category/{{ c.id }}" {% if scope_kind == 'category' and scope_id == c.id %}aria-current="page"{% endif %}><span class="sb-text">{{ c.name }}</span>{{ badge(c.unread, c.total) }}</a>{{ actions('category', c.id) }}</summary>
             <ul class="tree-body">
-              {% for f in c.feeds %}<li><a class="nav-item" href="/reader/feed/{{ f.id }}" {% if scope_kind == 'feed' and scope_id == f.id %}aria-current="page"{% endif %}><span class="sb-text">{{ f.name }}</span>{{ badge(f.unread, f.total) }}</a></li>
+              {% for f in c.feeds %}<li class="nav-row" draggable="true" data-drag-kind="feed" data-drag-id="{{ f.id }}"><a class="nav-item" href="/reader/feed/{{ f.id }}" {% if scope_kind == 'feed' and scope_id == f.id %}aria-current="page"{% endif %}><span class="sb-text">{{ f.name }}</span>{{ badge(f.unread, f.total) }}</a>{{ actions('feed', f.id) }}</li>
               {% else %}<li class="empty-note">이 카테고리에 사이트가 없습니다.</li>{% endfor %}
             </ul>
           </details>
@@ -41,10 +44,10 @@
 
       <details class="sec" id="sec-topics" {% if 'topics' in ui_open %}open{% endif %}>
         <summary title="주제">{{ icon('hash') }}<span class="sec-title">주제 (Topic)</span>
-          <span class="sec-actions"><a class="icon-btn" href="/topics" title="주제 추가" aria-label="주제 추가">{{ icon('plus') }}</a>{{ icon('chevron-down', 'chev') }}</span></summary>
-        <ul class="sec-body">
+          <span class="sec-actions">{{ plus('topic', '주제') }}{{ icon('chevron-down', 'chev') }}</span></summary>
+        <ul class="sec-body" data-reorder="topic">
           {% for t in ui_side.topics %}
-          <li><a class="nav-item" href="/reader/topic/{{ t.id }}" {% if scope_kind == 'topic' and scope_id == t.id %}aria-current="page"{% endif %}><span class="sb-text"># {{ t.name }}</span>{{ badge(t.unread, t.total) }}</a></li>
+          <li class="nav-row" draggable="true" data-drag-kind="topic" data-drag-id="{{ t.id }}">{{ grip() }}<a class="nav-item" href="/reader/topic/{{ t.id }}" {% if scope_kind == 'topic' and scope_id == t.id %}aria-current="page"{% endif %}><span class="sb-text"># {{ t.name }}</span>{{ badge(t.unread, t.total) }}</a>{{ actions('topic', t.id) }}</li>
           {% else %}<li class="empty-note">주제가 없습니다.</li>{% endfor %}
         </ul>
       </details>
@@ -52,8 +55,8 @@
       <details class="sec" id="sec-settings" {% if 'settings' in ui_open %}open{% endif %}>
         <summary title="환경 설정">{{ icon('gear') }}<span class="sec-title">환경 설정</span><span class="sec-actions">{{ icon('chevron-down', 'chev') }}</span></summary>
         <ul class="sec-body">
-          {% for href, label in [('/settings', '일반 · 알림 · LLM 설정'), ('/feeds', '구독 관리'), ('/import', 'OPML 가져오기'), ('/categories', '카테고리 관리'), ('/topics', '주제 관리'), ('/models', '모델'), ('/status', '상태')] %}
-          <li><a class="nav-item" href="{{ href }}" {% if ui_path == href %}aria-current="page"{% endif %}><span class="sb-text">{{ label }}</span></a></li>
+          {% for href, label in ui_settings_items %}
+          <li><a class="nav-item" href="{{ href }}" {% if href == ui_settings_tab %}aria-current="page"{% endif %}><span class="sb-text">{{ label }}</span></a></li>
           {% endfor %}
         </ul>
       </details>
