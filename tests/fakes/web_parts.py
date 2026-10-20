@@ -12,7 +12,7 @@ from tests.fakes.llm_client import FakeLlmClient, reply
 BASE = "https://rss.example.com"
 
 
-def start_app(tmp_path, *, feed_fetcher=None):
+def start_app(tmp_path, *, feed_fetcher=None, page_fetcher=None):
     """(부품 묶음, 실행 중인 클라이언트). 클라이언트는 with로 열어서 서버 시작 절차를 돌린다."""
     clock = FakeClock()
     sender = FakeWebhookSender()
@@ -23,6 +23,7 @@ def start_app(tmp_path, *, feed_fetcher=None):
         webhook_sender=sender,
         llm_client=llm,
         feed_fetcher=feed_fetcher,
+        page_fetcher=page_fetcher,
     )
     client = TestClient(app, base_url=BASE, follow_redirects=False)
     parts = SimpleNamespace(

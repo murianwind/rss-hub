@@ -48,11 +48,14 @@
     <h1>{{ title }}</h1>
     {% if show_original_title %}<p class="hint">{{ article.title }}</p>{% endif %}
     {% if article.summary_ko %}<div class="panel"><strong>요약</strong><p>{{ article.summary_ko }}</p></div>{% endif %}
+    {% if fulltext_state == 'failed' %}<div class="banner" role="status">원문 전문을 가져오지 못해 RSS 본문을 보여 줍니다{% if fulltext_reason %}: {{ fulltext_reason }}{% endif %}</div>{% endif %}
+    {% if fulltext_state == 'ok' %}<p class="hint fulltext-note">원문 페이지에서 가져온 전문입니다.</p>{% endif %}
     <div class="article-body" {% if lang %}lang="{{ lang }}"{% endif %}>
       {% if body %}{{ body | safe }}{% else %}<p class="hint">본문이 없습니다. 원문에서 확인하세요.</p>{% endif %}
     </div>
     <div class="doc-foot">
       <a class="back soft" href="{{ back }}">{{ icon('arrow-left') }}<span>목록으로 돌아가기</span></a>
+      {% if fulltext_state in ('ok', 'failed') %}<form method="post" action="/a/{{ article.id }}/fulltext" class="inline-form"><input type="hidden" name="next" value="{{ here }}"><button type="submit" class="link-btn">전문 다시 가져오기</button></form>{% endif %}
       {% if has_original %}<a class="button" href="/a/{{ article.id }}/original" target="_blank" rel="noopener noreferrer">원문 보기 {{ icon('external') }}</a>{% endif %}
     </div>
   </article>

@@ -243,7 +243,7 @@ def test_the_article_body_is_sanitized(world):
     )
     article_id = world.article(content=content)
     html = world.get(f"/a/{article_id}").text
-    body = html.split('class="article-body"')[1]
+    body = html.split('class="article-body"')[1].split('<div class="doc-foot">')[0]
     for bad in ("<script>alert", "onerror", "javascript:", "<iframe", "onclick"):
         assert bad not in body
     assert "안전한 글" in body and 'src="https://img.example.com/a.png"' in body
@@ -253,7 +253,11 @@ def test_relative_links_and_images_in_the_body_resolve_against_the_articles_addr
     article_id = world.article(
         content='<a href="/more">더</a><img src="/i.png">', link="https://blog.example.com/p/1"
     )
-    body = world.get(f"/a/{article_id}").text.split('class="article-body"')[1]
+    body = (
+        world.get(f"/a/{article_id}")
+        .text.split('class="article-body"')[1]
+        .split('<div class="doc-foot">')[0]
+    )
     assert (
         'href="https://blog.example.com/more"' in body
         and 'src="https://blog.example.com/i.png"' in body

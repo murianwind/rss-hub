@@ -234,6 +234,12 @@ MIGRATIONS: tuple[str, ...] = (
     """
     ALTER TABLE articles ADD COLUMN keep_unread INTEGER NOT NULL DEFAULT 0;
     """,
+    # 13: 원문 페이지에서 뽑은 전문(정제된 HTML)과 가져오기 결과. 실패하면 다시 시도하지 않는다
+    """
+    ALTER TABLE articles ADD COLUMN full_html TEXT;
+    ALTER TABLE articles ADD COLUMN full_status TEXT;
+    ALTER TABLE articles ADD COLUMN full_error TEXT;
+    """,
 )
 
 

@@ -24,11 +24,12 @@ from rss_hub.runtime import build_llm_services
 from rss_hub.services.clock import Clock, SystemClock
 from rss_hub.services.collect import CollectService
 from rss_hub.services.feed_registration import FeedRegistrationService
+from rss_hub.services.fulltext import FullTextService
 from rss_hub.services.importer import ImportService
 from rss_hub.services.model_benchmark import BenchmarkRunner, BenchmarkService
 from rss_hub.services.model_chain import ModelChainService
 from rss_hub.services.model_scan import ModelScanService
-from rss_hub.services.ports import DiscoveryFetcher, LlmClient, WebhookSender
+from rss_hub.services.ports import DiscoveryFetcher, LlmClient, PageFetcher, WebhookSender
 from rss_hub.services.settings import SettingsService
 from rss_hub.services.topic_probe import TopicProbe
 from rss_hub.storage.articles import ArticleRepository
@@ -79,6 +80,7 @@ def create_app(
     webhook_sender: WebhookSender | None = None,
     llm_client: LlmClient | None = None,
     feed_fetcher: DiscoveryFetcher | None = None,
+    page_fetcher: PageFetcher | None = None,
     benchmark_spawn: Callable[[Callable[[], None]], object] | None = None,
     benchmark_sleep: Callable[[float], None] | None = None,
 ) -> FastAPI:
@@ -143,6 +145,8 @@ def create_app(
     app.include_router(
         build_panel_router(feeds=feeds, topics=topics, settings=service, templates=templates)
     )
+    fetcher = feed_fetcher or RequestsFeedFetcher()
+    fulltext = FullTextService(articles=articles, pages=page_fetcher or fetcher)
     app.include_router(
         build_reader_router(
             reader=reader,
@@ -151,6 +155,7 @@ def create_app(
             articles=articles,
             settings=service,
             templates=templates,
+            fulltext=fulltext,
         )
     )
     importer = ImportService(
@@ -194,7 +199,6 @@ def create_app(
     )
     app.include_router(build_topic_router(topics, service, templates, probe))
     app.include_router(build_category_router(feeds, service, templates))
-    fetcher = feed_fetcher or RequestsFeedFetcher()
     registration = FeedRegistrationService(fetcher=fetcher, feeds=feeds)
     collector = CollectService(
         feeds=feeds, articles=articles, fetcher=fetcher, settings=service, clock=app_clock

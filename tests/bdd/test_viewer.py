@@ -293,7 +293,8 @@ def _no_button(ctx):
 
 
 def article_body(ctx):
-    return ctx.response.text.split('class="article-body"')[1]
+    # 본문 영역만(그 아래 글 하단의 버튼과 폼은 본문이 아니다)
+    return ctx.response.text.split('class="article-body"')[1].split('<div class="doc-foot">')[0]
 
 
 @then(parsers.re(r'본문에 "(?P<ok>[^"]+)"은 보이고 "(?P<bad>.+)"는 없다'))

@@ -18,6 +18,7 @@ SEEN_DELIVERED = "delivered"
 MODEL_FALLBACK = "fallback-final"  # 요약에 끝까지 실패해서 원문 발췌로 확정한 글
 SEEN_BASELINE = "baseline"
 SEEN_ARTICLE = "article"
+MAX_FULL_TEXT_CHARS = 400_000  # 저장하는 전문의 최대 길이
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,9 @@ class Article:
     llm_model: str | None
     read_at: datetime | None = None  # None이면 안 읽은 글
     bookmarked_at: datetime | None = None
+    full_html: str | None = None  # 원문 페이지에서 뽑은 전문(정제됨)
+    full_status: str | None = None  # None(가져온 적 없음), ok, failed
+    full_error: str | None = None  # 실패 분류(예: ReadTimeout)
 
 
 def _iso(moment: datetime) -> str:
@@ -80,6 +84,9 @@ def _article(row: sqlite3.Row) -> Article:
         bookmarked_at=(
             None if row["bookmarked_at"] is None else datetime.fromisoformat(row["bookmarked_at"])
         ),
+        full_html=row["full_html"],
+        full_status=row["full_status"],
+        full_error=row["full_error"],
     )
 
 
@@ -202,6 +209,30 @@ class ArticleRepository:
                     "UPDATE articles SET read_at = NULL, keep_unread = 1 "
                     "WHERE id = ? AND (read_at IS NOT NULL OR keep_unread = 0)",
                     (article_id,),
+                ).rowcount
+                > 0
+            )
+
+    def save_full_text(self, article_id: int, html: str) -> bool:
+        """원문에서 뽑은 전문(정제된 HTML)을 저장한다. 그런 글이 없으면 False."""
+        with self._db.connect() as conn:
+            return (
+                conn.execute(
+                    "UPDATE articles SET full_html = ?, full_status = 'ok', full_error = NULL "
+                    "WHERE id = ?",
+                    (html, article_id),
+                ).rowcount
+                > 0
+            )
+
+    def save_full_text_failure(self, article_id: int, reason: str) -> bool:
+        """전문을 가져오지 못했다고 기록한다(같은 글을 열 때마다 다시 가져오지 않기 위해)."""
+        with self._db.connect() as conn:
+            return (
+                conn.execute(
+                    "UPDATE articles SET full_html = NULL, full_status = 'failed', full_error = ? "
+                    "WHERE id = ?",
+                    (reason[:100], article_id),
                 ).rowcount
                 > 0
             )

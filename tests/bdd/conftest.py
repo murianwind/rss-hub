@@ -4,6 +4,7 @@
 이미 같아서 별도 준비가 필요 없다. 환경이 이 값과 다르면 환경을 만드는 쪽(CollectEnv)이 실패한다.
 """
 
+import pytest
 from pytest_bdd import given
 
 
@@ -30,3 +31,15 @@ def _default_interval():
 @given("한 슬롯의 기본 배치 크기는 15이다")
 def _default_batch_size():
     """설정의 기본값(slot_batch_size)이 15이다."""
+
+
+@pytest.fixture(autouse=True)
+def _the_real_page_fetcher_never_touches_the_network(monkeypatch):
+    """화면 시험은 원문 페이지를 실제로 가져오지 않는다(글을 열면 전문을 가져오려 하므로)."""
+    from rss_hub.adapters.http_feed_fetcher import RequestsFeedFetcher
+    from rss_hub.services.ports import FetchError
+
+    def refuse(self, url):
+        raise FetchError("NoNetworkInTests")
+
+    monkeypatch.setattr(RequestsFeedFetcher, "fetch_page", refuse)

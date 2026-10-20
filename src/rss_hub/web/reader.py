@@ -11,19 +11,21 @@ from dataclasses import dataclass
 from urllib.parse import quote
 
 from fastapi import APIRouter, Request, Response
-from fastapi.responses import HTMLResponse
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from rss_hub.domain.language import detect_language
 from rss_hub.domain.sanitize import sanitize_html
 from rss_hub.domain.text import strip_html
+from rss_hub.services.fulltext import FullTextService
 from rss_hub.services.settings import SettingsService
 from rss_hub.storage.articles import ArticleRepository
 from rss_hub.storage.feeds import FeedRepository
 from rss_hub.storage.reader import ONLY_BOOKMARKS, ONLY_UNREAD, ReaderRepository
 from rss_hub.storage.topics import TopicRepository
 from rss_hub.web.articles import is_web_link
-from rss_hub.web.ui import list_url, safe_path
+from rss_hub.web.ui import list_url, safe_path, with_toast
 
 SNIPPET_LENGTH = 140
 MAX_PAGE = 10_000
@@ -56,6 +58,7 @@ def build_reader_router(
     articles: ArticleRepository,
     settings: SettingsService,
     templates: Jinja2Templates,
+    fulltext: FullTextService,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -186,7 +189,13 @@ def build_reader_router(
         articles.mark_read(article.id)  # 처음 열 때 읽음으로 표시한다(이미 읽었으면 그대로)
         request.state.scope = Scope("feed", feed.id)
         zone = settings.snapshot().timezone
-        plain = strip_html(article.content_html)
+        full = fulltext.ensure(article)  # 처음 열 때 원문 전문을 가져와 저장한다(실패하면 RSS 본문)
+        body = (
+            full.html
+            if full.html is not None
+            else sanitize_html(article.content_html, article.link)
+        )
+        plain = strip_html(body)
         checked_back = safe_path(back, "")  # 검증을 통과한 것만 다시 주소에 싣는다
         here = f"/a/{article.id}" + (
             f"?back={quote(checked_back, safe='')}" if checked_back else ""
@@ -203,7 +212,9 @@ def build_reader_router(
                 m.topic_id for m in topics.memberships(article.id) if not m.rejected
             ],
             "enabled_topics": topics.list_enabled(),
-            "body": sanitize_html(article.content_html, article.link),
+            "body": body,
+            "fulltext_state": full.state,
+            "fulltext_reason": full.reason,
             "lang": detect_language(f"{article.title} {plain}"),
             "has_original": is_web_link(article.link),
             "back": checked_back or f"/reader/feed/{feed.id}",
@@ -211,6 +222,20 @@ def build_reader_router(
             "bookmarked": article.bookmarked_at is not None,
         }
         return templates.TemplateResponse(request, "article.html", context)
+
+    @router.post("/a/{article_id}/fulltext")
+    async def refetch_fulltext(request: Request, article_id: int) -> Response:
+        """전문을 다시 가져온다(원문 페이지가 바뀌었거나 앞서 실패했을 때)."""
+        form = await request.form()
+        article = articles.get(article_id)
+        if article is None:
+            return not_found(request, Scope("all"))
+        result = await run_in_threadpool(fulltext.ensure, article, force=True)
+        target = safe_path(form.get("next"), f"/a/{article_id}")
+        return RedirectResponse(
+            with_toast(target, "fulltext" if result.state == "ok" else "fulltext_failed"),
+            status_code=303,
+        )
 
     return router
 

@@ -56,6 +56,8 @@ TOASTS = {
     "unbookmarked": "북마크를 해제했습니다.",
     "marked_unread": "안 읽음으로 표시했습니다.",
     "marked_read": "읽음으로 표시했습니다.",
+    "fulltext": "원문에서 전문을 다시 가져왔습니다.",
+    "fulltext_failed": "원문에서 전문을 가져오지 못했습니다.",
     "saved": "저장했습니다.",
     "added": "추가했습니다.",
     "deleted": "삭제했습니다.",
