@@ -14,7 +14,7 @@ from tests.bdd.binding import bind
 from tests.fakes.viewer_world import World
 from tests.fakes.web_parts import start_app
 
-bind(globals(), "19_viewer_polish.feature", [f"VPL-{n:02d}" for n in range(1, 13)])
+bind(globals(), "19_viewer_polish.feature", [f"VPL-{n:02d}" for n in range(1, 16)])
 
 BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 KEY = "sk-or-v1-abcdefghijklmnop"
@@ -207,9 +207,17 @@ def _no_usage(world):
     assert model_text(world.get("/reader").text) is None
 
 
-@when("모델 키를 설정한다")
+def server_says(world, used, limit=1000):
+    from rss_hub.services.ports import ServerUsage
+
+    world.parts.llm.usage = ServerUsage(used=used, limit=limit)
+
+
+@when("모델 키를 설정하고 서버가 오늘 무료 호출 33회를 알려 준다")
+@given("모델 키가 설정되어 있고 서버가 오늘 무료 호출 33회를 알려 준다")
 def _set_key(world):
     post(world, "/settings/openrouter-key", openrouter_key=KEY, next="/settings")
+    server_says(world, 33)
 
 
 @then(parsers.re(r'사이드바에는 "모델 잔여 사용량 (?P<shown>\d+/\d+)"이 보인다'))
@@ -217,11 +225,24 @@ def _usage_shown(world, shown):
     assert model_text(world.get("/reader").text) == shown
 
 
-@when(parsers.re(r"모델이 (?P<calls>\d+)번 호출되었다"))
+@when(parsers.re(r"모델이 (?P<calls>\d+)번 호출되어 서버의 오늘 호출 수가 그만큼 늘었다"))
 def _model_calls(world, calls):
     usage = LlmUsageRepository(world.parts.db, world.parts.clock)
     for _ in range(int(calls)):
         usage.record(model="m/free", outcome="success", status=200)
+    server_says(world, 33 + int(calls))
+
+
+@when("다른 프로그램이 호출해서 서버의 오늘 호출 수가 600이 되고 시간이 지난다")
+def _other_programs(world):
+    server_says(world, 600)
+    world.parts.clock.advance(minutes=2)
+
+
+@when("서버에 닿지 못하고 시간이 지난다")
+def _server_unreachable(world):
+    world.parts.llm.usage = None
+    world.parts.clock.advance(minutes=2)
 
 
 # ---------- 피드 관리 검색 ----------
@@ -372,3 +393,66 @@ def _toggle_script(world):
     )[0]
     assert "closePanel()" in toggle and 'slot.setAttribute("data-open", url)' in js
     assert js.count("openPanel(opener.href)") == 1  # 같은 버튼이 아니면 열면서 내용이 바뀐다
+
+
+# ---------- 카테고리 소속 피드, 한 화면 ----------
+
+
+def rss_section(html):
+    return html.split('id="sec-rss"')[1].split("</details>")[0]
+
+
+def category_section(html):
+    return html.split('id="sec-categories"')[1].split('id="sec-topics"')[0]
+
+
+def feed_ids(section):
+    return [int(n) for n in re.findall(r'data-drag-kind="feed" data-drag-id="(\d+)"', section)]
+
+
+@then('사이드바의 RSS 피드에는 "자유 블로그"만 있고 "뉴스 블로그"는 카테고리 "뉴스" 아래에만 있다')
+def _rss_only_free(world):
+    html = world.get("/reader").text
+    assert feed_ids(rss_section(html)) == [world.f_free]
+    assert feed_ids(category_section(html)) == [world.f_news]
+
+
+@when('사이트 "뉴스 블로그"를 카테고리에서 뺀다')
+def _remove_category(world):
+    world.feeds.set_feed_category(world.f_news, None)
+
+
+@then('사이드바의 RSS 피드에는 "뉴스 블로그"와 "자유 블로그"가 있고 카테고리 아래에는 없다')
+def _rss_has_both(world):
+    html = world.get("/reader").text
+    assert set(feed_ids(rss_section(html))) == {world.f_news, world.f_free}
+    assert not feed_ids(category_section(html))
+
+
+@when("모든 사이트를 카테고리에 넣는다")
+def _all_in_category(world):
+    for feed in (world.f_news, world.f_free):
+        world.feeds.set_feed_category(feed, world.news)
+
+
+@then(parsers.re(r'RSS 피드에는 "(?P<note>[^"]+)" 안내가 있다'))
+def _rss_note(world, note):
+    assert note in rss_section(world.get("/reader").text)
+
+
+@then("열린 구역이 둘 이상이면 구역별 높이를 나누고 목록은 안에서 스크롤되는 스타일이 있다")
+def _share_css(world):
+    css = world.client.get("/static/app.css").text
+    assert ".sb-body:has(#sec-rss[open]):has(#sec-categories[open]):has(#sec-topics[open])" in css
+    assert (
+        "overflow-y: auto; overscroll-behavior: contain;" in css and "max-height: max(110px" in css
+    )
+
+
+@then("RSS 피드 목록은 카테고리에서 끌어다 놓으면 카테고리를 빼는 드롭 대상이다")
+def _rss_drop_target(world):
+    assert (
+        '<ul class="sec-body" data-reorder="feed" data-drop-category="">'
+        in world.get("/reader").text
+    )
+    assert "target.contains(dragged)" in world.client.get("/static/app.js").text

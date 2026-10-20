@@ -65,9 +65,9 @@
         <input type="hidden" name="next" value="/settings">
         <button type="submit">키 확인</button>
       </form>
-      <form method="post" action="/settings/openrouter-key/delete" class="row">
+      <form method="post" action="/settings/openrouter-key/delete" class="row" data-confirm="OpenRouter 키를 삭제합니다. 키를 다시 넣기 전까지 요약과 주제 판정이 멈춥니다. 삭제할까요?">
         <input type="hidden" name="next" value="/settings">
-        <label class="check-row"><input type="checkbox" name="confirm" value="yes">삭제합니다</label>
+        <input type="hidden" name="confirm" value="yes">
         <button type="submit" class="danger">키 삭제</button>
       </form>
       {% endif %}
@@ -87,9 +87,9 @@
             <input type="hidden" name="next" value="/settings">
             <button type="submit">시험 전송</button>
           </form>
-          <form method="post" action="/settings/webhooks/{{ w.id }}/delete" class="row">
+          <form method="post" action="/settings/webhooks/{{ w.id }}/delete" class="row" data-confirm="‘{{ w.name }}’ 웹훅을 삭제합니다. 이 웹훅으로 가던 알림이 멈춥니다. 삭제할까요?">
             <input type="hidden" name="next" value="/settings">
-            <label class="check-row"><input type="checkbox" name="confirm" value="yes">삭제합니다</label>
+            <input type="hidden" name="confirm" value="yes">
             <button type="submit" class="danger">삭제</button>
           </form>
         </li>

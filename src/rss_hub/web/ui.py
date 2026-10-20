@@ -1,8 +1,9 @@
 """화면 공통: 아이콘, 상대 시간, 모든 화면에 들어가는 사이드바 데이터와 토스트 문구."""
 
 import re
+import threading
 from collections.abc import Callable
-from datetime import UTC, datetime, tzinfo
+from datetime import UTC, datetime, timedelta, tzinfo
 from urllib.parse import quote, urlencode
 
 from fastapi import Request
@@ -10,6 +11,7 @@ from fastapi.responses import RedirectResponse
 from markupsafe import Markup, escape
 
 from rss_hub.services.clock import Clock
+from rss_hub.services.ports import LlmClient, ServerUsage
 from rss_hub.services.settings import SettingsService
 from rss_hub.storage.llm_usage import LlmUsageRepository
 from rss_hub.storage.reader import ReaderRepository
@@ -127,6 +129,33 @@ def done(form: object, default: str, toast: str) -> RedirectResponse:
     return RedirectResponse(with_toast(target, toast) if target else default, status_code=303)
 
 
+DELETE_NOTES = {
+    "feed": (
+        "피드를 삭제합니다. 수집한 글과 발송 기록도 함께 지워지고 되돌릴 수 없습니다. 삭제할까요?"
+    ),
+    "category": (
+        "카테고리를 삭제합니다. 안에 있던 피드와 글은 남고 카테고리 없이 보입니다. 삭제할까요?"
+    ),
+    "topic": (
+        "주제를 삭제합니다. 그 주제에 모은 기록(싫어요, 주제로 표시)이 "
+        "지워지고 글은 남습니다. 삭제할까요?"
+    ),
+}
+_OWN_LIST = re.compile(r"^/reader/(feed|category|topic)/(\d+)")
+
+
+def done_after_delete(
+    form: object, default: str, toast: str, kind: str, item_id: int
+) -> RedirectResponse:
+    """삭제를 마치고 돌아간다. 지금 보던 화면이 방금 지운 것의 목록이나 글이면 전체 글로 간다."""
+    target = safe_return(form.get("next"), "")  # type: ignore[attr-defined]
+    own = _OWN_LIST.match(target)
+    own_list = own is not None and own.group(1) == kind and int(own.group(2)) == item_id
+    if own_list or (kind == "feed" and target.startswith("/a/")):  # 피드를 지우면 그 글도 없다
+        target = "/reader"
+    return RedirectResponse(with_toast(target, toast) if target else default, status_code=303)
+
+
 def with_toast(path: str, key: str) -> str:
     return f"{path}{'&' if '?' in path else '?'}toast={key}"
 
@@ -178,23 +207,47 @@ def qs(value: object) -> str:
     return quote(str(value), safe="")
 
 
-def model_usage_view(
-    *, usage: LlmUsageRepository, settings: SettingsService, clock: Clock
-) -> Callable[[], dict[str, int] | None]:
-    """사이드바에 보여 줄 모델 잔여 호출 수. 모델이 설정되어 있을 때만 값이 있다(없으면 None).
+MODEL_USAGE_REFRESH = timedelta(seconds=60)  # 서버에 오늘 호출 수를 다시 묻는 간격
 
-    호출 수는 게이트웨이가 모델을 부를 때마다 기록하는 사용량(llm_usage)에서 읽는다.
-    요약, 주제 판정,
-    설정 화면의 벤치마크 모두 같은 게이트웨이를 거치므로 어디서 불러도 반영된다.
+
+class _ServerUsageCache:
+    """서버가 알려 준 호출 수를 잠시 기억한다(언제 물었고 그때 이 서비스의 기록은 몇 건이었나)."""
+
+    def __init__(self) -> None:
+        self.at: datetime | None = None
+        self.count = -1
+        self.server: ServerUsage | None = None
+
+
+def model_usage_view(
+    *, usage: LlmUsageRepository, settings: SettingsService, clock: Clock, client: LlmClient
+) -> Callable[[], dict[str, int] | None]:
+    """사이드바에 보여 줄 모델 잔여 호출 수("남은 호출/한도"). 모델이 설정되어 있을 때만 값이 있다.
+
+    값은 OpenRouter가 알려 주는 오늘의 무료 모델 호출 수(같은 키를 쓰는 모든 프로그램의 합계)다.
+    서버를 매번 부르지 않도록 1분 동안 재사용하되, 이 서비스가 모델을 부른 기록(llm_usage)이 늘면
+    바로 다시 묻는다(호출 이후 갱신). 서버에 닿지 못하면 이 서비스의 호출 기록과 내부 상한을 쓴다.
     """
+    cache = _ServerUsageCache()
+    lock = threading.Lock()
 
     def view() -> dict[str, int] | None:
         config = settings.snapshot()
         if not settings.has_openrouter_key() or not any(config.model_chain):
             return None
-        today = clock.now().astimezone(UTC).date()  # 게이트웨이와 같은 하루 기준
-        used = usage.count_day(today)
-        return {"remaining": max(0, config.llm_daily_cap - used), "cap": config.llm_daily_cap}
+        now = clock.now()
+        local = usage.count_day(now.astimezone(UTC).date())  # 게이트웨이와 같은 하루 기준
+        with lock:
+            if cache.at is None or cache.count != local or now - cache.at >= MODEL_USAGE_REFRESH:
+                try:
+                    server = client.server_usage()
+                except Exception:  # 서버를 못 불러도 화면은 그려야 한다
+                    server = None
+                cache.at, cache.count, cache.server = now, local, server
+            server = cache.server
+        if server is not None:
+            return {"remaining": max(0, server.remaining), "cap": server.limit}
+        return {"remaining": max(0, config.llm_daily_cap - local), "cap": config.llm_daily_cap}
 
     return view
 

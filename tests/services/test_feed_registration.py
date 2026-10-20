@@ -279,3 +279,42 @@ def test_a_feed_added_by_someone_else_between_the_check_and_the_save_is_reported
     env.feeds.existing_url_keys = lambda: set()  # 확인 시점에는 아직 없었던 것처럼
     assert env.service.register("https://a.example.com/feed").error == ALREADY_SUBSCRIBED
     assert len(env.feeds.list_all()) == 1
+
+
+# ---------- 주소 검사(피드 수정 때 쓴다): 저장하지 않고 정상적인 피드인지만 본다 ----------
+
+
+@pytest.mark.parametrize(
+    "bad",
+    ["ftp://x.example.com/rss", "javascript:alert(1)", "http://192.168.0.5/rss", "", "not a url"],
+)
+def test_check_refuses_an_address_that_breaks_the_address_rules_without_fetching(env, bad):
+    result = env.service.check(bad)
+    assert (
+        result.error
+        and result.site_url == ""
+        and env.fetcher.fetch_calls == []
+        and env.fetcher.page_calls == []
+    )
+
+
+def test_check_accepts_a_real_feed_and_reports_its_site_and_title_without_saving(env):
+    env.fetcher.feed("https://new.example.com/rss", "새 블로그", "https://new.example.com")
+    before = len(env.feeds.existing_url_keys())
+    result = env.service.check("https://new.example.com/rss")
+    assert (result.error, result.site_url, result.title) == (
+        "",
+        "https://new.example.com",
+        "새 블로그",
+    )
+    assert len(env.feeds.existing_url_keys()) == before  # 저장은 하지 않는다
+
+
+@pytest.mark.parametrize(
+    ("reason", "message"),
+    [("NotAFeed", "피드가 아닙니다"), ("ReadTimeout", "시간 초과"), ("ForbiddenAddress", "사설망")],
+)
+def test_check_turns_a_fetch_failure_into_a_short_reason(env, reason, message):
+    env.fetcher.fail("https://new.example.com/rss", reason)
+    result = env.service.check("https://new.example.com/rss")
+    assert message in result.error and result.site_url == ""

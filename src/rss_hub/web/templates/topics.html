@@ -69,8 +69,8 @@
   <label class="check-row"><input type="checkbox" name="enabled" value="yes" {% if t.enabled %}checked{% endif %}>사용</label>
   <div class="row"><button type="submit" class="primary">저장</button></div>
 </form>
-<form method="post" action="/topics/{{ t.id }}/delete" class="row">
-  <label class="check-row"><input type="checkbox" name="confirm" value="yes">'{{ t.name }}' 삭제합니다</label>
+<form method="post" action="/topics/{{ t.id }}/delete" class="row" data-confirm="‘{{ t.name }}’ {{ delete_notes['topic'] }}">
+  <input type="hidden" name="confirm" value="yes">
   <button type="submit" class="danger">삭제</button>
 </form>
 {% endfor %}

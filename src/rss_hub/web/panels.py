@@ -7,8 +7,6 @@
 - 삭제는 확인란을 선택해야만 보낼 수 있다(서버도 확인한다).
 """
 
-import re
-
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
@@ -20,12 +18,6 @@ from rss_hub.web.reader import Scope
 from rss_hub.web.ui import safe_return
 
 KINDS = ("feed", "category", "topic")
-DELETE_NOTES = {
-    "feed": "이 피드와 이 피드에서 수집한 글, 발송 기록이 모두 지워집니다. 되돌릴 수 없습니다.",
-    "category": "카테고리만 지워집니다. 안에 있던 피드와 글은 남고 카테고리 없이 보입니다.",
-    "topic": "주제와 그 주제에 모은 기록(싫어요, 주제로 표시)이 지워집니다. 글은 남습니다.",
-}
-_OWN_LIST = re.compile(r"^/reader/(feed|category|topic)/(\d+)")
 
 
 def render_panel(
@@ -93,24 +85,5 @@ def build_panel_router(
                 "default_max_entries": settings.snapshot().default_max_entries,
             }
         return render(request, {"mode": "settings", "kind": kind, "item": item, **extra})
-
-    @router.get("/panel/delete/{kind}/{item_id}", response_class=HTMLResponse)
-    def delete_panel(request: Request, kind: str, item_id: int) -> Response:
-        item = lookup(kind, item_id) if kind in KINDS else None
-        if item is None:
-            return missing()
-        # 지금 보고 있는 목록 자체를 지우면 그 목록은 사라지므로 전체 글로 돌아간다
-        own = _OWN_LIST.match(safe_return(request.query_params.get("next"), "/reader"))
-        after = "/reader" if own and own.group(1) == kind and int(own.group(2)) == item_id else None
-        return render(
-            request,
-            {
-                "mode": "delete",
-                "kind": kind,
-                "item": item,
-                "note": DELETE_NOTES[kind],
-                "after": after,
-            },
-        )
 
     return router

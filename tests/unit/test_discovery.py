@@ -110,3 +110,19 @@ def test_a_parser_failure_returns_what_was_found_so_far_without_raising(monkeypa
 
     monkeypatch.setattr(discovery._LinkParser, "feed", explode)
     assert find_feed_links("<html>", "https://blog.example.com/") == []
+
+
+@pytest.mark.parametrize(
+    ("reason", "shown"),
+    [
+        ("RemoteDisconnected", "가져오지 못했습니다(RemoteDisconnected)"),
+        ("https://secret.example.com/token?x=1", "가져오지 못했습니다"),
+        ("x" * 80, "가져오지 못했습니다"),
+        ("", "가져오지 못했습니다"),
+        ("오류\n줄바꿈", "가져오지 못했습니다"),
+    ],
+)
+def test_an_unknown_reason_is_shown_only_when_it_is_a_short_class_name(reason, shown):
+    from rss_hub.domain.discovery import describe_fetch_failure
+
+    assert describe_fetch_failure(reason) == shown

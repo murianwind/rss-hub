@@ -206,7 +206,7 @@
   document.addEventListener("drop", function (event) {
     if (!dragged || dragged.getAttribute("data-drag-kind") !== "feed") return;
     var target = event.target.closest("[data-drop-category]");
-    if (!target) return;
+    if (!target || target.contains(dragged)) return; // 같은 목록 안의 순서 바꾸기는 옮기기가 아니다
     event.preventDefault();
     post("/ui/move-feed", {
       feed_id: dragged.getAttribute("data-drag-id"),
@@ -561,6 +561,19 @@
       if (!menu.contains(event.target)) menu.open = false;
     });
   });
+
+  // ---------- 삭제는 확인 창을 한 번 거친다(폼의 data-confirm 문구) ----------
+  document.addEventListener(
+    "submit",
+    function (event) {
+      var message = event.target.getAttribute ? event.target.getAttribute("data-confirm") : null;
+      if (message && !window.confirm(message)) {
+        event.preventDefault();
+        event.stopImmediatePropagation(); // 취소하면 다른 처리기도 건너뛴다
+      }
+    },
+    true
+  );
 
   // ---------- 가끔 개수와 모델 잔여 사용량을 새로 받아 온다(백그라운드 수집과 요약이 바꾸므로) ----------
   window.setInterval(function () {

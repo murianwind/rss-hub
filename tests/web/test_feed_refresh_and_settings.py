@@ -132,6 +132,7 @@ def test_the_feed_priority_is_left_alone_because_the_panel_no_longer_has_it(worl
 
 
 def test_the_feed_url_can_be_changed_and_the_checks_restart(world):
+    world.fetcher.serve("https://new.example.com/feed.xml", today(1))
     world.feeds.record_success(world.f_free, etag="e", last_modified="m", activate=True)
     response = settings_form(world, world.f_free, url="https://new.example.com/feed.xml")
     assert response.status_code == 303
@@ -274,3 +275,82 @@ def test_bad_category_settings_are_refused_and_change_nothing(world, data, messa
 
 def test_a_missing_category_gives_404(world):
     assert post(world, "/categories/999/settings", name="x").status_code == 404
+
+
+# ---------- 주소를 바꿀 때 정상적인 피드인지 확인한다(등록과 같게) ----------
+
+NEW_URL = "https://new.example.com/feed.xml"
+
+
+def test_a_changed_address_is_fetched_once_and_must_be_a_real_feed(world):
+    world.fetcher.serve(NEW_URL, today(1))
+    assert settings_form(world, world.f_free, url=NEW_URL).status_code == 303
+    assert world.fetcher.urls_fetched() == [NEW_URL]
+    assert world.feeds.get(world.f_free).url == NEW_URL
+
+
+def test_the_site_address_of_the_feed_follows_the_new_feed(world):
+    from dataclasses import replace
+
+    world.fetcher.serve(NEW_URL, today(1))
+    world.fetcher.outcomes[NEW_URL] = replace(
+        world.fetcher.outcomes[NEW_URL], site_url="https://new.example.com/"
+    )
+    settings_form(world, world.f_free, url=NEW_URL)
+    assert world.feeds.get(world.f_free).html_url == "https://new.example.com/"
+
+
+@pytest.mark.parametrize(
+    ("reason", "message"),
+    [
+        ("NotAFeed", "피드가 아닙니다"),
+        ("ReadTimeout", "시간 초과"),
+        ("ConnectionError", "연결하지 못했습니다"),
+        ("HTTP 404", "HTTP 404"),
+        ("SSLError", "HTTPS"),
+    ],
+)
+def test_an_address_that_is_not_a_working_feed_is_refused_and_nothing_changes(
+    world, reason, message
+):
+    world.fetcher.fail(NEW_URL, reason)
+    before = world.feeds.get(world.f_free)
+    response = settings_form(world, world.f_free, name="바뀌면 안 됨", emoji="🧪", url=NEW_URL)
+    assert (
+        response.status_code == 400
+        and "새 피드 주소를 확인하지 못했습니다" in response.text
+        and message in response.text
+    )
+    after = world.feeds.get(world.f_free)
+    assert (after.name, after.emoji, after.url, after.html_url) == (
+        before.name,
+        before.emoji,
+        before.url,
+        before.html_url,
+    )
+
+
+def test_an_unchanged_address_is_not_fetched_again(world):
+    settings_form(world, world.f_free, name="이름만 바꿈")
+    assert world.fetcher.calls == []
+
+
+def test_nothing_is_fetched_when_an_earlier_check_already_fails(world):
+    settings_form(world, world.f_free, url="ftp://x.example.com/rss")  # 주소 규칙 위반
+    settings_form(world, world.f_free, url=NEW_URL, name="")  # 이름 오류
+    settings_form(
+        world, world.f_free, url=NEW_URL, category_id=str(world.tech), webhook_id="1"
+    )  # 규칙 위반
+    settings_form(world, world.f_free, url="https://n.example.com/rss")  # 이미 구독 중인 주소
+    assert world.fetcher.calls == []
+
+
+def test_a_fetch_that_crashes_gives_a_generic_message_not_the_details(world):
+    world.fetcher.fail(NEW_URL, "https://secret.example.com/token?x=1")
+    response = settings_form(world, world.f_free, url=NEW_URL)
+    assert response.status_code == 400 and "secret.example.com" not in response.text
+
+
+def test_the_settings_panel_says_the_new_address_is_checked_when_saved(world):
+    html = world.client.get(f"/panel/settings/feed/{world.f_free}", headers={"x-panel": "1"}).text
+    assert "저장할 때 정상적인 피드인지 확인" in html

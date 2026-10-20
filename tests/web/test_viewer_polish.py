@@ -417,3 +417,169 @@ def test_the_fixed_header_and_the_scrolling_body_have_their_own_layout_rules(wor
     assert ".doc-scroll { flex: 1; min-height: 0; overflow-y: auto;" in css  # 본문만 스크롤
     assert ".doc-summary { max-height: 26vh; overflow-y: auto; }" in css
     assert "button.back { font: inherit;" in css and ".title-link {" in css
+
+
+# ---------- 모델 잔여 사용량: 서버가 알려 준 값("남은 호출/한도")을 쓴다 ----------
+
+
+def server_says(world, used, limit=1000):
+    from rss_hub.services.ports import ServerUsage
+
+    world.parts.llm.usage = ServerUsage(used=used, limit=limit)
+
+
+def configure_model(world):
+    post(world, "/settings/openrouter-key", openrouter_key=KEY, next="/settings")
+
+
+def test_the_server_numbers_are_shown_with_the_server_limit(world):
+    configure_model(world)
+    server_says(world, 33)
+    assert model_text(world.get("/reader").text) == "967/1000"
+    assert world.get("/ui/state").json()["model_usage"] == {"remaining": 967, "cap": 1000}
+
+
+def test_calls_by_other_programs_with_the_same_key_are_counted_because_the_server_sums_them(world):
+    configure_model(world)
+    server_says(world, 600)  # 이 서비스가 부르지 않은 호출도 서버 합계에는 들어 있다
+    assert model_text(world.get("/reader").text) == "400/1000"
+
+
+def test_a_call_made_through_this_service_refreshes_the_number_right_away(world):
+    from rss_hub.storage.llm_usage import LlmUsageRepository
+
+    configure_model(world)
+    server_says(world, 33)
+    assert model_text(world.get("/reader").text) == "967/1000"
+    LlmUsageRepository(world.parts.db, world.parts.clock).record(
+        model="m/free", outcome="success", status=200
+    )
+    server_says(world, 34)
+    assert model_text(world.get("/reader").text) == "966/1000"  # 시간이 지나지 않아도 갱신
+
+
+def test_calls_by_other_programs_show_up_after_the_refresh_interval(world):
+    configure_model(world)
+    server_says(world, 33)
+    assert model_text(world.get("/reader").text) == "967/1000"
+    server_says(world, 500)
+    assert model_text(world.get("/reader").text) == "967/1000"  # 1분 안에는 같은 값을 다시 쓴다
+    world.parts.clock.advance(minutes=2)
+    assert model_text(world.get("/reader").text) == "500/1000"
+
+
+def test_the_server_is_asked_at_most_once_per_interval_and_never_when_no_model_is_set(world):
+    assert model_text(world.get("/reader").text) is None and world.parts.llm.usage_queries == 0
+    configure_model(world)
+    server_says(world, 33)
+    for _ in range(5):
+        world.get("/reader")
+        world.get("/ui/state")
+    assert world.parts.llm.usage_queries == 1
+
+
+def test_when_the_server_cannot_be_reached_the_local_count_and_the_internal_cap_are_used(world):
+    configure_model(world)
+    world.parts.llm.usage = None
+    assert model_text(world.get("/reader").text) == "700/700"
+    server_says(world, 33)
+    world.parts.clock.advance(minutes=2)
+    assert model_text(world.get("/reader").text) == "967/1000"
+
+
+def test_a_server_that_raises_never_breaks_the_page(world):
+    configure_model(world)
+
+    def boom():
+        raise RuntimeError("서버 오류")
+
+    world.parts.llm.server_usage = boom
+    assert model_text(world.get("/reader").text) == "700/700"
+
+
+def test_the_remaining_number_is_never_negative_even_if_the_server_says_over_the_limit(world):
+    configure_model(world)
+    server_says(world, 1005)
+    assert model_text(world.get("/reader").text) == "0/1000"
+
+
+# ---------- 사이드바: 카테고리에 넣은 피드는 카테고리에만, 세 구역이 한 화면에 ----------
+
+
+def rss_section(html):
+    return html.split('id="sec-rss"')[1].split("</details>")[0]
+
+
+def category_section(html):
+    return html.split('id="sec-categories"')[1].split('id="sec-topics"')[0]
+
+
+def feed_ids(section):
+    return [int(n) for n in re.findall(r'data-drag-kind="feed" data-drag-id="(\d+)"', section)]
+
+
+def test_a_feed_in_a_category_is_listed_only_under_its_category(world):
+    html = world.get("/reader").text
+    assert world.f_news not in feed_ids(rss_section(html))  # 뉴스 블로그는 카테고리 '뉴스'에 있다
+    assert world.f_news in feed_ids(category_section(html))
+    assert world.f_free in feed_ids(rss_section(html)) and world.f_free not in feed_ids(
+        category_section(html)
+    )
+
+
+def test_the_rss_list_gets_a_feed_back_when_its_category_is_removed(world):
+    world.feeds.set_feed_category(world.f_news, None)
+    html = world.get("/reader").text
+    assert world.f_news in feed_ids(rss_section(html)) and world.f_news not in feed_ids(
+        category_section(html)
+    )
+
+
+def test_the_rss_list_says_so_when_every_feed_is_in_a_category(world):
+    world.feeds.set_feed_category(world.f_free, world.news)
+    section = rss_section(world.get("/reader").text)
+    assert not feed_ids(section) and "모든 피드가 카테고리에 들어 있습니다." in section
+    assert "전체 글" in section  # 전체 글 항목은 그대로 있다
+
+
+def test_the_rss_list_says_no_feed_when_none_are_registered(world):
+    for feed in (world.f_news, world.f_free):
+        world.feeds.delete(feed)
+    section = rss_section(world.get("/reader").text)
+    assert "등록된 피드가 없습니다." in section and "카테고리에 들어 있습니다" not in section
+
+
+def test_the_rss_list_is_also_a_drop_target_that_removes_the_category(world):
+    html = world.get("/reader").text
+    assert '<ul class="sec-body" data-reorder="feed" data-drop-category="">' in html
+    assert (
+        'data-drop-category=""' in html.split('id="sec-rss"')[1].split("<ul")[0]
+    )  # 머리 줄도 그대로
+    js = world.client.get("/static/app.js").text
+    assert "target.contains(dragged)" in js  # 같은 목록 안의 순서 바꾸기는 옮기기로 처리하지 않는다
+
+
+def test_unread_counts_and_bold_still_follow_the_feed_in_its_category(world):
+    world.article(world.f_news)
+    html = world.get("/reader").text
+    row = re.search(
+        rf'<li class="nav-row( has-unread)?"[^>]*data-drag-id="{world.f_news}"',
+        category_section(html),
+    )
+    assert row is not None and row.group(1)
+
+
+def test_the_three_sections_share_the_sidebar_height_and_scroll_inside(world):
+    css = world.client.get("/static/app.css").text
+    assert ".sb-body { --sb-free: calc(100vh - 400px); }" in css
+    for section in ("rss", "categories", "topics"):
+        assert f"#sec-{section} > .sec-body" in css
+    assert "overflow-y: auto; overscroll-behavior: contain;" in css
+    assert (
+        ".sb-body:has(#sec-rss[open]):has(#sec-categories[open]):has(#sec-topics[open]) { --share-rss: 0.42;"
+        in css
+    )
+    assert (
+        "--share-cat: 0.6; --share-top: 0.4;" in css
+        and "--share-rss: 0.55; --share-cat: 0.45;" in css
+    )

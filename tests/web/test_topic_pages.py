@@ -207,7 +207,7 @@ def test_editing_an_unknown_topic_gives_404(client):
 def test_deleting_needs_the_confirmation_box(client, topics):
     ott = only(topics, "OTT")
     response = client.post(f"/topics/{ott.id}/delete", data={})
-    assert response.status_code == 400 and "확인란" in response.text
+    assert response.status_code == 400 and "삭제 확인이 필요합니다" in response.text
     assert topics.get(ott.id) is not None
 
 

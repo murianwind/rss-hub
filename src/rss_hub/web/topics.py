@@ -8,7 +8,7 @@ from rss_hub.domain.topics import TopicInputError, validate_topic_fields
 from rss_hub.services.settings import SettingsService
 from rss_hub.services.topic_probe import ProbeResult, TopicProbe
 from rss_hub.storage.topics import TopicRepository
-from rss_hub.web.ui import done
+from rss_hub.web.ui import done, done_after_delete
 
 
 def _counts(topics: TopicRepository, topic_id: int) -> tuple[int, int]:
@@ -108,9 +108,9 @@ def build_topic_router(
     async def delete_topic(request: Request, topic_id: int) -> Response:
         form = await request.form()
         if form.get("confirm") != "yes":
-            return page(request, error="삭제하려면 확인란을 선택해 주세요", status_code=400)
+            return page(request, error="삭제 확인이 필요합니다", status_code=400)
         if not topics.delete(topic_id):
             return page(request, error="주제를 찾을 수 없음", status_code=404)
-        return done(form, "/topics?deleted=1", "deleted")
+        return done_after_delete(form, "/topics?deleted=1", "deleted", "topic", topic_id)
 
     return router

@@ -35,6 +35,15 @@ class DiscoveryResult:
 
 
 @dataclass(frozen=True)
+class FeedCheck:
+    """주소 확인 결과. error가 비어 있으면 정상적인 피드다."""
+
+    error: str = ""
+    site_url: str = ""
+    title: str = ""
+
+
+@dataclass(frozen=True)
 class RegistrationResult:
     feed_id: int | None = None
     name: str = ""
@@ -102,6 +111,23 @@ class FeedRegistrationService:
         if candidates:
             return DiscoveryResult(candidates=tuple(candidates))
         return DiscoveryResult(error=ALL_SUBSCRIBED if skipped_as_subscribed else NOTHING_FOUND)
+
+    def check(self, raw_url: str) -> FeedCheck:
+        """주소가 정상적인 피드인지 확인한다(등록과 같은 검사: 주소 규칙, 실제 가져오기, 피드 해석).
+
+        피드 주소를 바꾸기 전에 쓴다. 저장은 하지 않는다.
+        """
+        try:
+            url = validate_feed_url(raw_url)
+        except FeedUrlError as error:
+            return FeedCheck(error=error.message)
+        try:
+            result = self._fetcher.fetch(url, etag=None, last_modified=None)
+        except FetchError as error:
+            return FeedCheck(error=describe_fetch_failure(error.reason))
+        return FeedCheck(
+            site_url=result.site_url[:MAX_URL_TEXT_LENGTH], title=_title(result, "", url)
+        )
 
     def register(
         self,

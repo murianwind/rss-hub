@@ -59,7 +59,15 @@ from rss_hub.web.reader import build_reader_router
 from rss_hub.web.reading import build_reading_router
 from rss_hub.web.security import SAFE_METHODS, SECURITY_HEADERS, request_is_same_origin
 from rss_hub.web.topics import build_topic_router
-from rss_hub.web.ui import ago, build_ui_context, icon, model_usage_view, qs, sprite
+from rss_hub.web.ui import (
+    DELETE_NOTES,
+    ago,
+    build_ui_context,
+    icon,
+    model_usage_view,
+    qs,
+    sprite,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +100,7 @@ def create_app(
     service = SettingsService(database, app_clock)
     app.state.settings_service = service
     templates = Jinja2Templates(directory=TEMPLATE_DIR)
-    templates.env.globals.update(icon=icon, sprite=sprite)
+    templates.env.globals.update(icon=icon, sprite=sprite, delete_notes=DELETE_NOTES)
     templates.env.filters["ago"] = ago
     templates.env.filters["qs"] = qs
     articles = ArticleRepository(database, app_clock)
@@ -139,7 +147,10 @@ def create_app(
     app.include_router(build_feedback_router(topics=topics, articles=articles, templates=templates))
     reader = ReaderRepository(database, app_clock)
     model_usage = model_usage_view(
-        usage=LlmUsageRepository(database, app_clock), settings=service, clock=app_clock
+        usage=LlmUsageRepository(database, app_clock),
+        settings=service,
+        clock=app_clock,
+        client=client,
     )
     templates.context_processors.append(
         build_ui_context(

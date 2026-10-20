@@ -388,3 +388,19 @@ body:not(.sidebar-collapsed).sw-480 .sidebar { width: 480px; }
 .nav-row[data-drag-kind=feed] .sb-text { font-weight: 400; opacity: 0.55; }
 .nav-row[data-drag-kind=feed].has-unread .sb-text { font-weight: 700; opacity: 1; }
 .nav-row[data-drag-kind=feed] .nav-item[aria-current=page] .sb-text { opacity: 1; }
+
+/* ---------- 삭제 버튼: 확인 창을 거치는 작은 폼 ---------- */
+.inline-del { display: inline-flex; margin: 0; }
+.row-actions .inline-del .icon-btn { margin: 0; }
+
+
+/* ---------- 한 화면에 RSS 피드, 카테고리, 주제를 함께: 열린 구역의 목록이 높이를 나눠 쓰고 안에서 스크롤한다 ---------- */
+.sb-body { --sb-free: calc(100vh - 400px); }
+#sec-rss > .sec-body, #sec-categories > .sec-body, #sec-topics > .sec-body { overflow-y: auto; overscroll-behavior: contain; }
+#sec-rss > .sec-body { max-height: max(110px, calc(var(--sb-free) * var(--share-rss, 1))); }
+#sec-categories > .sec-body { max-height: max(110px, calc(var(--sb-free) * var(--share-cat, 1))); }
+#sec-topics > .sec-body { max-height: max(90px, calc(var(--sb-free) * var(--share-top, 1))); }
+.sb-body:has(#sec-rss[open]):has(#sec-categories[open]) { --share-rss: 0.55; --share-cat: 0.45; }
+.sb-body:has(#sec-rss[open]):has(#sec-topics[open]) { --share-rss: 0.65; --share-top: 0.35; }
+.sb-body:has(#sec-categories[open]):has(#sec-topics[open]) { --share-cat: 0.6; --share-top: 0.4; }
+.sb-body:has(#sec-rss[open]):has(#sec-categories[open]):has(#sec-topics[open]) { --share-rss: 0.42; --share-cat: 0.33; --share-top: 0.25; }

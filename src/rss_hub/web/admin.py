@@ -20,7 +20,7 @@ from rss_hub.storage.llm_usage import LlmUsageRepository
 from rss_hub.version import get_version
 from rss_hub.web.ui import done
 
-CONFIRM_MESSAGE = "삭제하려면 확인란을 선택하세요"
+CONFIRM_MESSAGE = "삭제 확인이 필요합니다"
 _HOST = re.compile(r"^(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)(:\d{1,5})?$")
 
 SETTING_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (

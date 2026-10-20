@@ -33,6 +33,9 @@ def feed_order(world):
 
 
 def test_the_dragged_order_is_saved_and_the_sidebar_follows_it(world):
+    world.feeds.set_feed_category(
+        world.f_news, None
+    )  # RSS 피드 목록에는 카테고리 없는 피드만 나온다
     assert feed_order(world) == [str(world.f_news), str(world.f_free)]
     response = post(world, "/ui/reorder", kind="feed", ids=f"{world.f_free},{world.f_news}")
     assert response.status_code == 200 and response.text == "ok"

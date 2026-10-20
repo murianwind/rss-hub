@@ -1,5 +1,7 @@
 """슬라이드 패널(추가, 설정, 삭제 확인)과 설정 탭."""
 
+# ruff: noqa: E501  (HTML 정규식과 견본은 한 줄이 읽기 쉽다)
+
 import re
 
 import pytest
@@ -177,30 +179,45 @@ def test_names_in_panels_are_escaped(world):
 
 
 @pytest.mark.parametrize(
-    ("kind", "target", "action"),
+    ("kind", "target", "action", "note"),
     [
-        ("feed", "f_free", "/feeds/{id}/delete"),
-        ("category", "news", "/categories/{id}/delete"),
-        ("topic", "topic", "/topics/{id}/delete"),
+        ("feed", "f_free", "/feeds/{id}/delete", "피드를 삭제합니다"),
+        ("category", "news", "/categories/{id}/delete", "카테고리를 삭제합니다"),
+        ("topic", "topic", "/topics/{id}/delete", "주제를 삭제합니다"),
     ],
 )
-def test_the_delete_panel_posts_to_the_delete_endpoint_and_needs_the_checkbox(
-    world, kind, target, action
+def test_the_sidebar_delete_button_is_a_form_that_asks_for_confirmation(
+    world, kind, target, action, note
 ):
     item = getattr(world, target)
-    html = panel(world, f"/panel/delete/{kind}/{item}?next=/reader/bookmarks").text
-    assert f'action="{action.format(id=item)}"' in html
-    assert (
-        'type="checkbox" name="confirm" value="yes"' in html
-        and 'name="next" value="/reader/bookmarks"' in html
+    html = world.get("/reader/bookmarks").text
+    form = re.search(
+        rf'<form method="post" action="{re.escape(action.format(id=item))}" class="inline-del" data-confirm="([^"]+)">(.*?)</form>',
+        html,
+        re.S,
     )
+    assert form is not None
+    assert note in form.group(1) and form.group(1).startswith("‘")  # 이름이 들어간 확인 문구
+    assert 'name="confirm" value="yes"' in form.group(
+        2
+    ) and 'name="next" value="/reader/bookmarks"' in form.group(2)
+    assert 'type="checkbox"' not in form.group(2)
 
 
 def test_deleting_the_list_you_are_looking_at_goes_back_to_all_articles(world):
-    html = panel(world, f"/panel/delete/feed/{world.f_free}?next=/reader/feed/{world.f_free}").text
-    assert 'name="next" value="/reader"' in html
-    other = panel(world, f"/panel/delete/feed/{world.f_free}?next=/reader/feed/{world.f_news}").text
-    assert f'name="next" value="/reader/feed/{world.f_news}"' in other
+    own = f"/reader/feed/{world.f_free}"
+    done = world.client.post(
+        f"/feeds/{world.f_free}/delete", data={"confirm": "yes", "next": own}, headers=BROWSER
+    )
+    assert done.status_code == 303 and done.headers["location"] == "/reader?toast=deleted"
+    other_feed = world.feeds.add("https://other.example.com/rss", "다른 피드")
+    stay = f"/reader/feed/{world.f_news}"
+    kept = world.client.post(
+        f"/feeds/{other_feed}/delete", data={"confirm": "yes", "next": stay}, headers=BROWSER
+    )
+    assert (
+        kept.headers["location"] == f"{stay}?toast=deleted"
+    )  # 다른 목록을 보고 있었으면 그대로 돌아간다
 
 
 @pytest.mark.security
@@ -241,7 +258,7 @@ def test_sidebar_rows_have_a_grip_settings_and_delete_buttons_and_drag_attribute
     html = world.get("/reader").text
     assert f'data-drag-kind="feed" data-drag-id="{world.f_free}"' in html
     assert f'href="/panel/settings/feed/{world.f_free}?next=%2Freader" data-panel' in html
-    assert f'href="/panel/delete/feed/{world.f_free}?next=%2Freader" data-panel' in html
+    assert f'action="/feeds/{world.f_free}/delete" class="inline-del" data-confirm="' in html
     assert (
         f'data-drag-kind="category" data-drag-id="{world.news}"' in html
         and f'data-drag-kind="topic" data-drag-id="{world.topic}"' in html
@@ -327,7 +344,9 @@ def test_every_form_on_the_page_returns_to_the_settings_page(world):
         html,
     )
     assert forms and all(next_path == "/settings" for _, next_path in forms)
-    assert html.count("<form") == len(forms)
+    assert html.count('<form method="post" action="/settings') == len(
+        forms
+    )  # 사이드바의 삭제 폼은 따로
 
 
 def test_saving_a_section_returns_with_a_toast(world):
@@ -401,6 +420,57 @@ def test_the_stylesheet_follows_the_theme_and_font_attributes(world):
     assert len(dark) == 3 and dark[1] == dark[2] != dark[0]
 
 
-def test_the_delete_checkbox_is_required_so_the_browser_blocks_an_unconfirmed_send(world):
-    html = panel(world, f"/panel/delete/feed/{world.f_free}").text
-    assert 'name="confirm" value="yes" required' in html
+def test_no_delete_form_uses_a_checkbox_any_more_and_the_delete_panel_is_gone(world):
+    for path in ("/settings", "/topics", "/feeds", "/reader", "/categories"):
+        assert 'type="checkbox" name="confirm"' not in world.get(path).text, path
+    assert (
+        world.client.get(f"/panel/delete/feed/{world.f_free}", headers={"x-panel": "1"}).status_code
+        == 404
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/feeds/{feed}/delete",
+        "/categories/{news}/delete",
+        "/topics/{topic}/delete",
+        "/settings/openrouter-key/delete",
+    ],
+)
+def test_the_server_still_refuses_a_delete_request_without_the_confirm_value(world, path):
+    url = path.format(feed=world.f_free, news=world.news, topic=world.topic)
+    response = world.client.post(url, data={}, headers=BROWSER)
+    assert response.status_code == 400 and "삭제 확인이 필요합니다" in response.text
+    assert world.feeds.get(world.f_free) is not None and world.topics.get(world.topic) is not None
+
+
+def test_deleting_an_article_page_s_feed_or_a_category_page_s_category_leaves_the_vanished_page(
+    world,
+):
+    article = world.article(world.f_free)
+    gone = world.client.post(
+        f"/feeds/{world.f_free}/delete",
+        data={"confirm": "yes", "next": f"/a/{article}?back=%2Freader"},
+        headers=BROWSER,
+    )
+    assert gone.headers["location"] == "/reader?toast=deleted"
+    cat = world.client.post(
+        f"/categories/{world.news}/delete",
+        data={"confirm": "yes", "next": f"/reader/category/{world.news}"},
+        headers=BROWSER,
+    )
+    assert cat.headers["location"] == "/reader?toast=deleted"
+    topic = world.client.post(
+        f"/topics/{world.topic}/delete",
+        data={"confirm": "yes", "next": f"/reader/topic/{world.topic}"},
+        headers=BROWSER,
+    )
+    assert topic.headers["location"] == "/reader?toast=deleted"
+
+
+def test_the_confirm_script_stops_the_submit_when_the_user_cancels(world):
+    js = world.client.get("/static/app.js").text
+    assert 'getAttribute("data-confirm")' in js and "window.confirm(message)" in js
+    assert "event.preventDefault()" in js.split("window.confirm(message)")[1].split("}")[0]
+    assert "true\n  );" in js.split("window.confirm(message)")[1]  # 캡처 단계에서 가장 먼저

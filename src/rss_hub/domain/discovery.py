@@ -1,5 +1,6 @@
 """피드 자동 탐색: 웹페이지가 알려 주는 피드 링크 찾기, 가져오기 실패 이유 설명."""
 
+import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit
@@ -70,4 +71,8 @@ def describe_fetch_failure(reason: str) -> str:
         return "주소에 연결하지 못했습니다"
     if reason == "SSLError":
         return "보안 연결(HTTPS)을 확인하지 못했습니다"
-    return f"가져오지 못했습니다({reason})"
+    if re.fullmatch(
+        r"[A-Za-z][A-Za-z0-9_.]{0,39}", reason
+    ):  # 분류 이름(예: 예외 이름)만 그대로 보여 준다
+        return f"가져오지 못했습니다({reason})"
+    return "가져오지 못했습니다"  # 주소나 긴 글이 섞인 사유는 보여 주지 않는다

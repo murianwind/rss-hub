@@ -31,9 +31,10 @@ def test_the_sidebar_has_four_sections_in_order_and_they_start_collapsed(world):
     )
 
 
-def test_the_rss_group_lists_every_registered_site_including_those_in_categories(world):
-    rss = groups(world.get("/reader").text)["RSS"]
-    assert "뉴스 블로그" in rss and "자유 블로그" in rss
+def test_the_rss_group_lists_only_sites_without_a_category_and_the_category_lists_the_rest(world):
+    groups_html = groups(world.get("/reader").text)
+    assert "자유 블로그" in groups_html["RSS"] and "뉴스 블로그" not in groups_html["RSS"]
+    assert "뉴스 블로그" in groups_html["카테고리"] and "자유 블로그" not in groups_html["카테고리"]
 
 
 def test_the_category_group_nests_each_categorys_sites(world):

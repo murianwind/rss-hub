@@ -5,6 +5,7 @@
 """
 
 from fastapi import APIRouter, Request, Response
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
@@ -23,9 +24,9 @@ from rss_hub.storage.feeds import (
 )
 from rss_hub.storage.overview import OverviewRepository
 from rss_hub.web.panels import render_panel
-from rss_hub.web.ui import done, safe_return
+from rss_hub.web.ui import done, done_after_delete, safe_return
 
-CONFIRM_MESSAGE = "삭제하려면 확인란을 선택해 주세요"
+CONFIRM_MESSAGE = "삭제 확인이 필요합니다"
 
 
 def _id_or_none(value: object) -> int | None:
@@ -228,6 +229,13 @@ def build_feed_router(
         url_changed = feed_url_key(url) != feed_url_key(feed.url)
         if url_changed and feed_url_key(url) in feeds.existing_url_keys():
             return page(request, error="이미 구독 중인 피드입니다", status_code=400)
+        new_site: str | None = None
+        if url_changed:  # 새 주소가 정상적인 피드인지 등록할 때와 같게 확인한다(바꾸기 전에)
+            checked = await run_in_threadpool(registration.check, url)
+            if checked.error:
+                message = f"새 피드 주소를 확인하지 못했습니다: {checked.error}"
+                return page(request, error=message, status_code=400)
+            new_site = checked.site_url
         try:
             feeds.update_feed(feed_id, values)
             # 규칙에 걸리지 않도록 비우는 쪽을 먼저 처리한다
@@ -238,7 +246,7 @@ def build_feed_router(
                 feeds.set_feed_webhook(feed_id, None)
                 feeds.set_feed_category(feed_id, category_id)
             if url_changed:
-                feeds.change_feed_url(feed_id, url)
+                feeds.change_feed_url(feed_id, url, site_url=new_site)
         except (FeedRuleError, DuplicateFeedError) as error:
             message = (
                 error.message if isinstance(error, FeedRuleError) else "이미 구독 중인 피드입니다"
@@ -271,7 +279,7 @@ def build_feed_router(
             return page(request, error=CONFIRM_MESSAGE, status_code=400)
         if not feeds.delete(feed_id):
             return page(request, error="피드를 찾을 수 없음", status_code=404)
-        return done(form, "/feeds?deleted=1", "deleted")
+        return done_after_delete(form, "/feeds?deleted=1", "deleted", "feed", feed_id)
 
     # ---------- 카테고리, 웹훅 ----------
 

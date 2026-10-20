@@ -1,5 +1,7 @@
 """16_ui_management.feature: 슬라이드 패널, 순서와 이동, 설정 탭, 디스플레이 설정."""
 
+# ruff: noqa: E501  (HTML 정규식은 한 줄이 읽기 쉽다)
+
 import re
 from types import SimpleNamespace
 
@@ -7,7 +9,9 @@ import pytest
 from pytest_bdd import given, parsers, then, when
 
 from rss_hub.domain.topics import TopicFields
+from rss_hub.services.ports import FetchError
 from tests.bdd.binding import bind
+from tests.fakes.feed_fetcher import FakeFeedFetcher
 from tests.fakes.viewer_world import World
 from tests.fakes.web_parts import start_app
 
@@ -16,12 +20,22 @@ bind(globals(), "16_ui_management.feature", [f"PNL-{n:02d}" for n in range(1, 13
 BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 FRAGMENT = {"x-panel": "1"}
 WEBHOOK = "https://discord.com/api/webhooks/9/abc"
+NEW_FEED_URL = "https://new.example.com/feed.xml"
 KINDS = {"피드": "feed", "카테고리": "category", "주제": "topic"}
+
+
+class NoPages:
+    """원문 페이지는 가져오지 않는다(이 시험은 화면 틀만 본다)."""
+
+    def fetch_page(self, url):
+        raise FetchError("NoNetworkInTests")
 
 
 @pytest.fixture
 def world(tmp_path):
-    parts, client = start_app(tmp_path)
+    fetcher = FakeFeedFetcher()
+    fetcher.serve(NEW_FEED_URL, [])  # 새 주소는 정상적인 피드다
+    parts, client = start_app(tmp_path, feed_fetcher=fetcher, page_fetcher=NoPages())
     with client:
         yield World(parts)
 
@@ -194,14 +208,27 @@ DELETE = {
 }
 
 
-@when(parsers.re(r"(?P<kind>피드|카테고리|주제) 삭제 패널의 폼을 확인 없이 보낸다"))
-def _delete_unconfirmed(world, ctx, kind):
+@when(parsers.re(r"(?P<kind>피드|카테고리|주제)의 사이드바 삭제 버튼을 본다"))
+def _see_delete_button(world, ctx, kind):
     ctx.kind = KINDS[kind]
     ctx.item = target_of(world, ctx.kind)
-    html = world.client.get(
-        f"/panel/delete/{ctx.kind}/{ctx.item}?next=/reader", headers=FRAGMENT
-    ).text
-    assert f'action="{DELETE[ctx.kind].format(id=ctx.item)}"' in html and 'name="confirm"' in html
+    ctx.html = world.get("/reader").text
+
+
+@then("삭제 버튼은 이름이 든 확인 문구가 있는 폼이고 체크박스와 삭제 패널은 없다")
+def _delete_button_form(world, ctx):
+    action = re.escape(DELETE[ctx.kind].format(id=ctx.item))
+    form = re.search(
+        rf'<form method="post" action="{action}" class="inline-del" data-confirm="([^"]+)">(.*?)</form>',
+        ctx.html,
+        re.S,
+    )
+    assert form is not None and form.group(1).startswith("‘") and "삭제할까요?" in form.group(1)
+    assert 'type="checkbox"' not in form.group(2) and "/panel/delete/" not in ctx.html
+
+
+@when("확인 값 없이 삭제 요청을 보낸다")
+def _delete_unconfirmed(world, ctx):
     ctx.response = post(world, DELETE[ctx.kind].format(id=ctx.item), next="/reader")
 
 
@@ -218,7 +245,7 @@ def _nothing_deleted(world, ctx):
     assert ctx.response.status_code == 400 and exists(world, ctx.kind, ctx.item)
 
 
-@when("확인란을 선택해서 보낸다")
+@when("확인 창에서 확인해 삭제 요청을 보낸다")
 def _delete_confirmed(world, ctx):
     ctx.response = post(world, DELETE[ctx.kind].format(id=ctx.item), confirm="yes", next="/reader")
 
@@ -236,17 +263,15 @@ def _deleted(world, ctx, message, kind):
     )
 
 
-@when(parsers.re(r'사이트 "(?P<feed>[^"]+)" 목록에서 그 사이트의 삭제 패널을 연다'))
+@when(parsers.re(r'사이트 "(?P<feed>[^"]+)" 목록을 보다가 그 사이트를 삭제한다'))
 def _own_list_delete(world, ctx, feed):
     item = feed_id(world, feed)
-    ctx.fragment = world.client.get(
-        f"/panel/delete/feed/{item}?next=/reader/feed/{item}", headers=FRAGMENT
-    )
+    ctx.response = post(world, f"/feeds/{item}/delete", confirm="yes", next=f"/reader/feed/{item}")
 
 
-@then("삭제 후 돌아갈 곳은 전체 글이다")
+@then("삭제 후에는 전체 글로 돌아간다")
 def _after_is_all(ctx):
-    assert 'name="next" value="/reader"' in ctx.fragment.text
+    assert ctx.response.headers["location"] == "/reader?toast=deleted"
 
 
 @given(parsers.re(r'사이트 "(?P<feed>[^"]+)"에 새 글 "(?P<title>[^"]+)"이 있다'))
@@ -269,6 +294,11 @@ def _feed_survives(world, ctx, feed, title):
 
 
 # ---------- 순서와 이동 ----------
+
+
+@given("두 사이트 모두 카테고리 없이 RSS 피드에 있다")
+def _both_uncategorized(world):
+    world.feeds.set_feed_category(world.f_news, None)
 
 
 @when(parsers.re(r'사이트 순서를 "(?P<a>[^"]+)", "(?P<b>[^"]+)"로 저장한다'))

@@ -131,7 +131,8 @@ def test_each_row_has_refresh_settings_and_delete_buttons_that_return_to_this_pa
     html = row(world.get("/feeds").text, "자유 블로그")
     assert f'data-refresh="{world.f_free}"' in html
     assert f'href="/panel/settings/feed/{world.f_free}?next=%2Ffeeds" data-panel' in html
-    assert f'href="/panel/delete/feed/{world.f_free}?next=%2Ffeeds" data-panel' in html
+    assert f'action="/feeds/{world.f_free}/delete" class="inline-del" data-confirm="' in html
+    assert 'name="confirm" value="yes"' in html and 'name="next" value="/feeds"' in html
 
 
 def test_titles_and_addresses_are_escaped(world):

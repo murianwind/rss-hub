@@ -16,7 +16,7 @@ from tests.fakes.feed_fetcher import FakeFeedFetcher
 from tests.fakes.viewer_world import World
 from tests.fakes.web_parts import start_app
 
-bind(globals(), "17_feed_management.feature", [f"FMG-{n:02d}" for n in range(1, 8)])
+bind(globals(), "17_feed_management.feature", [f"FMG-{n:02d}" for n in range(1, 9)])
 
 BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 FRAGMENT = {"x-panel": "1"}
@@ -205,6 +205,7 @@ def settings_post(world, feed, **override):
 
 @when(parsers.re(r'사이트 "자유 블로그"의 주소를 "(?P<url>[^"]+)"로 바꾼다'))
 def _change_url(world, ctx, url):
+    world.fetcher.serve(url, [])  # 새 주소는 정상적인 피드다
     ctx.response = settings_post(world, world.f_free, url=url)
 
 
@@ -276,3 +277,48 @@ def _chips(ctx):
     listing = html_module.unescape(html.split('<ul class="feed-list">')[1].split("</ul>")[0])
     assert "뉴스 블로그" in listing and "자유 블로그" not in listing
     assert re.search(r"전체 2\s*</a>", html) and "오류 1" in html and "수집 전 1" in html
+
+
+# ---------- 주소를 바꿀 때의 확인 ----------
+
+OUTCOMES = {"정상 피드": None, "피드 아님": "NotAFeed", "시간 초과": "ReadTimeout"}
+
+
+@given(
+    parsers.re(
+        r'사이트 "자유 블로그"의 주소를 "(?P<url>[^"]+)"로 바꾸면 "(?P<outcome>[^"]+)" 상태다'
+    )
+)
+def _outcome(world, url, outcome):
+    reason = OUTCOMES[outcome]
+    if reason is None:
+        world.fetcher.serve(url, [])
+    else:
+        world.fetcher.fail(url, reason)
+
+
+@when(
+    parsers.re(
+        r'사이트 "자유 블로그"의 이름을 "(?P<name>[^"]+)"으로, 주소를 "(?P<url>[^"]+)"로 저장한다'
+    )
+)
+def _save_name_url(world, ctx, name, url):
+    ctx.before = world.feeds.get(world.f_free)
+    ctx.new_url = url
+    ctx.response = settings_post(world, world.f_free, name=name, url=url)
+
+
+@then(
+    parsers.re(r"저장되고 사이트 \"자유 블로그\"의 이름과 주소가 바뀌며 새 주소를 한 번 가져왔다")
+)
+def _saved(world, ctx):
+    feed = world.feeds.get(world.f_free)
+    assert ctx.response.status_code == 303 and feed.name == "바뀐 이름" and feed.url == ctx.new_url
+    assert world.fetcher.urls_fetched().count(ctx.new_url) == 1
+
+
+@then(parsers.re(r'"(?P<message>[^"]+)"로 거부되고 이름과 주소는 그대로다'))
+def _refused(world, ctx, message):
+    feed = world.feeds.get(world.f_free)
+    assert ctx.response.status_code == 400 and message in ctx.response.text
+    assert (feed.name, feed.url) == (ctx.before.name, ctx.before.url)

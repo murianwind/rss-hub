@@ -198,10 +198,13 @@ def _four_sections(ctx):
     assert list(groups(ctx.response.text)) == ["RSS", "카테고리", "주제", "환경 설정"]
 
 
-@then('RSS 아래에는 등록된 사이트 전체("뉴스 블로그", "자유 블로그")가 있다')
-def _rss_has_all(ctx):
+@then(
+    'RSS 아래에는 카테고리에 넣지 않은 사이트("자유 블로그")만 있고 '
+    '"뉴스 블로그"는 카테고리 아래에만 있다'
+)
+def _rss_has_uncategorized_only(ctx):
     rss = groups(ctx.response.text)["RSS"]
-    assert "뉴스 블로그" in rss and "자유 블로그" in rss
+    assert "자유 블로그" in rss and "뉴스 블로그" not in rss
 
 
 @then('카테고리 "뉴스" 아래에는 사이트 "뉴스 블로그"가 있고 "자유 블로그"는 없다')

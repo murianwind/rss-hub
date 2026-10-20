@@ -57,7 +57,7 @@ def test_turned_off_topics_have_no_buttons(world):
         world.game, TopicFields("게임", "", ("steam",)), webhook_id=None, enabled=False
     )
     html = world.get(f"/a/{world.article()}").text
-    assert f"/topics/{world.game}/" not in html
+    assert not re.search(rf"/topics/{world.game}/(?!delete)", html)  # 삭제 폼은 사이드바에 늘 있다
 
 
 def test_the_dislike_button_removes_the_article_from_that_topic_list_only(world):
@@ -121,7 +121,9 @@ def test_other_lists_have_no_dislike_buttons(world):
     article = world.article()
     world.topics.record_matches(article, {world.ott: ()})
     for path in ("/reader", f"/reader/feed/{world.f_free}", f"/reader/category/{world.news}"):
-        assert "싫어요" not in world.get(path).text
+        assert (
+            "/reject" not in world.get(path).text
+        )  # 싫어요 버튼의 전송 주소(삭제 안내문에도 낱말이 있다)
 
 
 # ---------- 잘못된 요청 ----------
