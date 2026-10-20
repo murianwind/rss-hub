@@ -46,6 +46,7 @@ ICONS: dict[str, str] = {
         '<circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/>'
         '<circle cx="15" cy="18" r="1"/>'
     ),
+    "refresh": '<path d="M20 11a8 8 0 0 0-14.9-3M4 5v4h4M4 13a8 8 0 0 0 14.9 3M20 19v-4h-4"/>',
     "inbox": '<path d="M3 13h5l1 3h6l1-3h5M5 5h14l2 8v6H3v-6z"/>',
 }
 
@@ -157,7 +158,9 @@ def _open_sections(request: Request, scope_kind: str) -> set[str]:
     path = request.url.path
     if path.startswith(SETTINGS_PATHS):
         return {"settings"}
-    return {"feed": {"rss"}, "category": {"categories"}, "topic": {"topics"}}.get(scope_kind, set())
+    sections = {"feed": {"rss"}, "category": {"categories"}, "topic": {"topics"}}
+    sections.update({"all": {"rss"}, "bookmarks": {"rss"}})
+    return sections.get(scope_kind, set())
 
 
 def _current(request: Request) -> str:

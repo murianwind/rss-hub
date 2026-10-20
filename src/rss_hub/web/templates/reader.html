@@ -7,7 +7,7 @@
   <span class="spacer"></span>
   {% if page is not none %}
   <form class="searchform" method="get" action="{{ base_path }}" role="search">
-    <input class="compact" type="search" name="q" value="{{ q }}" placeholder="검색어 입력..." aria-label="검색어" maxlength="100">
+    <input class="compact" type="search" name="q" value="{{ q }}" placeholder="검색어 입력..." aria-label="검색어" maxlength="100" autocomplete="off" enterkeyhint="search">
     {% if scope.kind != 'bookmarks' %}
     <select class="compact" name="only" aria-label="필터">
       <option value="" {% if not only %}selected{% endif %}>전체 글</option>
@@ -15,7 +15,6 @@
       <option value="bookmarks" {% if only == 'bookmarks' %}selected{% endif %}>북마크</option>
     </select>
     {% endif %}
-    <button type="submit" class="compact">{{ icon('search') }} 검색</button>
   </form>
   <form method="post" action="/reader/mark-read">
     <input type="hidden" name="kind" value="{{ scope.kind }}">
@@ -59,7 +58,6 @@
         </form>
         {% endif %}
       </span>
-      <span class="more">상세 보기 {{ icon('chevron-right') }}</span>
     </div>
   </article>
   {% endfor %}

@@ -90,6 +90,12 @@
       openPanel(opener.href);
       return;
     }
+    var refresher = event.target.closest("[data-refresh]");
+    if (refresher) {
+      event.preventDefault();
+      refreshFeed(refresher);
+      return;
+    }
     var target = event.target.closest("[data-action]");
     if (target) {
       var action = target.getAttribute("data-action");
@@ -226,6 +232,157 @@
       if (!result.ok) showToast(result.text);
     });
   });
+
+  // ---------- 사이드바 상태(개수와 피드 상태 점)를 화면을 다시 불러오지 않고 고친다 ----------
+  var STATE_LABEL = { ok: "정상", error: "오류", never: "아직 수집 전" };
+
+  function setBadge(el, unread, total) {
+    el.classList.toggle("unread", unread > 0);
+    el.textContent = unread > 0 ? String(unread) : total > 0 ? String(total) : "";
+    el.hidden = !(unread > 0 || total > 0);
+    el.title = unread > 0 ? "안 읽은 글 " + unread + "개" : "글 " + total + "개";
+  }
+
+  function setCount(key, unread, total) {
+    document.querySelectorAll('[data-count="' + key + '"]').forEach(function (el) {
+      setBadge(el, unread, total);
+    });
+  }
+
+  function applyState(state) {
+    Object.keys(state.feeds).forEach(function (id) {
+      var feed = state.feeds[id];
+      setCount("feed:" + id, feed.unread, feed.total);
+      document.querySelectorAll('[data-state="' + id + '"]').forEach(function (dot) {
+        dot.className = "state-dot " + feed.state;
+        dot.setAttribute("aria-label", STATE_LABEL[feed.state]);
+        dot.title = feed.state === "error" ? "오류: " + feed.error : STATE_LABEL[feed.state];
+      });
+    });
+    Object.keys(state.categories).forEach(function (id) {
+      setCount("category:" + id, state.categories[id].unread, state.categories[id].total);
+    });
+    Object.keys(state.topics).forEach(function (id) {
+      setCount("topic:" + id, state.topics[id].unread, state.topics[id].total);
+    });
+    setCount("all", state.all_unread, 0);
+    setCount("bookmarks", 0, state.bookmarks);
+  }
+
+  function refreshFeed(button) {
+    if (button.disabled) return;
+    button.disabled = true;
+    button.classList.add("refreshing");
+    post("/feeds/" + button.getAttribute("data-refresh") + "/refresh", {})
+      .then(function (result) {
+        var data = null;
+        try {
+          data = JSON.parse(result.text);
+        } catch (error) {
+          data = null;
+        }
+        if (data && data.state) applyState(data.state);
+        if (!data) showToast("다시 읽지 못했습니다.");
+        else if (!data.ok) showToast("읽지 못했습니다: " + data.error);
+        else if (data.added > 0) showToast("새 글 " + data.added + "개를 가져왔습니다.");
+        else showToast("다시 읽었습니다. 새 글은 없습니다.");
+      })
+      .catch(function () {
+        showToast("다시 읽지 못했습니다.");
+      })
+      .then(function () {
+        button.disabled = false;
+        button.classList.remove("refreshing");
+      });
+  }
+
+  // ---------- 검색과 필터: 입력하면 바로 목록을 고친다 ----------
+  var searchForm = document.querySelector("form[role=search]");
+  if (searchForm) {
+    var queryBox = searchForm.elements.q;
+    var filterBox = searchForm.elements.only;
+    var typing = null;
+
+    var search = function () {
+      var params = new URLSearchParams();
+      var text = queryBox.value.trim();
+      if (text) params.set("q", text);
+      if (filterBox && filterBox.value) params.set("only", filterBox.value);
+      var target = searchForm.getAttribute("action") + (params.toString() ? "?" + params : "");
+      if (target === window.location.pathname + window.location.search) return;
+      window.sessionStorage.setItem("rsshub.refocus", document.activeElement === queryBox ? "1" : "0");
+      window.location.href = target;
+    };
+
+    queryBox.addEventListener("input", function () {
+      window.clearTimeout(typing);
+      typing = window.setTimeout(search, 400);
+    });
+    queryBox.addEventListener("search", search); // 입력 칸의 지우기(x) 버튼
+    searchForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      search();
+    });
+    if (filterBox) filterBox.addEventListener("change", search);
+    if (window.sessionStorage.getItem("rsshub.refocus") === "1") {
+      queryBox.focus();
+      queryBox.setSelectionRange(queryBox.value.length, queryBox.value.length);
+    }
+    window.sessionStorage.removeItem("rsshub.refocus");
+  }
+
+  // ---------- 메뉴: 바깥을 누르면 닫는다 ----------
+  document.addEventListener("click", function (event) {
+    document.querySelectorAll("details.menu[open]").forEach(function (menu) {
+      if (!menu.contains(event.target)) menu.open = false;
+    });
+  });
+
+  // ---------- 화면을 다시 불러와도 보던 자리를 유지한다 ----------
+  // 사이드바의 펼침 상태와 스크롤, 같은 화면이면 본문 스크롤까지 기억했다가 되돌린다.
+  var UI_KEY = "rsshub.ui";
+
+  function saveUi() {
+    var open = {};
+    document.querySelectorAll("details.sec[id], details.tree[id]").forEach(function (box) {
+      open[box.id] = box.open;
+    });
+    var side = document.querySelector(".sb-body");
+    var main = document.querySelector(".main .scroll");
+    window.sessionStorage.setItem(
+      UI_KEY,
+      JSON.stringify({
+        url: window.location.pathname + window.location.search,
+        side: side ? side.scrollTop : 0,
+        main: main ? main.scrollTop : 0,
+        open: open,
+      })
+    );
+  }
+
+  function restoreUi() {
+    var saved = null;
+    try {
+      saved = JSON.parse(window.sessionStorage.getItem(UI_KEY) || "null");
+    } catch (error) {
+      saved = null;
+    }
+    if (!saved) return;
+    Object.keys(saved.open).forEach(function (id) {
+      var box = document.getElementById(id);
+      if (box && saved.open[id]) box.open = true; // 서버가 열어 둔 것은 닫지 않는다
+    });
+    var side = document.querySelector(".sb-body");
+    var main = document.querySelector(".main .scroll");
+    if (side) side.scrollTop = saved.side;
+    if (main && saved.url === window.location.pathname + window.location.search) {
+      main.scrollTop = saved.main;
+    }
+  }
+
+  window.addEventListener("pagehide", saveUi);
+  document.addEventListener("submit", saveUi);
+  restoreUi();
 
   // 토스트는 3초 뒤에 사라지고, 주소에서 toast 값을 지워서 새로고침해도 다시 나오지 않게 한다
   var toast = document.querySelector("[data-toast]");

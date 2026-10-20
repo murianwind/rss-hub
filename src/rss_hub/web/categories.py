@@ -67,6 +67,24 @@ def build_category_router(
             return page(request, error="카테고리를 찾을 수 없음", status_code=404)
         return done(form, "/categories?saved=1", "saved")
 
+    @router.post("/categories/{category_id}/settings", response_class=HTMLResponse)
+    async def save_category_settings(request: Request, category_id: int) -> Response:
+        """이름과 웹훅을 한 번에 저장한다. 웹훅이 없는 번호면 아무것도 바꾸지 않는다."""
+        form = await request.form()
+        text = str(form.get("webhook_id", "")).strip()
+        webhook_id = int(text) if text.isdigit() else None
+        if webhook_id is not None and webhook_id not in {w.id for w in settings.list_webhooks()}:
+            return page(request, error="웹훅을 찾을 수 없음", status_code=400)
+        try:
+            name = validate_category_name(str(form.get("name", "")))
+            found = feeds.rename_category(category_id, name)
+        except (CategoryInputError, FeedRuleError) as error:
+            return page(request, error=error.message, status_code=400)
+        if not found:
+            return page(request, error="카테고리를 찾을 수 없음", status_code=404)
+        feeds.set_category_webhook(category_id, webhook_id)
+        return done(form, "/categories?saved=1", "saved")
+
     @router.post("/categories/{category_id}/delete", response_class=HTMLResponse)
     async def delete_category(request: Request, category_id: int) -> Response:
         form = await request.form()

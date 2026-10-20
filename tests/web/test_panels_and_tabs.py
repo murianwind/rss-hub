@@ -104,31 +104,34 @@ def test_adding_a_topic_from_the_panel_works_the_same_way(world):
 # ---------- 설정 ----------
 
 
-def test_the_feed_panel_has_edit_category_webhook_and_delete(world):
+def test_the_feed_panel_is_one_form_with_every_field_and_no_delete_or_priority(world):
     html = panel(world, f"/panel/settings/feed/{world.f_free}?next=/reader").text
-    assert f'action="/feeds/{world.f_free}/edit"' in html and 'value="자유 블로그"' in html
-    assert (
-        f'action="/feeds/{world.f_free}/category"' in html
-        and f'action="/feeds/{world.f_free}/webhook"' in html
+    assert html.count("<form") == 1 and f'action="/feeds/{world.f_free}/settings"' in html
+    for field in ("name", "url", "emoji", "max_entries", "category_id", "webhook_id"):
+        assert f'name="{field}"' in html, field
+    assert 'value="자유 블로그"' in html and f'value="{world.feeds.get(world.f_free).url}"' in html
+    assert "/delete" not in html and "/panel/delete" not in html  # 삭제는 사이드바의 −로만
+    assert "priority" not in html and "점검 우선순위" not in html
+
+
+def test_the_close_button_sits_next_to_save_and_not_in_the_header(world):
+    html = panel(world, f"/panel/settings/feed/{world.f_free}").text
+    head, form = (
+        html.split('<div class="slide-head">')[1].split("</div>", 1)[0],
+        html.split("<form")[1],
     )
-    assert f'href="/panel/delete/feed/{world.f_free}?next=/reader" data-panel' in html
+    assert "닫기" not in head and 'data-action="close-panel"' not in head
+    pattern = r'class="primary">저장</button><a class="button" href="[^"]*" '
+    assert re.search(pattern + r'data-action="close-panel">닫기', form)
 
 
-def test_a_feed_with_its_own_webhook_cannot_choose_a_category_in_the_panel(world):
+def test_the_feed_panel_explains_that_a_category_and_a_webhook_exclude_each_other(world):
     webhook = world.parts.settings.add_webhook("개별", WEBHOOK)
     world.feeds.set_feed_webhook(world.f_free, webhook)
     html = panel(world, f"/panel/settings/feed/{world.f_free}").text
-    assert "개별 웹훅이 있어서 카테고리에 넣을 수 없습니다" in html and "/category" not in html
-    assert f'action="/feeds/{world.f_free}/webhook"' in html
-
-
-def test_a_feed_in_a_category_cannot_choose_a_webhook_in_the_panel(world):
-    html = panel(world, f"/panel/settings/feed/{world.f_news}").text
-    assert "카테고리에 속한 피드는 개별 웹훅을 지정할 수 없습니다" in html
-    assert (
-        f'action="/feeds/{world.f_news}/webhook"' not in html
-        and f'action="/feeds/{world.f_news}/category"' in html
-    )
+    assert "함께 지정할 수 없습니다" in html and f'<option value="{webhook}" selected>' in html
+    category = panel(world, f"/panel/settings/feed/{world.f_news}").text
+    assert f'<option value="{world.news}" selected>' in category
 
 
 def test_saving_the_feed_panel_returns_to_the_reading_screen(world):
@@ -146,19 +149,22 @@ def test_saving_the_feed_panel_returns_to_the_reading_screen(world):
     assert (feed.name, feed.poll_priority, feed.max_entries) == ("새 이름", "every_slot", 7)
 
 
-def test_the_category_panel_has_rename_webhook_and_delete(world):
+def test_the_category_panel_is_one_form_for_name_and_webhook_without_delete(world):
     html = panel(world, f"/panel/settings/category/{world.news}").text
-    assert (
-        f'action="/categories/{world.news}/rename"' in html
-        and f'action="/categories/{world.news}/webhook"' in html
+    assert html.count("<form") == 1 and f'action="/categories/{world.news}/settings"' in html
+    assert 'name="name"' in html and 'name="webhook_id"' in html and "피드 1개" in html
+    assert "/delete" not in html and re.search(
+        r'저장</button><a class="button"[^>]*>닫기</a>', html
     )
-    assert f"/panel/delete/category/{world.news}" in html and "피드 1개" in html
 
 
 def test_the_topic_panel_shows_the_keywords_and_links_to_the_suggestions(world):
     html = panel(world, f"/panel/settings/topic/{world.topic}").text
     assert f'action="/topics/{world.topic}/update"' in html and ">steam</textarea>" in html
     assert f'href="/topics/{world.topic}/suggestions"' in html and "checked" in html
+    assert "/delete" not in html and re.search(
+        r'저장</button><a class="button"[^>]*>닫기</a>', html
+    )
 
 
 def test_names_in_panels_are_escaped(world):
@@ -337,10 +343,20 @@ def test_an_error_keeps_the_tab_the_user_was_on(world):
     assert "<h1>디스플레이 및 테마</h1>" in response.text and "OpenRouter 키" not in response.text
 
 
-def test_the_tab_bar_lists_every_settings_page_and_marks_the_current_one(world):
-    html = world.get("/settings/notifications").text
-    tabs = html.split('<nav class="tabs"')[1].split("</nav>")[0]
-    assert re.findall(r'href="([^"]+)"', tabs) == [
+def test_there_is_no_top_navigation_on_the_settings_pages_only_the_sidebar_menu(world):
+    for path in (
+        "/settings/general",
+        "/settings/notifications",
+        "/feeds",
+        "/topics",
+        "/status",
+        "/models",
+    ):
+        html = world.get(path).text
+        assert 'class="tabs"' not in html and "_settings_tabs" not in html
+    menu = world.get("/settings/general").text.split('id="sec-settings"')[1].split("</details>")[0]
+    links = [h for h in re.findall(r'href="([^"]+)"', menu) if h.startswith("/")]
+    assert links == [
         "/settings/general",
         "/feeds",
         "/settings/notifications",
@@ -349,7 +365,6 @@ def test_the_tab_bar_lists_every_settings_page_and_marks_the_current_one(world):
         "/topics",
         "/status",
     ]
-    assert 'href="/settings/notifications" aria-current="page"' in tabs
 
 
 def test_an_unknown_tab_gives_404_and_save_paths_still_reject_get(world):

@@ -362,6 +362,8 @@ def test_the_all_articles_link_shows_the_unread_total(world):
 def test_the_section_of_the_current_list_starts_open_and_the_others_closed(world):
     topic = world.topics.list_all()[0].id
     cases = {
+        "/reader": "rss",
+        "/reader/bookmarks": "rss",
         f"/reader/feed/{world.f_free}": "rss",
         f"/reader/category/{world.news}": "categories",
         f"/reader/topic/{topic}": "topics",
@@ -420,7 +422,7 @@ def test_every_management_page_shows_the_same_sidebar_and_marks_its_tab(world):
         assert '<nav aria-label="구독 목록">' in html
         expected = tab.get(path, path)
         assert re.search(rf'href="{expected}"[^>]*aria-current="page"', html), path
-        assert '<nav class="tabs"' in html
+        assert 'class="tabs"' not in html  # 설정 위쪽의 탭 네비게이션은 없다
 
 
 # ---------- 정적 파일과 보안 ----------

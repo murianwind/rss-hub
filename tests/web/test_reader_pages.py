@@ -21,7 +21,8 @@ def world(tmp_path):
 def test_the_sidebar_has_four_sections_in_order_and_they_start_collapsed(world):
     html = world.get("/reader").text
     assert list(groups(html)) == ["RSS", "카테고리", "주제", "환경 설정"]
-    assert 'class="sec" id="sec-rss" open' not in html  # 전체 글 목록에서는 모두 접혀 있다
+    # 전체 글과 북마크는 RSS 피드 구역 안에 있어서 전체 글 목록에서는 RSS만 열린다
+    assert re.findall(r'<details class="sec" id="sec-(\w+)" open>', html) == ["rss"]
 
 
 def test_the_rss_group_lists_every_registered_site_including_those_in_categories(world):
@@ -231,7 +232,7 @@ def test_the_topics_and_matched_keywords_are_shown(world):
     article_id = world.article()
     world.topics.record_matches(article_id, {ott.id: ("netflix", "drama")})
     html = world.get(f"/a/{article_id}").text
-    assert ott.name in html and "키워드 netflix, drama" in html
+    assert ott.name in html and 'title="netflix, drama"' in html  # 주제 칩에 마우스를 올리면 키워드
 
 
 def test_the_article_body_is_sanitized(world):

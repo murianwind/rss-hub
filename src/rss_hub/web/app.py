@@ -22,6 +22,7 @@ from rss_hub.adapters.openrouter_client import OpenRouterClient
 from rss_hub.jobs.runner import JobRunner, start_thread
 from rss_hub.runtime import build_llm_services
 from rss_hub.services.clock import Clock, SystemClock
+from rss_hub.services.collect import CollectService
 from rss_hub.services.feed_registration import FeedRegistrationService
 from rss_hub.services.importer import ImportService
 from rss_hub.services.model_benchmark import BenchmarkRunner, BenchmarkService
@@ -48,6 +49,7 @@ from rss_hub.web.feedback import build_feedback_router
 from rss_hub.web.feeds import build_feed_router
 from rss_hub.web.health import data_dir_is_writable
 from rss_hub.web.importer import build_import_router
+from rss_hub.web.live import build_live_router
 from rss_hub.web.models import build_model_router
 from rss_hub.web.ordering import build_ordering_router
 from rss_hub.web.panels import build_panel_router
@@ -191,9 +193,12 @@ def create_app(
     )
     app.include_router(build_topic_router(topics, service, templates, probe))
     app.include_router(build_category_router(feeds, service, templates))
-    registration = FeedRegistrationService(
-        fetcher=feed_fetcher or RequestsFeedFetcher(), feeds=feeds
+    fetcher = feed_fetcher or RequestsFeedFetcher()
+    registration = FeedRegistrationService(fetcher=fetcher, feeds=feeds)
+    collector = CollectService(
+        feeds=feeds, articles=articles, fetcher=fetcher, settings=service, clock=app_clock
     )
+    app.include_router(build_live_router(reader=reader, feeds=feeds, collector=collector))
     app.include_router(build_feed_router(feeds, service, templates, registration))
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

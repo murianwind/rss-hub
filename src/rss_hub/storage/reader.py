@@ -52,6 +52,15 @@ class SideFeed:
     category_id: int | None
     total: int
     unread: int
+    state: str = "never"  # ok(정상), error(마지막 점검 실패), never(아직 수집 전)
+    error: str = ""
+
+
+def feed_state(fail_count: int, last_checked_at: object) -> str:
+    """피드의 상태 점: 마지막 점검이 실패했으면 error, 점검한 적이 없으면 never, 아니면 ok."""
+    if fail_count > 0:
+        return "error"
+    return "never" if last_checked_at is None else "ok"
 
 
 @dataclass(frozen=True)
@@ -220,7 +229,8 @@ class ReaderRepository:
         statuses = list(VIEWABLE_STATUSES)
         with self._db.connect() as conn:
             feed_rows = conn.execute(
-                "SELECT f.id, f.name, f.category_id, COALESCE(c.total, 0) AS total, "
+                "SELECT f.id, f.name, f.category_id, f.fail_count, f.last_error, "
+                "f.last_checked_at, COALESCE(c.total, 0) AS total, "
                 "COALESCE(c.unread, 0) AS unread FROM feeds f LEFT JOIN ("
                 "SELECT feed_id, COUNT(*) AS total, SUM(read_at IS NULL) AS unread FROM articles "
                 f"WHERE status IN ({marks}) GROUP BY feed_id) c ON c.feed_id = f.id "
@@ -250,7 +260,15 @@ class ReaderRepository:
                 statuses,
             ).fetchone()["n"]
         feeds = tuple(
-            SideFeed(r["id"], r["name"], r["category_id"], r["total"], r["unread"])
+            SideFeed(
+                r["id"],
+                r["name"],
+                r["category_id"],
+                r["total"],
+                r["unread"],
+                feed_state(r["fail_count"], r["last_checked_at"]),
+                r["last_error"] or "",
+            )
             for r in feed_rows
         )
         categories = tuple(

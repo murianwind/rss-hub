@@ -199,6 +199,9 @@ def build_reader_router(
             "published": article.published_dt.astimezone(zone).strftime("%Y-%m-%d %H:%M"),
             "topic_matches": reader.topics_of(article.id),
             "memberships": {m.topic_id: m for m in topics.memberships(article.id)},
+            "memberships_active": [
+                m.topic_id for m in topics.memberships(article.id) if not m.rejected
+            ],
             "enabled_topics": topics.list_enabled(),
             "body": sanitize_html(article.content_html, article.link),
             "lang": detect_language(f"{article.title} {plain}"),

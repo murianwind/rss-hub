@@ -9,10 +9,16 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from rss_hub.domain.feed_edit import FeedEditError, validate_feed_edit
+from rss_hub.domain.feed_url import FeedUrlError, feed_url_key, validate_feed_url
 from rss_hub.domain.opml_export import ExportFeed, build_opml
 from rss_hub.services.feed_registration import DiscoveryResult, FeedRegistrationService
 from rss_hub.services.settings import SettingsService
-from rss_hub.storage.feeds import FeedRepository, FeedRuleError
+from rss_hub.storage.feeds import (
+    RULE_FEED_WEBHOOK_BLOCKS_CATEGORY,
+    DuplicateFeedError,
+    FeedRepository,
+    FeedRuleError,
+)
 from rss_hub.web.ui import done
 
 CONFIRM_MESSAGE = "삭제하려면 확인란을 선택해 주세요"
@@ -104,6 +110,53 @@ def build_feed_router(
         if result.error:
             return page(request, error=result.error, status_code=400, discover_url=url)
         return done(form, "/feeds?added=1", "added")
+
+    # ---------- 설정 한 번에 저장(패널) ----------
+
+    @router.post("/feeds/{feed_id}/settings", response_class=HTMLResponse)
+    async def save_settings(request: Request, feed_id: int) -> Response:
+        """이름, 주소, 이모지, 최대 항목 수, 카테고리, 웹훅을 한 번에 저장한다.
+
+        바꾸기 전에 입력과 규칙을 모두 확인해서, 규칙에 어긋나면 아무것도 바꾸지 않는다.
+        """
+        form = await request.form()
+        feed = feeds.get(feed_id)
+        if feed is None:
+            return page(request, error="피드를 찾을 수 없음", status_code=404)
+        category_id = _id_or_none(form.get("category_id"))
+        webhook_id = _id_or_none(form.get("webhook_id"))
+        try:
+            values = validate_feed_edit(
+                str(form.get("name", "")),
+                str(form.get("emoji", "")),
+                feed.poll_priority,
+                str(form.get("max_entries", "")),
+            )
+            url = validate_feed_url(str(form.get("url", "")))
+        except (FeedEditError, FeedUrlError) as error:
+            return page(request, error=error.message, status_code=400)
+        if category_id is not None and webhook_id is not None:
+            return page(request, error=RULE_FEED_WEBHOOK_BLOCKS_CATEGORY, status_code=400)
+        url_changed = feed_url_key(url) != feed_url_key(feed.url)
+        if url_changed and feed_url_key(url) in feeds.existing_url_keys():
+            return page(request, error="이미 구독 중인 피드입니다", status_code=400)
+        try:
+            feeds.update_feed(feed_id, values)
+            # 규칙에 걸리지 않도록 비우는 쪽을 먼저 처리한다
+            if category_id is None:
+                feeds.set_feed_category(feed_id, None)
+                feeds.set_feed_webhook(feed_id, webhook_id)
+            else:
+                feeds.set_feed_webhook(feed_id, None)
+                feeds.set_feed_category(feed_id, category_id)
+            if url_changed:
+                feeds.change_feed_url(feed_id, url)
+        except (FeedRuleError, DuplicateFeedError) as error:
+            message = (
+                error.message if isinstance(error, FeedRuleError) else "이미 구독 중인 피드입니다"
+            )
+            return page(request, error=message, status_code=400)
+        return done(form, "/feeds?saved=1", "saved")
 
     # ---------- 편집, 삭제 ----------
 

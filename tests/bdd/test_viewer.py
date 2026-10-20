@@ -272,7 +272,7 @@ def _titles_and_summary(ctx, ko, summary):
 
 @then(parsers.re(r'주제 "(?P<topic>[^"]+)"와 키워드 "(?P<keyword>[^"]+)"가 보인다'))
 def _topic_and_keyword(ctx, topic, keyword):
-    assert topic in ctx.response.text and f"키워드 {keyword}" in ctx.response.text
+    assert topic in ctx.response.text and f'title="{keyword}"' in ctx.response.text
 
 
 @then("원문 보기 버튼이 있다")

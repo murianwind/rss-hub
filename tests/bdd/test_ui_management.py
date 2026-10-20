@@ -90,18 +90,20 @@ def _open_feed_panel(world, ctx, feed):
     ctx.fragment = world.client.get(
         f"/panel/settings/feed/{ctx.feed}?next=/reader", headers=FRAGMENT
     )
-    assert f'action="/feeds/{ctx.feed}/edit"' in ctx.fragment.text
+    assert f'action="/feeds/{ctx.feed}/settings"' in ctx.fragment.text
 
 
-@when(parsers.re(r'이름을 "(?P<name>[^"]+)"으로, 우선순위를 "매 슬롯"으로 저장한다'))
-def _save_feed(world, ctx, name):
+@when(parsers.re(r'이름을 "(?P<name>[^"]+)"으로, 피드 주소를 "(?P<url>[^"]+)"로 저장한다'))
+def _save_feed(world, ctx, name, url):
     ctx.response = post(
         world,
-        f"/feeds/{ctx.feed}/edit",
+        f"/feeds/{ctx.feed}/settings",
         name=name,
+        url=url,
         emoji="📰",
-        priority="every_slot",
         max_entries="",
+        category_id="",
+        webhook_id="",
         next="/reader",
     )
 
@@ -125,40 +127,61 @@ def _own_webhook(world, feed):
     world.feeds.set_feed_webhook(feed_id(world, feed), webhook)
 
 
-@when(parsers.re(r'사이트 "(?P<a>[^"]+)"와 "(?P<b>[^"]+)"의 설정 패널을 연다'))
-def _two_panels(world, ctx, a, b):
-    ctx.panels = {
-        name: world.client.get(
-            f"/panel/settings/feed/{feed_id(world, name)}", headers=FRAGMENT
-        ).text
-        for name in (a, b)
+@given("개별 웹훅이 하나 등록되어 있다")
+def _one_webhook(world, ctx):
+    ctx.webhook = world.parts.settings.add_webhook("개별", WEBHOOK)
+
+
+def settings_post(world, feed, **override):
+    f = world.feeds.get(feed)
+    data = {
+        "name": f.name,
+        "url": f.url,
+        "emoji": f.emoji,
+        "max_entries": "",
+        "category_id": "",
+        "webhook_id": "",
     }
+    return post(world, f"/feeds/{feed}/settings", **{**data, **override})
+
+
+@when(
+    parsers.re(
+        r'사이트 "(?P<feed>[^"]+)"의 설정 패널에서 카테고리 "기술"과 개별 웹훅을 함께 골라 저장한다'
+    )
+)
+def _both(world, ctx, feed):
+    ctx.feed = feed_id(world, feed)
+    ctx.response = settings_post(
+        world, ctx.feed, category_id=str(world.tech), webhook_id=str(ctx.webhook)
+    )
+
+
+@then(parsers.re(r'이유를 알리며 거부되고 사이트 "(?P<feed>[^"]+)"는 아무것도 바뀌지 않는다'))
+def _refused_nothing(world, ctx, feed):
+    item = world.feeds.get(feed_id(world, feed))
+    assert ctx.response.status_code == 400 and "웹훅" in ctx.response.text
+    assert (item.category_id, item.webhook_id) == (None, None)
+
+
+@when(parsers.re(r'사이트 "(?P<feed>[^"]+)"의 설정 패널에서 개별 웹훅만 골라 저장한다'))
+def _webhook_only(world, ctx, feed):
+    ctx.response = settings_post(world, feed_id(world, feed), webhook_id=str(ctx.webhook))
+
+
+@then(parsers.re(r'사이트 "(?P<feed>[^"]+)"에는 개별 웹훅이 지정되고 카테고리는 없다'))
+def _webhook_set(world, ctx, feed):
+    item = world.feeds.get(feed_id(world, feed))
+    assert (item.category_id, item.webhook_id) == (None, ctx.webhook)
 
 
 @then(
-    parsers.re(
-        r'"(?P<name>[^"]+)" 패널에는 카테고리를 고를 수 없다는 안내가 있고 카테고리 선택이 없다'
-    )
+    parsers.re(r'사이트 "(?P<feed>[^"]+)"의 피드 주소가 바뀌고 처음부터 다시 점검하는 상태가 된다')
 )
-def _no_category(world, ctx, name):
-    html = ctx.panels[name]
-    assert (
-        "카테고리에 넣을 수 없습니다" in html
-        and f"/feeds/{feed_id(world, name)}/category" not in html
-    )
-
-
-@then(
-    parsers.re(
-        r'"(?P<name>[^"]+)" 패널에는 개별 웹훅을 지정할 수 없다는 안내가 있고 웹훅 선택이 없다'
-    )
-)
-def _no_webhook(world, ctx, name):
-    html = ctx.panels[name]
-    assert (
-        "개별 웹훅을 지정할 수 없습니다" in html
-        and f"/feeds/{feed_id(world, name)}/webhook" not in html
-    )
+def _url_changed(world, feed):
+    item = world.feeds.get(feed_id(world, feed))
+    assert item.url == "https://new.example.com/feed.xml" and item.last_checked_at is None
+    assert item.status == "baseline_pending"
 
 
 # ---------- 삭제 ----------

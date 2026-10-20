@@ -38,7 +38,7 @@ def test_the_article_page_offers_dislike_for_member_topics_and_add_for_the_other
     world.topics.record_matches(article, {world.ott: ("netflix",)})
     html = world.get(f"/a/{article}").text
     assert f'action="/a/{article}/topics/{world.ott}/reject"' in html and ">싫어요<" in html
-    assert f'action="/a/{article}/topics/{world.game}/add"' in html and ">주제로<" in html
+    assert f'action="/a/{article}/topics/{world.game}/add"' in html and "특정 주제로" in html
 
 
 def test_a_rejected_topic_shows_the_restore_button_instead(world):
@@ -48,7 +48,7 @@ def test_a_rejected_topic_shows_the_restore_button_instead(world):
     html = world.get(f"/a/{article}").text
     assert f'action="/a/{article}/topics/{world.ott}/restore"' in html
     assert (
-        "에서 제외됨" in html and ">되돌리기<" in html and f"/topics/{world.ott}/reject" not in html
+        "(제외됨)" in html and "특정 주제로" in html and f"/topics/{world.ott}/reject" not in html
     )
 
 
