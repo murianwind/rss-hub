@@ -164,3 +164,23 @@ def test_opening_a_list_never_fetches_pages(world):
     world.article(link=LINK)
     world.get("/reader")
     assert world.fetcher.page_calls == []
+
+
+def test_a_youtube_embed_in_the_full_text_is_a_video_link_that_opens_in_a_new_window(world):
+    embed = "<iframe src='https://www.youtube.com/embed/dQw4w9WgXcQ'></iframe>"
+    world.fetcher.page(LINK, PAGE.replace("</article>", f"{embed}</article>"))
+    article = world.article(link=LINK)
+    text = body(world.get(f"/a/{article}").text)
+    link = next(a for a in text.split("<a ") if "영상 보기" in a)
+    assert 'href="https://www.youtube.com/watch?v=dQw4w9WgXcQ"' in link
+    assert 'target="_blank"' in link and "<iframe" not in text
+    rel = link.split('rel="')[1].split('"')[0].split()
+    assert "noopener" in rel and "noreferrer" in rel  # 새 창에서 이 페이지에 접근하지 못한다
+
+
+def test_the_rss_fallback_body_does_not_get_video_links(world):
+    world.fetcher.page_errors[LINK] = "ReadTimeout"
+    content = "<p>RSS 본문</p><iframe src='https://www.youtube.com/embed/dQw4w9WgXcQ'></iframe>"
+    article = world.article(link=LINK, content=content)
+    text = body(world.get(f"/a/{article}").text)
+    assert "RSS 본문" in text and "영상 보기" not in text and "<iframe" not in text

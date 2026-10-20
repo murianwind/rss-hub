@@ -58,3 +58,23 @@ Feature: 글 전문: 원문 페이지에서 본문을 가져와 보여 준다
     Given 원문 페이지에 스크립트와 이벤트 속성과 위험한 링크와 iframe이 들어 있는 글이 있다
     When 그 글을 연다
     Then 본문에는 정상 문장만 남고 위험한 요소는 하나도 없다
+
+  @FTX-07 @new
+  Scenario: 영상은 재생하지 않고 주소 없이 "영상 보기" 링크가 되어 새 창으로 열린다
+    Given 원문 페이지의 본문 중간에 유튜브 영상이 들어 있는 글이 있다
+    When 그 글을 연다
+    Then 영상이 있던 자리에 "영상 보기" 링크가 있고 화면 글자에는 영상 주소가 보이지 않는다
+    And 그 링크는 새 창으로 열리고 영상 페이지 주소를 가리킨다
+
+  @FTX-08 @new
+  Scenario Outline: 알려진 영상 사이트가 아닌 프레임이나 쓸 수 없는 주소는 지우고 링크도 만들지 않는다
+    Given 원문 페이지에 "<frame>" 주소의 프레임이 들어 있는 글이 있다
+    When 그 글을 연다
+    Then 본문에는 "영상 보기" 링크도 프레임도 없다
+
+    Examples:
+      | frame                           |
+      | https://ads.example.com/banner  |
+      | javascript:alert(1)             |
+      | https://evil.example.org/embed  |
+

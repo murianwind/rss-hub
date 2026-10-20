@@ -10,7 +10,7 @@ from tests.fakes.discovery_fetcher import FakeDiscoveryFetcher
 from tests.fakes.viewer_world import World
 from tests.fakes.web_parts import start_app
 
-bind(globals(), "18_full_text.feature", [f"FTX-{n:02d}" for n in range(1, 7)])
+bind(globals(), "18_full_text.feature", [f"FTX-{n:02d}" for n in range(1, 9)])
 
 BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 LINK = "https://blog.example.com/post/1"
@@ -155,3 +155,47 @@ def _clean(ctx):
     assert "원문 전체에만 있는 본문" in text
     for danger in ("<script", "onclick", "onerror", "javascript:", "<iframe", "__pwned"):
         assert danger not in text
+
+
+# ---------- 영상 ----------
+
+
+def _article_with_media(world, ctx, media):
+    page = f"<html><body><article><p>{FULL}</p>{media}<p>영상 뒤 문단</p></article></body></html>"
+    world.fetcher.page(LINK, page)
+    ctx.article = world.article(link=LINK)
+
+
+@given("원문 페이지의 본문 중간에 유튜브 영상이 들어 있는 글이 있다")
+def _youtube_article(world, ctx):
+    _article_with_media(
+        world, ctx, "<iframe src='https://www.youtube.com/embed/dQw4w9WgXcQ' width='560'></iframe>"
+    )
+
+
+@then('영상이 있던 자리에 "영상 보기" 링크가 있고 화면 글자에는 영상 주소가 보이지 않는다')
+def _link_in_place(ctx):
+    import re
+
+    text = body(ctx.response.text)
+    assert text.index("원문 전체에만 있는") < text.index("영상 보기") < text.index("영상 뒤 문단")
+    shown = re.sub(r"<[^>]*>", " ", text)
+    assert "youtube" not in shown and "dQw4w9WgXcQ" not in shown and "http" not in shown
+
+
+@then("그 링크는 새 창으로 열리고 영상 페이지 주소를 가리킨다")
+def _opens_in_new_window(ctx):
+    link = next(a for a in body(ctx.response.text).split("<a ") if "영상 보기" in a)
+    assert 'target="_blank"' in link and "noopener" in link
+    assert 'href="https://www.youtube.com/watch?v=dQw4w9WgXcQ"' in link
+
+
+@given(parsers.re(r'원문 페이지에 "(?P<frame>[^"]+)" 주소의 프레임이 들어 있는 글이 있다'))
+def _frame_article(world, ctx, frame):
+    _article_with_media(world, ctx, f"<iframe src='{frame}'></iframe>")
+
+
+@then('본문에는 "영상 보기" 링크도 프레임도 없다')
+def _no_link_no_frame(ctx):
+    text = body(ctx.response.text)
+    assert "영상 보기" not in text and "<iframe" not in text and "영상 뒤 문단" in text

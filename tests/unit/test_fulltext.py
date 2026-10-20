@@ -246,3 +246,184 @@ def test_the_choice_descends_from_a_wrapper_with_stray_text_to_the_content_block
     )
     text = extract_main_content(html, "https://x.example.com/")
     assert text and "본문 문장입니다" in text and "래퍼에 섞인 잡음" not in text
+
+
+# ---------- 영상은 재생하지 않고 "영상 보기" 링크로 바꾼다(주소는 글자로 보이지 않는다) ----------
+
+
+def visible(text: str) -> str:
+    """태그를 뺀 화면에 보이는 글자."""
+    import re
+
+    return re.sub(r"<[^>]*>", " ", text)
+
+
+def media_page(media: str) -> str:
+    return page(f"<article><p>{LONG}</p>{media}<p>뒤 문단</p></article>")
+
+
+@pytest.mark.parametrize(
+    ("embed", "watch"),
+    [
+        (
+            "https://www.youtube.com/embed/dQw4w9WgXcQ",
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        ),
+        (
+            "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0",
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        ),
+        ("//www.youtube.com/embed/dQw4w9WgXcQ", "https://www.youtube.com/watch?v=dQw4w9WgXcQ"),
+        ("https://player.vimeo.com/video/123456789", "https://vimeo.com/123456789"),
+        (
+            "https://www.dailymotion.com/embed/video/x8abc",
+            "https://www.dailymotion.com/embed/video/x8abc",
+        ),
+        ("https://tv.naver.com/embed/12345", "https://tv.naver.com/embed/12345"),
+        (
+            "https://tv.kakao.com/embed/player/cliplink/1",
+            "https://tv.kakao.com/embed/player/cliplink/1",
+        ),
+        ("https://player.twitch.tv/?video=1", "https://player.twitch.tv/?video=1"),
+    ],
+)
+def test_a_known_video_embed_becomes_a_link_that_opens_in_a_new_window(embed, watch):
+    text = extract_main_content(
+        media_page(f"<iframe src='{embed}' width='560'></iframe>"), "https://x.example.com/"
+    )
+    assert text and f'href="{watch}"' in text.replace("&amp;", "&")
+    assert 'target="_blank"' in text and "noopener" in text and "<iframe" not in text
+    assert "영상 보기" in visible(text)
+
+
+def test_the_address_is_never_shown_as_text_and_the_label_is_fixed():
+    text = extract_main_content(
+        media_page("<iframe src='https://www.youtube.com/embed/dQw4w9WgXcQ'></iframe>"),
+        "https://x.example.com/",
+    )
+    shown = visible(text)
+    assert "youtube" not in shown and "dQw4w9WgXcQ" not in shown and "http" not in shown
+    assert shown.count("영상 보기") == 1
+
+
+def test_the_link_sits_where_the_video_was():
+    text = extract_main_content(
+        media_page("<iframe src='https://player.vimeo.com/video/1'></iframe>"),
+        "https://x.example.com/",
+    )
+    assert text.index("본문 문장입니다") < text.index("영상 보기") < text.index("뒤 문단")
+
+
+@pytest.mark.parametrize(
+    "src",
+    [
+        "https://ads.example.com/banner",
+        "https://maps.example.org/embed",
+        "https://evil.youtube.com.attacker.example/embed/x",
+        "javascript:alert(1)",
+        "data:text/html,<script>1</script>",
+        "ftp://www.youtube.com/embed/x",
+        "https://user:pw@www.youtube.com/embed/abcdefgh",
+        "",
+    ],
+)
+def test_other_frames_and_unusable_addresses_are_dropped_without_any_link(src):
+    text = extract_main_content(
+        media_page(f"<iframe src='{src}'></iframe>"), "https://x.example.com/"
+    )
+    assert (
+        text
+        and "영상 보기" not in text
+        and "<iframe" not in text
+        and "attacker" not in text
+        and "banner" not in text
+    )
+
+
+def test_a_video_element_with_a_file_address_becomes_a_link():
+    media = "<video src='https://cdn.example.com/clip.mp4' controls>"
+    media += "지원하지 않는 브라우저입니다</video>"
+    text = extract_main_content(media_page(media), "https://x.example.com/")
+    assert 'href="https://cdn.example.com/clip.mp4"' in text and "영상 보기" in visible(text)
+    assert "지원하지 않는 브라우저" not in text  # 대체 문구는 남기지 않는다
+
+
+def test_a_video_with_a_source_child_uses_the_first_source():
+    media = "<video controls><source src='https://cdn.example.com/a.mp4'><source src='https://cdn.example.com/b.webm'></video>"
+    text = extract_main_content(media_page(media), "https://x.example.com/")
+    assert 'href="https://cdn.example.com/a.mp4"' in text and "b.webm" not in text
+
+
+def test_a_relative_video_address_is_resolved_against_the_final_address():
+    text = extract_main_content(
+        media_page("<video src='/media/clip.mp4'></video>"), "https://x.example.com/blog/post"
+    )
+    assert 'href="https://x.example.com/media/clip.mp4"' in text
+
+
+def test_audio_gets_its_own_label():
+    text = extract_main_content(
+        media_page("<audio src='https://cdn.example.com/a.mp3'></audio>"), "https://x.example.com/"
+    )
+    assert "오디오 듣기" in visible(text) and "영상 보기" not in text
+
+
+@pytest.mark.parametrize(
+    "media",
+    [
+        "<video></video>",
+        "<video controls>대체 문구</video>",
+        "<audio></audio>",
+        "<embed>",
+        "<object></object>",
+    ],
+)
+def test_media_without_an_address_leaves_nothing_behind(media):
+    text = extract_main_content(media_page(media), "https://x.example.com/")
+    assert text and "영상 보기" not in text and "오디오" not in text and "대체 문구" not in text
+
+
+def test_media_inside_dropped_blocks_is_not_turned_into_links():
+    top = "<nav><iframe src='https://www.youtube.com/embed/abcdefgh1'></iframe></nav>"
+    bottom = "<footer><video src='https://cdn.example.com/f.mp4'></video></footer>"
+    text = extract_main_content(
+        page(f"{top}<article><p>{LONG}</p></article>{bottom}"), "https://x.example.com/"
+    )
+    assert text and "영상 보기" not in text
+
+
+def test_embed_and_object_with_a_known_host_also_become_links():
+    text = extract_main_content(
+        media_page(
+            "<embed src='https://www.youtube.com/v/abcdefgh1'><object data='https://player.vimeo.com/video/42'></object>"
+        ),
+        "https://x.example.com/",
+    )
+    assert "https://www.youtube.com/watch?v=abcdefgh1" in text and "https://vimeo.com/42" in text
+
+
+def test_the_number_of_media_links_is_capped():
+    media = "".join(f"<video src='https://cdn.example.com/{n}.mp4'></video>" for n in range(60))
+    text = extract_main_content(media_page(media), "https://x.example.com/")
+    assert text.count("영상 보기") == 20
+
+
+def test_a_video_site_address_of_an_unknown_shape_is_kept_as_it_is():
+    media = "<iframe src='https://www.youtube.com/playlist?list=PL123'></iframe>"
+    media += "<iframe src='https://player.vimeo.com/video/not-a-number'></iframe>"
+    text = extract_main_content(media_page(media), "https://x.example.com/")
+    assert 'href="https://www.youtube.com/playlist?list=PL123"' in text
+    assert 'href="https://player.vimeo.com/video/not-a-number"' in text
+
+
+def test_a_broken_address_never_crashes_and_makes_no_link():
+    text = extract_main_content(
+        media_page("<video src='https://[broken/x.mp4'></video>"), "https://x.example.com/"
+    )
+    assert text and "영상 보기" not in text
+
+
+def test_a_source_without_an_address_is_skipped_for_the_next_source():
+    media = "<video controls><source type='video/mp4'><source src='https://cdn.example.com/c.mp4'></video>"
+    text = extract_main_content(media_page(media), "https://x.example.com/")
+    assert 'href="https://cdn.example.com/c.mp4"' in text
