@@ -13,7 +13,7 @@ from tests.fakes.discovery_fetcher import FakeDiscoveryFetcher
 from tests.fakes.viewer_world import World
 from tests.fakes.web_parts import start_app
 
-bind(globals(), "18_full_text.feature", [f"FTX-{n:02d}" for n in range(1, 11)])
+bind(globals(), "18_full_text.feature", [f"FTX-{n:02d}" for n in range(1, 14)])
 
 BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 LINK = "https://blog.example.com/post/1"
@@ -77,10 +77,13 @@ def _full_text(ctx):
     assert "메뉴" not in text and "하단 안내" not in text and "RSS 요약뿐" not in text
 
 
-@then("원문 페이지에서 가져온 전문이라는 안내와 다시 가져오기 버튼이 있다")
+@then(
+    '제목 아래 고정 영역에 전문 다시 가져오기 버튼이 있고 "원문 페이지에서 가져온 전문입니다" 안내는 없다'
+)
 def _notice(ctx):
-    assert "원문 페이지에서 가져온 전문입니다" in ctx.response.text
-    assert "전문 다시 가져오기" in ctx.response.text
+    html = ctx.response.text
+    assert "원문 페이지에서 가져온 전문입니다" not in html
+    assert "전문 다시 가져오기" in html.split('<div class="doc-scroll">')[0]
 
 
 @then("원문 페이지는 한 번만 요청했다")
@@ -276,3 +279,111 @@ def _head_gone(ctx):
     assert "<img" not in raw
     for noise in ("Build a Board", "Define what your", "October 20", "Annotate", "Print", "Save"):
         assert noise not in text, noise
+
+
+# ---------- 실제 페이지(Gizmodo, InfoQ, HBR) 검토에서 나온 시나리오 ----------
+
+
+def visible_text(html):
+    """본문 영역의 화면 글자(태그를 빼고 공백을 하나로)."""
+    inner = body(html).split(">", 1)[1]  # 본문 요소의 여는 태그 뒤부터
+    return re.sub(r"\s+", " ", _plain(inner)).strip()
+
+
+@given(
+    "원문 페이지에 본문 영역 바깥의 머리 영역과 본문 속 기울임 글자와 글 끝의 홍보 문단이 있는 글이 있다"
+)
+def _gizmodo_like(world, ctx):
+    hero = (
+        "<div class='hero'><span class='cat'><a href='/c/tv'>Television</a></span>"
+        "<h1>Star Felt Like Season 3 Might Be the End</h1><div class='post-excerpt'>According to Woll, the ending felt different.</div>"
+        "<div class='meta'><span>By</span><a href='/a/jen'>Jen Lennon</a><time>Published October 20, 2026, 8:00 am ET</time></div>"
+        "<p>Reading time 2 minutes</p></div>"
+    )
+    paragraphs = "".join(f"<p>{FULL}{n}</p>" for n in range(6))
+    promo = "<blockquote><p>Want more io9 news? Check out <a href='/best'>the best movies</a> and <a href='/b'>books</a> on your radar.</p></blockquote>"
+    inline = "<p>The news that <i>Daredevil: Born Again</i> would end came as a shock to fans of the show.</p>"
+    page = f"<html><body><main>{hero}<div class='wrap'><article class='post'><div class='entry-content'>{inline}{paragraphs}{promo}</div></article></div></main></body></html>"
+    world.fetcher.page(LINK, page)
+    ctx.article = world.article(link=LINK, title="Star Felt Like Season 3 Might Be the End")
+
+
+@then("본문은 문단 속 기울임 글자까지 온전하고 머리 영역과 홍보 문단은 없다")
+def _giz_result(ctx):
+    text = visible_text(ctx.response.text)
+    assert (
+        "The news that Daredevil: Born Again would end" in text
+        and "원문 전체에만 있는 본문" in text
+    )
+    for noise in (
+        "Television",
+        "According to Woll",
+        "Jen Lennon",
+        "Published October",
+        "Reading time",
+        "Want more",
+        "radar",
+    ):
+        assert noise not in text, noise
+
+
+@given(
+    "원문 페이지에 본문 앞에 이동 경로와 분류와 제목과 날짜와 재생기 문구와 읽기 목록이 붙은 글이 있다"
+)
+def _infoq_like(world, ctx):
+    title = "GitHub Actions Runner Controller 0.15.0 Targets Reliability at Scale"
+    lead = (
+        f"<p>InfoQ HomepageNews{title}</p><div>DevOps</div><h1>{title}</h1>"
+        "<div>Oct 20, 2026 3 min read</div><div>Listen to this article - 0:00</div><div>Audio ready to play</div>"
+        "<div>0:00</div><div>Reading list</div>"
+    )
+    page = (
+        f"<html><body><article>{lead}<p>{FULL}</p><p>둘째 문단입니다.</p></article></body></html>"
+    )
+    world.fetcher.page(LINK, page)
+    ctx.article = world.article(link=LINK, title=title)
+
+
+@then("본문의 첫 문단부터 시작하고 앞머리 군더더기는 하나도 없다")
+def _infoq_result(ctx):
+    text = visible_text(ctx.response.text)
+    assert text.startswith("원문 전체에만 있는 본문")
+    for noise in (
+        "InfoQ",
+        "DevOps",
+        "min read",
+        "Listen to this",
+        "Audio ready",
+        "0:00",
+        "Reading list",
+        "Runner Controller",
+    ):
+        assert noise not in text, noise
+
+
+@given("RSS 본문이 전문이고 원문 페이지는 유료 벽으로 앞부분만 있는 글이 있다")
+def _hbr_like(world, ctx):
+    full = "".join(
+        f"<p>RSS가 이미 전문을 담고 있는 {n}번째 문단입니다. "
+        + "긴 문장이 이어집니다. " * 8
+        + "</p>"
+        for n in range(6)
+    )
+    ctx.rss_first = "RSS가 이미 전문을 담고 있는 0번째 문단입니다."
+    ctx.rss_last = "RSS가 이미 전문을 담고 있는 5번째 문단입니다."
+    world.fetcher.page(
+        LINK,
+        f"<html><body><article>{ctx.rss_first} {'긴 문장이 이어집니다. ' * 26}</article></body></html>",
+    )
+    ctx.article = world.article(link=LINK, content=full)
+
+
+@then(
+    parsers.re(
+        r'RSS 본문 전체가 보이고 "(?P<reason>[^"]+)" 이유가 보이며 원문 페이지는 한 번만 요청했다'
+    )
+)
+def _hbr_result(world, ctx, reason):
+    text = visible_text(ctx.response.text)
+    assert ctx.rss_first in text and ctx.rss_last in text and reason in ctx.response.text
+    assert world.fetcher.page_calls == [LINK]

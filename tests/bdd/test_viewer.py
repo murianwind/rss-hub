@@ -267,7 +267,8 @@ def _not_found(ctx):
 @then(parsers.re(r'제목 "(?P<ko>[^"]+)"와 원래 제목, 요약 "(?P<summary>[^"]+)"가 보인다'))
 def _titles_and_summary(ctx, ko, summary):
     text = ctx.response.text
-    assert f"<h1>{ko}</h1>" in text and ctx.orig in text and summary in text
+    heading = re.sub(r"<[^>]+>", "", re.search(r"<h1>(.*?)</h1>", text, re.S).group(1)).strip()
+    assert heading == ko and ctx.orig in text and summary in text
 
 
 @then(parsers.re(r'주제 "(?P<topic>[^"]+)"와 키워드 "(?P<keyword>[^"]+)"가 보인다'))
@@ -275,21 +276,21 @@ def _topic_and_keyword(ctx, topic, keyword):
     assert topic in ctx.response.text and f'title="{keyword}"' in ctx.response.text
 
 
-@then("원문 보기 버튼이 있다")
-def _has_button(ctx):
-    assert "원문 보기" in ctx.response.text
+@then("제목은 원문으로 가는 링크다")
+def _title_is_link(ctx):
+    assert re.search(r'<h1><a class="title-link" href="/a/\d+/original"', ctx.response.text)
 
 
-@then("원문 보기 버튼은 있고 새 탭에서 안전하게 열린다")
-def _button_safe(world, ctx):
-    anchor = re.search(r'<a class="button"[^>]*>원문 보기.*?</a>', ctx.response.text, re.S).group(0)
+@then("제목은 원문으로 가는 링크이고 새 탭에서 안전하게 열린다")
+def _title_link_safe(world, ctx):
+    anchor = re.search(r'<h1><a class="title-link"[^>]*>', ctx.response.text).group(0)
     assert f'href="/a/{ctx.last}/original"' in anchor and 'target="_blank"' in anchor
     assert 'rel="noopener noreferrer"' in anchor
 
 
-@then("원문 보기 버튼은 없다")
-def _no_button(ctx):
-    assert "원문 보기" not in ctx.response.text
+@then("제목은 링크가 아니다")
+def _title_not_link(ctx):
+    assert 'class="title-link"' not in ctx.response.text and "원문 보기" not in ctx.response.text
 
 
 def article_body(ctx):

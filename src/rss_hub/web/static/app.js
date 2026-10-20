@@ -54,6 +54,7 @@
   function closePanel() {
     if (!slot || slot.hidden) return;
     slot.classList.remove("open");
+    slot.removeAttribute("data-open");
     window.setTimeout(function () {
       slot.replaceChildren();
       slot.hidden = true;
@@ -70,6 +71,7 @@
         var doc = new DOMParser().parseFromString(text, "text/html");
         slot.replaceChildren.apply(slot, Array.from(doc.body.childNodes));
         slot.hidden = false;
+        slot.setAttribute("data-open", url); // 어느 버튼으로 연 패널인지 기억한다
         window.requestAnimationFrame(function () {
           slot.classList.add("open");
         });
@@ -87,6 +89,10 @@
     if (opener && slot && event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
       event.preventDefault();
       closeDrawer();
+      if (slot.classList.contains("open") && slot.getAttribute("data-open") === opener.href) {
+        closePanel(); // 같은 버튼을 다시 누르면 패널을 닫는다
+        return;
+      }
       openPanel(opener.href);
       return;
     }

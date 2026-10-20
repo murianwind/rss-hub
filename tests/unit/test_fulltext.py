@@ -2,6 +2,7 @@
 
 # ruff: noqa: E501  (HTML 견본은 한 줄로 두는 편이 읽기 쉽다)
 
+import re
 import time
 
 import pytest
@@ -18,7 +19,7 @@ def page(body: str, head: str = "") -> str:
 def test_the_article_element_is_the_body_and_menus_footers_and_sidebars_are_dropped():
     html = page(
         f"<header><nav><a href='/'>홈</a></nav></header>"
-        f"<article><h2>소제목</h2><p>{LONG}</p><p>둘째 문단</p></article>"
+        f"<article><p>{LONG}</p><h2>소제목</h2><p>둘째 문단</p></article>"
         f"<aside>관련 글 목록</aside><footer>저작권 안내</footer>"
     )
     text = extract_main_content(html, "https://x.example.com/post")
@@ -188,9 +189,11 @@ def test_the_article_element_itself_is_never_dropped_by_its_class():
 
 
 def test_self_closing_tags_are_handled_like_open_and_close_pairs():
-    html = page(f"<article><p>첫 줄<br/>둘째 줄</p><div/><p>{LONG}</p><hr/></article>")
+    html = page(
+        f"<article><p>첫 줄입니다.<br/>둘째 줄입니다.</p><div/><p>{LONG}</p><hr/></article>"
+    )
     text = extract_main_content(html, "https://x.example.com/")
-    assert text and "첫 줄" in text and "둘째 줄" in text and "본문 문장입니다" in text
+    assert text and "첫 줄입니다" in text and "둘째 줄입니다" in text and "본문 문장입니다" in text
 
 
 def test_a_page_with_far_more_tags_than_the_limit_still_finds_the_text_and_is_fast():
@@ -544,15 +547,16 @@ def test_a_title_that_is_contained_in_the_heading_or_the_other_way_around_also_m
 
 
 def test_an_unrelated_heading_is_kept_even_when_a_title_is_given():
-    assert "완전히 다른 소제목" in clean(
-        f"<h2>완전히 다른 소제목</h2><p>{LONG}</p>", "Build a Board That Challenges Your Thinking"
+    text = clean(
+        f"<p>{LONG}</p><h2>완전히 다른 소제목</h2><p>뒷 문단</p>",
+        "Build a Board That Challenges Your Thinking",
     )
+    assert "완전히 다른 소제목" in text
 
 
 def test_without_a_title_no_heading_is_removed():
-    assert "Build a Board" in clean(
-        f"<h1>Build a Board That Challenges Your Thinking</h1><p>{LONG}</p>"
-    )
+    text = clean(f"<p>{LONG}</p><h2>Build a Board That Challenges Your Thinking</h2><p>뒷 문단</p>")
+    assert "Build a Board" in text  # 제목을 모르면 머리글을 빼지 않는다
 
 
 @pytest.mark.parametrize(
@@ -674,5 +678,183 @@ def test_both_bracket_shapes_of_a_cut_off_summary_are_dropped(ending):
 
 
 def test_a_very_short_heading_is_never_taken_for_the_title():
-    text = clean(f"<h2>설계</h2><p>{LONG}</p>", "설계")  # 너무 짧아서 같은 제목인지 알 수 없다
+    text = clean(
+        f"<p>{LONG}</p><h2>설계</h2><p>뒷 문단</p>", "설계"
+    )  # 너무 짧아서 같은 제목인지 알 수 없다
     assert "설계" in text
+
+
+# ---------- 실제 페이지(Gizmodo, InfoQ, HBR) 검토에서 나온 규칙 ----------
+
+
+def giz(body: str) -> str:
+    """Gizmodo 모양: 머리 영역(분류, 제목, 요약, 기자 줄, 대표 이미지)은 본문 영역(entry-content) 바깥."""
+    hero = (
+        "<div class='giz-bg'><span class='giz-cat'><a href='/c/tv'>Television</a></span>"
+        "<h1>‘Daredevil: Born Again’ Star Felt Like Season 3 Might Be the End</h1>"
+        "<div class='post-excerpt'>According to Woll, who plays Karen Page, the ending felt very different.</div>"
+        "<div class='meta'><span>By</span><a href='/a/jen'>Jen Lennon</a>"
+        "<time>Published October 20, 2026, 8:00 am ET</time></div><p>Reading time 2 minutes</p>"
+        "<figure><img src='https://cdn.example.com/hero.jpg' alt=''><figcaption>© Marvel Studios</figcaption></figure></div>"
+    )
+    wrap = (
+        "<div class='wrap'><div class='col'><article class='post'>"
+        f"<div class='entry-content'>{body}</div></article></div></div>"
+    )
+    return page(f"<main>{hero}{wrap}</main>")
+
+
+def test_the_header_area_outside_the_article_body_is_left_out():
+    body = "".join(f"<p>{LONG}{n}</p>" for n in range(6)) + "<p>둘째 문단입니다.</p>"
+    title = "‘Daredevil: Born Again’ Star Felt Like Season 3 Might Be the End"
+    text = extract_main_content(giz(body), "https://x.example.com/p", title)
+    assert text and "본문 문장입니다" in text and "둘째 문단" in text
+    noise = ("Television", "Daredevil", "According to Woll", "By", "Jen Lennon", "Published")
+    for word in (*noise, "Reading time", "Marvel"):
+        assert word not in text, word
+
+
+def test_a_promo_paragraph_at_the_end_of_the_article_is_dropped_even_inside_a_blockquote():
+    promo = "<blockquote><p>Want more io9 news? Check out <a href='/best'>the best movies and TV shows</a> and <a href='/books'>upcoming books</a> on your radar.</p></blockquote>"
+    text = extract_main_content(
+        giz(f"<p>{LONG}</p><p>{LONG}</p>{promo}"), "https://x.example.com/p"
+    )
+    assert text and "본문 문장입니다" in text and "Want more" not in text and "radar" not in text
+
+
+@pytest.mark.parametrize(
+    "promo",
+    [
+        "Read more about this topic on our site.",
+        "Sign up for our newsletter to get updates.",
+        "Check out our other stories today.",
+        "Subscribe to our channel for more videos.",
+    ],
+)
+def test_promo_openers_at_the_very_end_are_dropped_but_not_in_the_middle(promo):
+    end = clean(f"<p>{LONG}</p><p>{promo}</p>")
+    assert promo.split()[0] not in end or promo not in end
+    middle = clean(f"<p>{LONG}</p><p>{promo}</p><p>{LONG}</p><p>{LONG}</p><p>{LONG}</p>")
+    assert promo in middle  # 글 가운데의 같은 문장은 본문일 수 있다
+
+
+def test_lead_furniture_before_the_first_real_paragraph_is_dropped():
+    lead = (
+        "<p>InfoQ HomepageNewsGitHub Actions Runner Controller 0.15.0 Targets Reliability at Scale</p>"
+        "<div>DevOps</div><h1>GitHub Actions Runner Controller 0.15.0 Targets Reliability at Scale</h1>"
+        "<div>Oct 20, 2026 3 min read</div><div>Listen to this article - 0:00</div>"
+        "<div>Audio ready to play</div><div>0:00</div><div>0:00</div><div>Reading list</div>"
+    )
+    text = clean(
+        f"{lead}<p>{LONG}</p><p>둘째 문단입니다.</p>",
+        "GitHub Actions Runner Controller 0.15.0 Targets Reliability at Scale",
+    )
+    assert "본문 문장입니다" in text and "둘째 문단" in text
+    for noise in (
+        "InfoQ",
+        "DevOps",
+        "min read",
+        "Listen to this",
+        "Audio ready",
+        "0:00",
+        "Reading list",
+        "Runner Controller",
+    ):
+        assert noise not in text, noise
+
+
+def test_a_short_real_first_sentence_is_not_mistaken_for_furniture():
+    text = clean(f"<p>이 글은 짧은 첫 문장으로 시작합니다.</p><p>{LONG}</p>")
+    assert "짧은 첫 문장" in text
+
+
+def test_short_labels_after_the_first_real_text_are_kept():
+    text = clean(f"<p>{LONG}</p><h3>소제목</h3><p>이어지는 문단입니다.</p><div>짧은 표 제목</div>")
+    assert "소제목" in text and "짧은 표 제목" in text  # 앞머리(첫 본문 이전)에서만 군더더기로 본다
+
+
+def test_a_header_with_an_image_keeps_the_image():
+    text = clean(
+        f"<div>Reading list</div><div><img src='https://cdn.example.com/a.png' alt='그림'><span>캡션</span></div><p>{LONG}</p>"
+    )
+    assert "https://cdn.example.com/a.png" in text and "Reading list" not in text
+
+
+def test_the_same_paragraph_twice_is_kept_once():
+    teaser = "An effective board should challenge the forces shaping decision-making at your company, not reinforce them."
+    text = clean(f"<div class='dek'><p>{teaser}</p></div><p>{teaser}</p><p>{LONG}</p>")
+    assert text.count("An effective board") == 1
+
+
+def test_short_repeated_lines_are_not_treated_as_duplicates():
+    text = clean(f"<p>{LONG}</p><p>네.</p><p>네.</p>")
+    assert text.count("네.") == 2
+
+
+@pytest.mark.parametrize(
+    "cls",
+    [
+        "crumbs",
+        "notice",
+        "dropdown",
+        "reading-list",
+        "event__list-box",
+        "recorded",
+        "typo-eyebrow-2",
+        "excerpt",
+        "post-excerpt",
+        "post-meta",
+    ],
+)
+def test_blocks_with_ui_class_names_from_real_sites_are_dropped(cls):
+    text = clean(f"<p>{LONG}</p><div class='{cls}'><p>UI 군더더기 {cls}</p></div>")
+    assert "UI 군더더기" not in text and "본문 문장입니다" in text
+
+
+@pytest.mark.parametrize("marker", ["See more presentations with transcripts", "Recorded at:"])
+def test_infoq_style_closing_labels_cut_the_rest(marker):
+    text = clean(f"<p>{LONG}</p><p>{LONG}</p><p>{marker}</p><p>Oct 20, 2026</p><p>by</p>")
+    assert "본문 문장입니다" in text and "Oct 20, 2026" not in text and marker not in text
+
+
+def test_the_choice_descends_by_the_plain_score_so_a_boosted_wrapper_does_not_win():
+    # article/main 가산점이 붙은 바깥 덩어리가 본문 블록(점수 0.85 이상)을 가리지 못한다
+    html = page(
+        f"<main><div class='head'><p>머리 영역 문장입니다. 짧은 소개글 하나.</p></div><div class='body'><p>{LONG}</p></div></main>"
+    )
+    text = extract_main_content(html, "https://x.example.com/")
+    assert text and "머리 영역" not in text and "본문 문장입니다" in text
+
+
+@pytest.mark.parametrize(
+    "inline",
+    [
+        "<i>Daredevil: Born Again</i>",
+        "<a href='/s'>Born Again</a>",
+        "<strong>Season 3</strong>",
+        "<em>The Cycle</em>",
+        "<span>Karen Page</span>",
+        "<code>ARC</code>",
+    ],
+)
+def test_a_short_inline_element_at_the_start_of_the_first_paragraph_is_part_of_the_text(inline):
+    text = clean(
+        f"<p>The news that {inline} would end came as a shock to fans of the show. {LONG}</p>"
+    )
+    label = re.sub(r"<[^>]+>", "", inline)
+    assert f"The news that {label}" in re.sub(r"<[^>]+>", "", text)
+
+
+def test_inline_text_that_starts_a_paragraph_is_kept_even_before_any_other_text():
+    text = clean(f"<p><em>Daredevil: Born Again</em> would end with season three. {LONG}</p>")
+    assert "Daredevil: Born Again" in text
+
+
+def test_a_category_span_in_the_same_block_as_the_text_is_removed_and_the_image_stays():
+    block = (
+        "<div><span class='cat'><a href='/c/tv'>Television</a></span>"
+        f"<figure><img src='https://cdn.example.com/hero.jpg' alt=''></figure><p>{LONG}</p></div>"
+    )
+    html = extract_main_content(page(f"<main>{block}</main>"), "https://x.example.com/p") or ""
+    assert "Television" not in re.sub(r"<[^>]+>", " ", html)
+    assert "https://cdn.example.com/hero.jpg" in html

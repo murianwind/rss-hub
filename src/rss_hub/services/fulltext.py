@@ -11,10 +11,14 @@ from dataclasses import dataclass
 from rss_hub.domain.discovery import describe_fetch_failure
 from rss_hub.domain.feed_url import FeedUrlError, validate_feed_url
 from rss_hub.domain.fulltext import extract_main_content
+from rss_hub.domain.text import strip_html
 from rss_hub.services.ports import FetchError, PageFetcher
 from rss_hub.storage.articles import MAX_FULL_TEXT_CHARS, Article, ArticleRepository
 
 NO_CONTENT = "NoContent"  # 페이지는 받았지만 본문을 찾지 못했다
+SHORTER_THAN_RSS = "ShorterThanRss"  # 페이지 본문이 RSS 본문보다 짧다(유료 벽으로 잘린 페이지 등)
+MIN_RSS_TO_COMPARE = 300  # RSS 본문이 이만큼 되어야 "이미 전문"으로 보고 비교한다
+SHORTER_RATIO = 0.8  # 페이지 본문이 RSS 본문의 이 비율보다 짧으면 RSS 본문을 쓴다
 
 
 @dataclass(frozen=True)
@@ -50,6 +54,9 @@ class FullTextService:
         html = extract_main_content(page.text, page.final_url, article.title)
         if html is None:
             return self._failed(article, NO_CONTENT)
+        rss_length = len(strip_html(article.content_html))
+        if rss_length >= MIN_RSS_TO_COMPARE and len(strip_html(html)) < SHORTER_RATIO * rss_length:
+            return self._failed(article, SHORTER_THAN_RSS)  # RSS가 이미 더 완전한 전문이다
         self._articles.save_full_text(article.id, html[:MAX_FULL_TEXT_CHARS])
         return FullText(html[:MAX_FULL_TEXT_CHARS], "ok")
 
@@ -61,4 +68,6 @@ class FullTextService:
 def _describe(reason: str) -> str:
     if reason == NO_CONTENT:
         return "원문 페이지에서 본문을 찾지 못했습니다"
+    if reason == SHORTER_THAN_RSS:
+        return "원문 페이지의 본문이 RSS 본문보다 짧습니다(유료 구독이 필요한 글일 수 있습니다)"
     return describe_fetch_failure(reason)

@@ -85,15 +85,26 @@ def test_the_page_language_follows_the_article_so_the_browser_offers_translation
 # ---------- 글 화면 ----------
 
 
-def test_the_article_page_has_one_back_button_and_two_same_style_buttons_at_the_bottom(world):
-    article = world.article(world.f_news, link="https://blog.example.com/p/1")
+def test_the_title_links_to_the_original_and_the_fixed_header_holds_the_summary_and_the_refetch_button(
+    world,
+):
+    article = world.article(world.f_news, link="https://blog.example.com/p/1", summary="요약입니다")
     html = world.get(f"/a/{article}").text
     assert html.count("목록으로 돌아가기") == 1 and "출처" not in html
-    foot = html.split('<div class="doc-foot">')[1].split("</article>")[0]
-    assert "목록으로 돌아가기" not in foot
-    labels = re.findall(r'<(?:button|a) [^>]*class="button"[^>]*>\s*([^<]+)', foot)
-    assert [label.strip() for label in labels] == ["전문 다시 가져오기", "원문 보기"]
-    assert "link-btn" not in foot
+    assert "원문 보기" not in html and "doc-foot" not in html  # 원문 보기 버튼은 없고 제목이 링크다
+    assert "원문 페이지에서 가져온 전문입니다" not in html  # 안내 문구는 없다
+    fixed = html.split('<div class="doc-fixed">')[1].split('<div class="doc-scroll">')[0]
+    scroll = html.split('<div class="doc-scroll">')[1]
+    link = f'<h1><a class="title-link" href="/a/{article}/original" target="_blank" rel="noopener noreferrer"'
+    assert link in fixed and "요약입니다" in fixed
+    assert re.search(
+        r'<button type="submit" class="back">.*?<span>전문 다시 가져오기</span>', fixed, re.S
+    )
+    assert (
+        'class="article-body"' in scroll
+        and "전문 다시 가져오기" not in scroll
+        and "요약입니다" not in scroll
+    )
 
 
 def test_the_viewer_has_no_grid_background_and_fills_the_area_with_equal_margins(world):
@@ -103,7 +114,11 @@ def test_the_viewer_has_no_grid_background_and_fills_the_area_with_equal_margins
         ".detail-scroll { display: flex; flex-direction: column; overflow: hidden; padding: 24px; }"
         in css
     )
-    assert ".detail-scroll .doc { flex: 1; min-height: 0;" in css and "overflow-y: auto" in css
+    assert (
+        ".detail-scroll .doc { display: flex; flex: 1; flex-direction: column; min-height: 0;"
+        in css
+        and "overflow-y: auto" in css
+    )
 
 
 def test_the_unread_wording_is_the_new_one_everywhere_a_user_sees_it(world):
@@ -372,3 +387,33 @@ def test_the_site_address_for_the_title_link_is_chosen_safely(html_url, feed_url
     from rss_hub.web.reader import _site_of
 
     assert _site_of(html_url, feed_url) == expected
+
+
+@pytest.mark.parametrize("link", ["javascript:alert(1)", "", "ftp://x.example.com/a"])
+def test_a_title_without_a_followable_original_is_plain_text(world, link):
+    article = world.article(world.f_news, link=link, title="Plain")
+    html = world.get(f"/a/{article}").text
+    assert 'class="title-link"' not in html and "<h1>Plain</h1>" in html
+
+
+def test_the_refetch_button_is_shown_only_when_there_is_something_to_refetch(world):
+    article = world.article(world.f_news, link="")  # 원문 주소가 없으면 가져온 적도 없다
+    assert "전문 다시 가져오기" not in world.get(f"/a/{article}").text
+
+
+def test_pressing_the_same_panel_button_again_closes_the_panel(world):
+    js = world.client.get("/static/app.js").text
+    assert 'slot.getAttribute("data-open") === opener.href' in js
+    assert 'slot.setAttribute("data-open", url)' in js and 'slot.removeAttribute("data-open")' in js
+    toggle = js.split('slot.getAttribute("data-open") === opener.href')[1].split(
+        "openPanel(opener.href)"
+    )[0]
+    assert "closePanel()" in toggle and "return;" in toggle
+
+
+def test_the_fixed_header_and_the_scrolling_body_have_their_own_layout_rules(world):
+    css = world.client.get("/static/app.css").text
+    assert ".doc-fixed { flex: none; max-height: 55%; overflow-y: auto;" in css  # 위쪽은 고정
+    assert ".doc-scroll { flex: 1; min-height: 0; overflow-y: auto;" in css  # 본문만 스크롤
+    assert ".doc-summary { max-height: 26vh; overflow-y: auto; }" in css
+    assert "button.back { font: inherit;" in css and ".title-link {" in css

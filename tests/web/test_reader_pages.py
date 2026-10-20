@@ -213,7 +213,12 @@ def test_titles_are_escaped_in_the_list(world):
 # ---------- 글 페이지 ----------
 
 
-def test_the_article_page_shows_titles_site_time_summary_and_the_original_button(world):
+def h1_text(html):
+    """제목(h1)의 글자. 원문 링크가 있으면 제목은 링크 안에 있다."""
+    return re.sub(r"<[^>]+>", "", re.search(r"<h1>(.*?)</h1>", html, re.S).group(1)).strip()
+
+
+def test_the_article_page_shows_titles_site_time_summary_and_the_title_link(world):
     article_id = world.article(
         world.f_news,
         30,
@@ -223,7 +228,7 @@ def test_the_article_page_shows_titles_site_time_summary_and_the_original_button
         link="https://x.example.com/orig",
     )
     html = world.get(f"/a/{article_id}").text
-    assert "<h1>번역된 제목</h1>" in html and "Original title" in html
+    assert h1_text(html) == "번역된 제목" and "Original title" in html
     assert f'href="/reader/feed/{world.f_news}"' in html and "2026-10-16 10:30" in html
     assert "요약입니다" in html and f'href="/a/{article_id}/original"' in html
     assert 'target="_blank"' in html and "noopener noreferrer" in html
@@ -232,7 +237,7 @@ def test_the_article_page_shows_titles_site_time_summary_and_the_original_button
 def test_an_article_without_a_translation_shows_its_own_title_once(world):
     article_id = world.article(title="Plain title")
     html = world.get(f"/a/{article_id}").text
-    assert "<h1>Plain title</h1>" in html and html.count("Plain title") == 2  # 제목 태그와 h1
+    assert h1_text(html) == "Plain title" and html.count("Plain title") == 2  # 제목 태그와 h1
 
 
 def test_the_topics_and_matched_keywords_are_shown(world):
@@ -298,7 +303,7 @@ def test_an_article_without_a_body_says_so(world):
 def test_an_archived_article_without_a_summary_has_no_summary_box(world):
     article_id = world.article(title="Archived", status="archived")
     html = world.get(f"/a/{article_id}").text
-    assert "<h1>Archived</h1>" in html and "<strong>요약</strong>" not in html
+    assert h1_text(html) == "Archived" and "<strong>요약</strong>" not in html
 
 
 @pytest.mark.parametrize("link", ["javascript:alert(1)", "", "ftp://x.example.com/a"])

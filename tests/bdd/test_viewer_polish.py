@@ -14,7 +14,7 @@ from tests.bdd.binding import bind
 from tests.fakes.viewer_world import World
 from tests.fakes.web_parts import start_app
 
-bind(globals(), "19_viewer_polish.feature", [f"VPL-{n:02d}" for n in range(1, 12)])
+bind(globals(), "19_viewer_polish.feature", [f"VPL-{n:02d}" for n in range(1, 13)])
 
 BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 KEY = "sk-or-v1-abcdefghijklmnop"
@@ -143,12 +143,25 @@ def _top_bar(ctx):
     assert ">읽지 않음으로</button>" in html
 
 
-@then('글 아래에는 "전문 다시 가져오기"와 "원문 보기" 버튼만 같은 모양으로 있다')
-def _bottom_buttons(ctx):
-    foot = ctx.response.text.split('<div class="doc-foot">')[1].split("</article>")[0]
-    labels = re.findall(r'<(?:button|a) [^>]*class="button"[^>]*>\s*([^<]+)', foot)
-    assert [label.strip() for label in labels] == ["전문 다시 가져오기", "원문 보기"]
-    assert "목록으로 돌아가기" not in foot and "link-btn" not in foot
+@then('제목은 원문으로 가는 새 창 링크이고 "원문 보기" 버튼과 가져온 전문 안내 문구는 없다')
+def _title_link(ctx):
+    html = ctx.response.text
+    link = re.search(r'<h1><a class="title-link"[^>]*>', html).group(0)
+    assert 'target="_blank"' in link and 'rel="noopener noreferrer"' in link and "/original" in link
+    assert "원문 보기" not in html and "원문 페이지에서 가져온 전문입니다" not in html
+
+
+@then('분류, 제목, 요약, "전문 다시 가져오기" 버튼은 고정 영역에 있고 본문만 스크롤 영역에 있다')
+def _fixed_header(ctx):
+    html = ctx.response.text
+    fixed = html.split('<div class="doc-fixed">')[1].split('<div class="doc-scroll">')[0]
+    scroll = html.split('<div class="doc-scroll">')[1]
+    assert 'class="doc-meta"' in fixed and "<h1>" in fixed and 'class="back"' in fixed
+    assert (
+        'class="article-body"' in scroll
+        and "<h1>" not in scroll
+        and "전문 다시 가져오기" not in scroll
+    )
 
 
 @then("글 카드는 격자 배경 없이 위아래 여백이 같은 영역을 채운다")
@@ -159,7 +172,10 @@ def _layout(world):
         ".detail-scroll { display: flex; flex-direction: column; overflow: hidden; padding: 24px; }"
         in css
     )
-    assert ".detail-scroll .doc { flex: 1; min-height: 0;" in css
+    assert (
+        ".detail-scroll .doc { display: flex; flex: 1; flex-direction: column; min-height: 0;"
+        in css
+    )
 
 
 @given(parsers.re(r'사이트 "뉴스 블로그"에 (?P<language>영어|한국어) 본문의 글이 있다'))
@@ -332,3 +348,27 @@ def _script(world):
     js = world.client.get("/static/app.js").text
     assert "IntersectionObserver" in js and "a[data-next]" in js
     assert 'pagerBox.classList.add("auto")' in js and 'pagerBox.classList.remove("auto")' in js
+
+
+# ---------- 설정 패널 토글 ----------
+
+
+@when("사이드바의 설정 버튼들을 본다")
+def _panel_buttons(world, ctx):
+    ctx.response = world.get("/reader")
+
+
+@then("모든 버튼은 패널을 여는 버튼이다")
+def _panel_openers(ctx):
+    links = re.findall(r'<a [^>]*href="(/panel/[^"]+)"[^>]*data-panel', ctx.response.text)
+    assert len(links) >= 6 and all(link.startswith("/panel/") for link in links)
+
+
+@then("스크립트는 같은 버튼으로 연 패널이 열려 있으면 닫고 다른 버튼이면 내용을 바꾼다")
+def _toggle_script(world):
+    js = world.client.get("/static/app.js").text
+    toggle = js.split('slot.getAttribute("data-open") === opener.href')[1].split(
+        "openPanel(opener.href)"
+    )[0]
+    assert "closePanel()" in toggle and 'slot.setAttribute("data-open", url)' in js
+    assert js.count("openPanel(opener.href)") == 1  # 같은 버튼이 아니면 열면서 내용이 바뀐다

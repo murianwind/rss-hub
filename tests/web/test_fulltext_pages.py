@@ -39,7 +39,10 @@ def test_opening_an_article_shows_the_full_text_from_the_original_page(world):
     html = world.get(f"/a/{article}").text
     assert "원문 전체에만 있는 본문" in body(html) and "RSS에는 요약만" not in body(html)
     assert "메뉴" not in body(html) and "하단" not in body(html)
-    assert "원문 페이지에서 가져온 전문입니다" in html and "전문 다시 가져오기" in html
+    assert "원문 페이지에서 가져온 전문입니다" not in html  # 안내 문구는 없다
+    assert (
+        "전문 다시 가져오기" in html.split('<div class="doc-scroll">')[0]
+    )  # 제목 아래 고정 영역에 있다
 
 
 def test_the_page_is_fetched_once_and_the_saved_text_is_used_afterwards(world):

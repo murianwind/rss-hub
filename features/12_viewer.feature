@@ -65,25 +65,25 @@ Feature: 뷰어(M4): 사이드바, 글 목록, 글 페이지
   # ---------- 글 페이지 ----------
 
   @VWR-06 @new
-  Scenario: 글 페이지는 번역 제목, 요약, 해당 주제와 키워드, 원문 보기 버튼을 보여 준다
+  Scenario: 글 페이지는 번역 제목, 요약, 해당 주제와 키워드, 원문으로 가는 제목 링크를 보여 준다
     Given 사이트 "자유 블로그"에 원래 제목 "Netflix announces a drama", 번역 제목 "넷플릭스 신작 공개", 요약 "신작이 공개된다"인 글이 있다
     And 그 글은 주제 "OTT"에 키워드 "netflix"로 해당했다
     When 그 글을 연다
     Then 제목 "넷플릭스 신작 공개"와 원래 제목, 요약 "신작이 공개된다"가 보인다
     And 주제 "OTT"와 키워드 "netflix"가 보인다
-    And 원문 보기 버튼이 있다
+    And 제목은 원문으로 가는 링크다
 
   @VWR-09 @new
-  Scenario Outline: 원문 보기는 새 탭에서 열리고, 이동할 수 없는 주소면 버튼을 보이지 않는다
+  Scenario Outline: 제목의 원문 링크는 새 탭에서 열리고, 이동할 수 없는 주소면 제목은 링크가 아니다
     Given 사이트 "자유 블로그"에 원문 주소가 "<link>"인 글이 있다
     When 그 글을 연다
-    Then 원문 보기 버튼은 <button>
+    Then 제목은 <result>
 
     Examples:
-      | link                       | button     |
-      | https://example.com/orig   | 있고 새 탭에서 안전하게 열린다 |
-      | javascript:alert(1)        | 없다       |
-      | ftp://example.com/file     | 없다       |
+      | link                       | result                                |
+      | https://example.com/orig   | 원문으로 가는 링크이고 새 탭에서 안전하게 열린다 |
+      | javascript:alert(1)        | 링크가 아니다                            |
+      | ftp://example.com/file     | 링크가 아니다                            |
 
   @VWR-07 @new
   Scenario Outline: 본문의 위험한 내용은 지우고 글자만 보여 준다

@@ -18,6 +18,7 @@
 </header>
 <div class="scroll detail-scroll">
   <article class="doc">
+    <div class="doc-fixed">
     <div class="doc-meta">
       <a class="chip" href="/reader/feed/{{ feed.id }}">{{ feed.name }}</a>
       <span>·</span><time datetime="{{ article.published_dt.isoformat() }}">{{ published }}</time>
@@ -44,17 +45,16 @@
         </div>
       </details>
     </div>
-    <h1>{{ title }}</h1>
+    <h1>{% if has_original %}<a class="title-link" href="/a/{{ article.id }}/original" target="_blank" rel="noopener noreferrer" title="원문으로 이동">{{ title }}{{ icon('external') }}</a>{% else %}{{ title }}{% endif %}</h1>
     {% if show_original_title %}<p class="hint">{{ article.title }}</p>{% endif %}
-    {% if article.summary_ko %}<div class="panel"><strong>요약</strong><p>{{ article.summary_ko }}</p></div>{% endif %}
+    {% if article.summary_ko %}<div class="panel doc-summary"><strong>요약</strong><p>{{ article.summary_ko }}</p></div>{% endif %}
     {% if fulltext_state == 'failed' %}<div class="banner" role="status">원문 전문을 가져오지 못해 RSS 본문을 보여 줍니다{% if fulltext_reason %}: {{ fulltext_reason }}{% endif %}</div>{% endif %}
-    {% if fulltext_state == 'ok' %}<p class="hint fulltext-note">원문 페이지에서 가져온 전문입니다.</p>{% endif %}
+    {% if fulltext_state in ('ok', 'failed') %}<form method="post" action="/a/{{ article.id }}/fulltext" class="doc-tools"><input type="hidden" name="next" value="{{ here }}"><button type="submit" class="back">{{ icon('refresh') }}<span>전문 다시 가져오기</span></button></form>{% endif %}
+    </div>
+    <div class="doc-scroll">
     <div class="article-body" {% if lang %}lang="{{ lang }}"{% endif %}>
       {% if body %}{{ body | safe }}{% else %}<p class="hint">본문이 없습니다. 원문에서 확인하세요.</p>{% endif %}
     </div>
-    <div class="doc-foot">
-      {% if fulltext_state in ('ok', 'failed') %}<form method="post" action="/a/{{ article.id }}/fulltext" class="inline-form"><input type="hidden" name="next" value="{{ here }}"><button type="submit" class="button">전문 다시 가져오기</button></form>{% endif %}
-      {% if has_original %}<a class="button" href="/a/{{ article.id }}/original" target="_blank" rel="noopener noreferrer">원문 보기 {{ icon('external') }}</a>{% endif %}
     </div>
   </article>
 </div>

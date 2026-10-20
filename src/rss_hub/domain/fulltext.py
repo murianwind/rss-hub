@@ -39,7 +39,14 @@ _NEGATIVE_TOKEN = re.compile(
     r"^(comments?|respond|reply|related|share|sharing|social|sidebar|widgets?|promo|banner|sponsor|"
     r"advert\w*|ads?|breadcrumbs?|pagination|recommend\w*|subscribe|newsletter|cookie\w*|"
     r"popup|modal|"
-    r"menu|nav\w*|footer)([-_].*)?$",
+    r"menu|nav\w*|footer|crumbs|notice|dropdown|reading[-_]list|events?|recorded|aside|"
+    r"excerpt|post-excerpt)([-_].*)?$",
+    re.I,
+)
+# 이름 안에 이 낱말이 들어 있으면 잡음으로 본다(예: typo-sofia-eyebrow-2, post-meta)
+_NEGATIVE_PART = re.compile(
+    r"eyebrow|kicker|byline|dateline|breadcrumb|crumbs|post-meta|entry-meta|article-meta|"
+    r"reading-?time|readtime|paywall",
     re.I,
 )
 _STRUCTURAL = frozenset({"body", "main", "article"})
@@ -63,11 +70,11 @@ _PLACEHOLDER = re.compile(r"^data:", re.I)
 
 def _is_negative(attrs: dict[str, str]) -> bool:
     tokens = f"{attrs.get('class', '')} {attrs.get('id', '')}".split()
-    return any(_NEGATIVE_TOKEN.match(token) for token in tokens)
+    return any(_NEGATIVE_TOKEN.match(token) or _NEGATIVE_PART.search(token) for token in tokens)
 
 
 class _Node:
-    __slots__ = ("attrs", "children", "dropped", "metrics", "parent", "score", "tag")
+    __slots__ = ("attrs", "children", "dropped", "metrics", "parent", "tag")
 
     def __init__(self, tag: str, attrs: dict[str, str], parent: "_Node | None") -> None:
         self.tag = tag
@@ -75,7 +82,6 @@ class _Node:
         self.parent = parent
         self.children: list[_Node | str] = []
         self.metrics: tuple[int, int, int] | None = None  # (글자 수, 링크 글자 수, 문단 수)
-        self.score: float | None = None
         self.dropped = tag in _DROP or (tag not in _STRUCTURAL and _is_negative(attrs))
 
 
@@ -135,17 +141,20 @@ def _measure(node: _Node) -> tuple[int, int, int]:
     return node.metrics
 
 
+def _raw(node: _Node) -> float:
+    """가산점 없는 점수: 글자 수에서 링크 글자를 크게 깎고 문단 수를 더한다."""
+    text, links, paragraphs = _measure(node)
+    return float(text - 2 * links + 25 * paragraphs)
+
+
 def _score(node: _Node) -> float:
-    if node.score is None:
-        text, links, paragraphs = _measure(node)
-        score = float(text - 2 * links + 25 * paragraphs)  # 링크가 많으면 크게 깎는다
-        signature = _signature(node)
-        if node.tag in ("article", "main"):
-            score *= 1.2
-        elif _POSITIVE.search(signature):
-            score *= 1.15
-        node.score = score
-    return node.score
+    """후보를 고를 때의 점수: 순수 점수에 article, main, 본문스러운 이름의 가산점을 더한다."""
+    score = _raw(node)
+    if node.tag in ("article", "main"):
+        return score * 1.2
+    if _POSITIVE.search(_signature(node)):
+        return score * 1.15
+    return score
 
 
 def _candidates(node: _Node, found: list[_Node], depth: int = 0) -> None:
@@ -180,14 +189,16 @@ def _best(root: _Node) -> _Node | None:
         return None
     scored = [(_score(node), index, node) for index, node in enumerate(found)]
     scored.sort(key=lambda item: (-item[0], item[1]))  # 점수 높은 순, 같으면 문서에서 먼저 나온 것
-    best_score, _, best = scored[0]
+    best = scored[0][2]
     while True:  # 거의 같은 점수의 자식이 있으면 더 좁은 쪽(본문에 가까운 쪽)으로 내려간다
-        deeper = [(_score(c), c) for c in _nearest_candidates(best)]
-        deeper = [item for item in deeper if item[0] >= 0.85 * best_score]
+        # article/main 가산점이 붙은 바깥 덩어리가 본문 블록을 가리지 못하도록 순수 점수로 비교한다
+        raw = _raw(best)
+        deeper = [(_raw(c), c) for c in _nearest_candidates(best)]
+        deeper = [item for item in deeper if item[0] >= 0.85 * raw]
         if not deeper:
             return best
         deeper.sort(key=lambda item: -item[0])
-        best_score, best = deeper[0]
+        best = deeper[0][1]
 
 
 def _host_is_video_site(host: str) -> bool:
@@ -247,8 +258,10 @@ _MARKERS = frozenset({
     "관련 글", "관련 기사", "관련 포스트", "함께 읽으면 좋은 글", "공유하기", "댓글", "태그",
     "이전 글", "다음 글",
 })  # fmt: skip
-_MARKER_PREFIXES = ("sign up for", "subscribe to", "subscribe and", "join our", "follow us",
-                    "share this", "explore more", "more from")  # fmt: skip
+_MARKER_PREFIXES = (
+    "sign up for", "subscribe to", "subscribe and", "join our", "follow us",
+    "share this", "explore more", "more from", "see more", "recorded at",
+)  # fmt: skip
 CUT_AFTER_SHARE = 0.4  # 글의 이만큼 이후에 나온 끝 안내만 자른다(앞쪽의 같은 낱말은 본문일 수 있다)
 _BLOCKS = frozenset(
     {"p", "div", "span", "section", "strong", "b", "h1", "h2", "h3", "h4", "h5", "h6"}
@@ -261,6 +274,39 @@ _DATE = re.compile(
 )
 MAX_DATE_ZONE = 1500  # 글 맨 앞 이만큼 안의 날짜만 한 줄 날짜로 본다
 MAX_LABEL = 40  # 목록 바로 앞의 짧은 이름표(예: Cybersecurity Guides)
+LEAD_ZONE = (
+    300  # 글 맨 앞 이만큼의 본문이 나오기 전까지가 "앞머리"(분류, 제목, 기자 줄 같은 군더더기 자리)
+)
+MAX_FURNITURE = 200  # 앞머리의 군더더기는 이보다 짧은 덩어리
+PROMO_ZONE = 0.75  # 글의 이만큼 이후에 나온 홍보 문단만 뺀다
+_PROMO = re.compile(
+    r"^(want more|check out|read more|read next|read also|sign up|subscribe|follow us|"
+    r"don'?t miss|click here|also read|see also|more from|get the latest)\b",
+    re.I,
+)
+_SENTENCE_END = re.compile(r"[.!?…。」”\"')\]]\s*$")
+_FURNITURE_TAGS = frozenset(
+    {
+        "p",
+        "div",
+        "section",
+        "ul",
+        "ol",
+        "li",
+        "dl",
+        "dd",
+        "dt",
+        "time",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+    }
+    | {"h6", "header", "blockquote"}
+)  # 앞머리 군더더기가 될 수 있는 블록 요소(인라인 요소는 제외)
+_INLINE_FURNITURE = frozenset({"span", "a", "em", "i", "strong", "b", "small", "label"})
+_MEDIA_INSIDE = frozenset({"img", "figure", "picture", "pre", "table", "video", "audio", "code"})
 
 
 def _own_text(node: _Node, limit: int = 200) -> str:
@@ -336,6 +382,46 @@ def _is_noise_block(node: _Node) -> bool:
     return _is_noise_list(node) or _is_link_row(node)
 
 
+def _sentence_like(text: str) -> bool:
+    """문장처럼 보이는가: 세 낱말 이상이고 문장 부호로 끝난다(분류나 날짜 줄은 아니다)."""
+    return len(text) >= 12 and len(text.split()) >= 3 and bool(_SENTENCE_END.search(text))
+
+
+def _has_media(node: _Node) -> bool:
+    stack: list[_Node | str] = [node]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, str) or item.dropped:
+            continue
+        if item.tag in _MEDIA_INSIDE:
+            return True
+        stack.extend(item.children)
+    return False
+
+
+def _may_be_furniture(node: _Node) -> bool:
+    """블록 요소는 되고, 인라인 요소(span, a, em 등)는 글 속에 섞여 있지 않을 때만 된다.
+
+    문단 안에서 글과 섞인 기울임이나 링크("The news that <i>Daredevil</i> would...")는 글의 일부다.
+    글자 없이 요소만 담은 덩어리 속의 span(예: 분류 <span><a>Television</a></span>)은 군더더기다.
+    """
+    if node.tag in _FURNITURE_TAGS:
+        return True
+    parent = node.parent
+    mixed = parent is None or any(isinstance(c, str) for c in parent.children)
+    return node.tag in _INLINE_FURNITURE and not mixed
+
+
+def _is_furniture(node: _Node, walk: "_Walk") -> bool:
+    """앞머리의 짧은 군더더기(분류, 제목, 기자 줄, 날짜, 재생 시간, 읽기 목록 등)인가."""
+    if walk.text >= LEAD_ZONE or not _may_be_furniture(node):
+        return False
+    length = _measure(node)[0]
+    if length == 0 or length > MAX_FURNITURE:
+        return False
+    return not _sentence_like(_own_text(node, MAX_FURNITURE + 1)) and not _has_media(node)
+
+
 def _is_decor_image(node: _Node) -> bool:
     if node.tag != "img":
         return False
@@ -359,10 +445,17 @@ class _Walk:
         self.title = title
         self.title_done = False
         self.cut = False
+        self.seen: set[str] = set()  # 이미 낸 문단(같은 문단을 두 번 내지 않는다)
+        self.skipped = 0  # 건너뛴 글자 수(글에서 지나온 위치를 셀 때 낸 글자와 함께 센다)
 
     def emit(self, piece: str) -> None:
         self.out.append(piece)
         self.chars += len(piece)  # 누적 길이만 센다(매번 전체를 다시 합산하면 제곱 시간이 된다)
+
+
+def _position(walk: _Walk) -> int:
+    """글에서 지나온 위치(글자 수): 낸 글자와 건너뛴 글자를 함께 센다."""
+    return walk.text + walk.skipped
 
 
 def _skip_block(node: _Node, walk: _Walk) -> bool:
@@ -371,7 +464,7 @@ def _skip_block(node: _Node, walk: _Walk) -> bool:
         return True
     own = _own_text(node, 100)
     if node.tag in _BLOCKS and 0 < len(own) <= 60:
-        if _is_marker(own) and walk.text >= CUT_AFTER_SHARE * walk.total:
+        if _is_marker(own) and _position(walk) >= CUT_AFTER_SHARE * walk.total:
             walk.cut = True
             return True
         is_title = node.tag in ("h1", "h2", "h3") and _matches_title(own, walk.title)
@@ -381,8 +474,36 @@ def _skip_block(node: _Node, walk: _Walk) -> bool:
         in_date_zone = node.tag in ("p", "div", "span", "time") and walk.text < MAX_DATE_ZONE
         if in_date_zone and _DATE.match(own):
             return True
+    if _is_furniture(node, walk) or _is_promo(node, walk):
+        return True
     # 요약문 끝의 "[…]"는 길이와 상관없이 문단의 끝에서 본다(RSS 요약이 잘린 흔적)
-    return node.tag == "p" and _own_text(node, 3000).endswith(("[…]", "[...]"))
+    if node.tag == "p" and _own_text(node, 3000).endswith(("[…]", "[...]")):
+        return True
+    return _is_repeat(node, walk)
+
+
+def _is_promo(node: _Node, walk: _Walk) -> bool:
+    """글 끝의 홍보 문단("Want more ...? Check out ...")."""
+    if (
+        node.tag not in ("p", "div", "blockquote", "section")
+        or _position(walk) < PROMO_ZONE * walk.total
+    ):
+        return False
+    text = _own_text(node, 401)
+    return len(text) <= 400 and bool(_PROMO.match(text))
+
+
+def _is_repeat(node: _Node, walk: _Walk) -> bool:
+    """앞에서 낸 문단과 같은 문단(40자 이상)이면 건너뛴다. 처음 보는 문단은 기억해 둔다."""
+    if node.tag != "p":
+        return False
+    key = _normal(_own_text(node, 400))
+    if len(key) < 40:
+        return False
+    if key in walk.seen:
+        return True
+    walk.seen.add(key)
+    return False
 
 
 def _serialize(node: _Node, walk: _Walk, depth: int = 0) -> None:
@@ -395,7 +516,10 @@ def _serialize(node: _Node, walk: _Walk, depth: int = 0) -> None:
             label, url = media
             walk.emit(f'<div><a href="{escape(url, quote=True)}">{label}</a></div>')
         return
-    if node.dropped or node.tag in _MEDIA_TAGS or _is_decor_image(node) or _skip_block(node, walk):
+    if node.dropped or node.tag in _MEDIA_TAGS or _is_decor_image(node):
+        return
+    if _skip_block(node, walk):
+        walk.skipped += _measure(node)[0]  # 버린 글자도 지나온 위치로 센다
         return
     attrs = {k: v for k, v in node.attrs.items() if k in _KEEP_ATTRS}
     lazy = node.attrs.get("data-src") or node.attrs.get("data-original")
@@ -405,7 +529,6 @@ def _serialize(node: _Node, walk: _Walk, depth: int = 0) -> None:
     walk.emit(f"<{node.tag}{rendered}>")
     if node.tag in _VOID:
         return
-    children = [c for c in node.children if not (isinstance(c, str) and not c.strip())]
     for index, child in enumerate(node.children):
         if isinstance(child, str):
             walk.text += len(child.strip())
@@ -414,7 +537,6 @@ def _serialize(node: _Node, walk: _Walk, depth: int = 0) -> None:
         if _is_label_of_noise(node, index):
             continue  # 링크 목록 바로 앞의 이름표(예: Cybersecurity Guides)는 목록과 함께 뺀다
         _serialize(child, walk, depth + 1)
-    del children
     walk.emit(f"</{node.tag}>")
 
 

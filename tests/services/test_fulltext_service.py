@@ -169,9 +169,108 @@ def test_the_heading_that_repeats_the_article_title_is_left_out_of_the_stored_te
     articles, service, pages, add = env
     title = "Build a Board That Challenges Your Thinking"
     pages.pages["https://a.example.com/post/1"] = (
-        f"<article><h1>{title}</h1><h2>전혀 다른 소제목</h2><p>{PARAGRAPH}</p></article>"
+        f"<article><h1>{title}</h1><p>{PARAGRAPH}</p>"
+        "<h2>전혀 다른 소제목</h2><p>뒷 문단</p></article>"
     )
     article_id = add(title=title)
     service.ensure(articles.get(article_id))
     stored = articles.get(article_id).full_html
     assert title not in stored and "전혀 다른 소제목" in stored
+
+
+# ---------- RSS 본문이 더 완전하면 잘린 원문 페이지로 덮어쓰지 않는다(HBR 유료 벽) ----------
+
+RSS_FULL = "<p>" + "RSS가 이미 전문을 담고 있는 긴 본문 문장입니다. " * 40 + "</p>"
+PAGE_TRUNCATED = (
+    "<html><body><article><p>"
+    + "RSS가 이미 전문을 담고 있는 긴 본문 문장입니다. " * 20
+    + "</p></article></body></html>"
+)
+
+
+def add_with_content(articles, feed, content, link="https://a.example.com/post/9"):
+    new = NewArticle(feed, f"g-{link}", "제목", link, content, "", FakeClock().now(), "2026-10-16")
+    return articles.add(new)
+
+
+@pytest.fixture
+def env2(tmp_path):
+    db, clock = Database(tmp_path / "rss_hub.db"), FakeClock()
+    feeds, articles = FeedRepository(db, clock), ArticleRepository(db, clock)
+    feed = feeds.add("https://a.example.com/rss", "A")
+    pages = FakePages()
+    return articles, FullTextService(articles=articles, pages=pages), pages, feed
+
+
+def test_a_page_shorter_than_the_rss_body_does_not_replace_it(env2):
+    articles, service, pages, feed = env2
+    pages.pages["https://a.example.com/post/9"] = PAGE_TRUNCATED
+    article_id = add_with_content(articles, feed, RSS_FULL)
+    result = service.ensure(articles.get(article_id))
+    assert (
+        result.state == "failed"
+        and result.html is None
+        and "RSS 본문보다 짧습니다" in result.reason
+    )
+    saved = articles.get(article_id)
+    assert saved.full_status == "failed" and saved.full_html is None
+    assert (
+        len(pages.calls) == 1
+        and service.ensure(articles.get(article_id)).state == "failed"
+        and len(pages.calls) == 1
+    )
+
+
+def test_a_page_longer_than_the_rss_summary_is_used(env2):
+    articles, service, pages, feed = env2
+    pages.pages["https://a.example.com/post/9"] = PAGE
+    article_id = add_with_content(articles, feed, "<p>짧은 RSS 요약입니다.</p>")
+    assert service.ensure(articles.get(article_id)).state == "ok"
+
+
+def test_a_short_rss_body_never_blocks_the_page_even_if_the_page_is_not_longer(env2):
+    articles, service, pages, feed = env2
+    pages.pages["https://a.example.com/post/9"] = (
+        "<article><p>" + "비슷한 길이의 본문 문장입니다. " * 15 + "</p></article>"
+    )
+    article_id = add_with_content(
+        articles, feed, "<p>" + "비슷한 길이의 본문 문장입니다. " * 15 + "</p>"
+    )  # RSS도 300자 미만이 아님
+    result = service.ensure(articles.get(article_id))
+    assert result.state == "ok"  # 길이가 비슷하면(80% 이상) 원문 페이지를 쓴다
+
+
+def test_the_force_refetch_applies_the_same_comparison(env2):
+    articles, service, pages, feed = env2
+    pages.pages["https://a.example.com/post/9"] = PAGE_TRUNCATED
+    article_id = add_with_content(articles, feed, RSS_FULL)
+    service.ensure(articles.get(article_id))
+    assert service.ensure(articles.get(article_id), force=True).state == "failed"
+
+
+def test_a_short_rss_body_does_not_count_as_a_full_text_even_when_the_page_is_shorter_than_it(env2):
+    articles, service, pages, feed = env2
+    pages.pages["https://a.example.com/post/9"] = (
+        "<article><p>" + "짧은 원문 문장입니다. " * 20 + "</p></article>"
+    )
+    article_id = add_with_content(
+        articles, feed, "<p>" + "요약 문장입니다. " * 30 + "</p>"
+    )  # 300자 미만이고 원문보다 길다
+    assert service.ensure(articles.get(article_id)).state == "ok"
+
+
+def test_a_rss_summary_under_the_limit_is_never_compared_with_the_page_length(env2):
+    articles, service, pages, feed = env2
+    page_text = "가" * 210  # 본문 판정(200자) 이상이지만 RSS(290자)의 80%(232자)보다 짧다
+    pages.pages["https://a.example.com/post/9"] = f"<article><p>{page_text}</p></article>"
+    article_id = add_with_content(
+        articles, feed, f"<p>{'나' * 290}</p>"
+    )  # 300자 미만이라 비교하지 않는다
+    assert service.ensure(articles.get(article_id)).state == "ok"
+    limit = add_with_content(
+        articles, feed, f"<p>{'다' * 300}</p>", link="https://a.example.com/post/10"
+    )
+    pages.pages["https://a.example.com/post/10"] = f"<article><p>{page_text}</p></article>"
+    assert (
+        service.ensure(articles.get(limit)).state == "failed"
+    )  # 300자 이상이면 비교한다(210 < 240)
