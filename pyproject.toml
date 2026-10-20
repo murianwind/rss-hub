@@ -8,7 +8,7 @@ dependencies = [
     "uvicorn==0.54.0",
     "jinja2==3.1.6",
     "python-multipart==0.0.32",
-    "requests==2.34.2",
+    "requests==2.33.1",
     "feedparser==6.0.14",
     "defusedxml==0.7.1",
     "tzdata",  # Windows와 일부 슬림 이미지에는 시스템 시간대 데이터베이스가 없다
@@ -34,7 +34,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-rss_hub = ["web/templates/*.html"]
+rss_hub = ["web/templates/*.html", "web/static/*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
