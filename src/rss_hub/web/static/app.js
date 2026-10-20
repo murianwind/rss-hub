@@ -548,6 +548,11 @@
       search();
     });
     if (filterBox) filterBox.addEventListener("change", search);
+    else {
+      searchForm.addEventListener("change", function (event) {
+        if (event.target.matches("select")) search(); // 수집 주기, 마지막 게시 같은 선택 필터
+      });
+    }
     if (window.sessionStorage.getItem("rsshub.refocus") === "1") {
       queryBox.focus();
       queryBox.setSelectionRange(queryBox.value.length, queryBox.value.length);

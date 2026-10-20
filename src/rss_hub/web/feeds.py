@@ -4,6 +4,9 @@
 카테고리에서 빠지면 피드 웹훅을 다시 지정할 수 있다.
 """
 
+from datetime import datetime, timedelta
+from urllib.parse import urlencode
+
 from fastapi import APIRouter, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse
@@ -12,7 +15,14 @@ from fastapi.templating import Jinja2Templates
 from rss_hub.domain.feed_edit import FeedEditError, validate_feed_edit
 from rss_hub.domain.feed_url import FeedUrlError, feed_url_key, validate_feed_url
 from rss_hub.domain.opml_export import ExportFeed, build_opml
-from rss_hub.domain.schedule import FeedRef, build_schedule, describe_cycle, feed_cycles, next_check
+from rss_hub.domain.schedule import (
+    FeedCycle,
+    FeedRef,
+    build_schedule,
+    describe_cycle,
+    feed_cycles,
+    next_check,
+)
 from rss_hub.services.clock import Clock
 from rss_hub.services.feed_registration import DiscoveryResult, FeedRegistrationService
 from rss_hub.services.settings import SettingsService
@@ -37,6 +47,39 @@ def _id_or_none(value: object) -> int | None:
 
 
 STATE_FILTERS = ("ok", "error", "never")
+CYCLE_FILTERS = (("1", "시간당 1회"), ("2", "시간당 2회"), ("3", "시간당 3회"))  # 3은 3회 이상
+LAST_FILTERS = (
+    ("day", "하루 이내", timedelta(days=1)),
+    ("week", "1주일 이내", timedelta(days=7)),
+    ("month", "1달 이내", timedelta(days=30)),
+    ("year", "1년 이내", timedelta(days=365)),
+)
+LAST_OLDER = "older"  # 1년 넘게 게시가 없거나 게시 기록이 없는 피드
+
+
+def _cycle_matches(cycle: FeedCycle | None, wanted: str) -> bool:
+    """수집 주기 필터: 시간당 N회(3은 3회 이상). 아직 배정 전인 피드는 어느 조건에도 안 맞는다."""
+    if not wanted:
+        return True
+    if cycle is None:
+        return False
+    return cycle.checks_per_hour >= 3 if wanted == "3" else cycle.checks_per_hour == int(wanted)
+
+
+def _last_matches(published: datetime | None, now: datetime, wanted: str) -> bool:
+    """마지막 게시 필터: 하루, 1주일, 1달, 1년 이내 또는 1년 넘게 없음(게시 기록 없음 포함)."""
+    if not wanted:
+        return True
+    if wanted == LAST_OLDER:
+        return published is None or now - published > timedelta(days=365)
+    span = next(span for key, _, span in LAST_FILTERS if key == wanted)
+    return published is not None and now - published <= span
+
+
+def _feeds_url(**params: str) -> str:
+    """조건을 모두 담은 피드 관리 주소(값의 /도 인코딩해 프록시의 차단 규칙에 걸리지 않게 한다)."""
+    pairs = [(key, value) for key, value in params.items() if value]
+    return "/feeds?" + urlencode(pairs) if pairs else "/feeds"
 
 
 def build_feed_router(
@@ -49,7 +92,9 @@ def build_feed_router(
 ) -> APIRouter:
     router = APIRouter()
 
-    def rows(state: str, query: str) -> tuple[list[dict[str, object]], dict[str, int]]:
+    def rows(
+        state: str, query: str, cycle_filter: str, last_filter: str
+    ) -> tuple[list[dict[str, object]], dict[str, int]]:
         """피드 관리 화면의 행들과 상태별 개수. 수집 주기는 스케줄러가 실제로 배정한 값이다."""
         config = settings.snapshot()
         listed = overview.feeds()
@@ -70,11 +115,15 @@ def build_feed_router(
             haystack = f"{item.name} {item.url} {item.site_url} {item.category_name}".lower()
             if needle and needle not in haystack:
                 continue
-            counts["all"] += 1
+            cycle = cycles.get(str(item.id))
+            if not _cycle_matches(cycle, cycle_filter) or not _last_matches(
+                item.last_published, now, last_filter
+            ):
+                continue
+            counts["all"] += 1  # 상태 칩의 개수는 검색과 수집 주기, 마지막 게시 조건 안에서 센다
             counts[item.state] += 1
             if state and item.state != state:
                 continue
-            cycle = cycles.get(str(item.id))
             following = None if cycle is None else next_check(now, cycle.minutes)
             if item.category_id:
                 alert = f"카테고리 '{item.category_name}'의 웹훅을 따름"
@@ -105,14 +154,29 @@ def build_feed_router(
         status_code: int = 200,
         state: str = "",
         q: str = "",
+        cycle: str = "",
+        last: str = "",
     ) -> HTMLResponse:
         config = settings.snapshot()
-        listed, counts = rows(state if state in STATE_FILTERS else "", q)
+        state = state if state in STATE_FILTERS else ""
+        cycle = cycle if cycle in dict(CYCLE_FILTERS) else ""
+        last = last if last in {key for key, *_ in LAST_FILTERS} | {LAST_OLDER} else ""
+        listed, counts = rows(state, q, cycle, last)
         context = {
             "rows": listed,
             "counts": counts,
-            "state": state if state in STATE_FILTERS else "",
+            "state": state,
             "q": q.strip()[:100],
+            "cycle": cycle,
+            "last": last,
+            "cycle_options": CYCLE_FILTERS,
+            "last_options": [(key, label) for key, label, _ in LAST_FILTERS]
+            + [(LAST_OLDER, "1년 넘게 없음")],
+            "filtered": bool(q.strip() or cycle or last),
+            "chips": {
+                name: _feeds_url(state=name, q=q.strip()[:100], cycle=cycle, last=last)
+                for name in ("", *STATE_FILTERS)
+            },
             "interval": config.collect_interval_minutes,
             "default_max_entries": config.default_max_entries,
             "error": error,
@@ -154,6 +218,8 @@ def build_feed_router(
         deleted: str = "",
         state: str = "",
         q: str = "",
+        cycle: str = "",
+        last: str = "",
     ) -> HTMLResponse:
         notice = (
             "피드를 추가했습니다. 첫 점검에서 지금 있는 글은 기록만 하고, 새 글부터 알림이 갑니다."
@@ -164,7 +230,7 @@ def build_feed_router(
             if saved
             else ""
         )
-        return page(request, notice=notice, state=state, q=q)
+        return page(request, notice=notice, state=state, q=q, cycle=cycle, last=last)
 
     # ---------- 개별 등록 ----------
 

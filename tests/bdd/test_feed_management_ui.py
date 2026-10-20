@@ -1,5 +1,7 @@
 """17_feed_management.feature: 피드 상태, 새로고침, 자동 가변 수집 주기, 주소 변경, 추가 패널."""
 
+# ruff: noqa: E501  (시나리오 문장과 같은 긴 단계 문구)
+
 import html as html_module
 import re
 from types import SimpleNamespace
@@ -16,7 +18,7 @@ from tests.fakes.feed_fetcher import FakeFeedFetcher
 from tests.fakes.viewer_world import World
 from tests.fakes.web_parts import start_app
 
-bind(globals(), "17_feed_management.feature", [f"FMG-{n:02d}" for n in range(1, 9)])
+bind(globals(), "17_feed_management.feature", [f"FMG-{n:02d}" for n in range(1, 12)])
 
 BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 FRAGMENT = {"x-panel": "1"}
@@ -322,3 +324,105 @@ def _refused(world, ctx, message):
     feed = world.feeds.get(world.f_free)
     assert ctx.response.status_code == 400 and message in ctx.response.text
     assert (feed.name, feed.url) == (ctx.before.name, ctx.before.url)
+
+
+# ---------- 필터와 버튼, 카드 ----------
+
+ACTIVITY = {1: (0, 0), 2: (3, 0), 3: (10, 1)}  # 활동량으로 시간당 1, 2, 3회가 배정되는 값
+
+
+def make_feed(world, name, cycle, ago):
+    from rss_hub.domain.activity import FeedMeasurement
+    from rss_hub.domain.schedule import Activity
+
+    feed = world.feeds.add(f"https://{abs(hash(name))}.example.com/rss", name)
+    last = None if ago is None else world.parts.clock.now() - ago
+    world.feeds.save_stats(feed, FeedMeasurement(Activity(*ACTIVITY[cycle]), last))
+    return feed
+
+
+def visible(world, path, names):
+    html = world.get(path).text
+    listing = html_module.unescape(html.split('<ul class="feed-list">')[1].split("</ul>")[0])
+    return {
+        n for n in names if f"{n}</a>" in listing or f" {n}\n" in listing or f"> {n}<" in listing
+    }
+
+
+@given('피드 "가"는 시간당 1회, "나"는 시간당 2회, "다"는 시간당 3회로 배정되어 있다')
+def _cycles(world):
+    from datetime import timedelta
+
+    for name, cycle in (("가", 1), ("나", 2), ("다", 3)):
+        make_feed(world, name, cycle, timedelta(hours=1))
+
+
+@when(parsers.re(r'피드 관리에서 수집 주기 "(?P<cycle>\d)"로 거른다'))
+def _filter_cycle(world, ctx, cycle):
+    ctx.path = f"/feeds?cycle={cycle}"
+
+
+@given(
+    '피드 "하루"는 2시간 전, "주"는 3일 전, "달"은 20일 전, "해"는 200일 전, "오래"는 400일 전에 마지막으로 게시했고 "없음"은 게시 기록이 없다'
+)
+def _ages(world):
+    from datetime import timedelta
+
+    for name, ago in (
+        ("하루", timedelta(hours=2)),
+        ("주", timedelta(days=3)),
+        ("달", timedelta(days=20)),
+        ("해", timedelta(days=200)),
+        ("오래", timedelta(days=400)),
+        ("없음", None),
+    ):
+        make_feed(world, name, 1, ago)
+
+
+@when(parsers.re(r'피드 관리에서 마지막 게시 "(?P<last>[a-z]+)"로 거른다'))
+def _filter_last(world, ctx, last):
+    ctx.path = f"/feeds?last={last}"
+
+
+@then(parsers.re(r'"가", "나", "다" 중 (?P<shown>"[^\n]+")만 보인다'))
+@then(parsers.re(r'"하루", "주", "달", "해", "오래", "없음" 중 (?P<shown>"[^\n]+")만 보인다'))
+def _shown_only(world, ctx, shown):
+    expected = set(re.findall(r'"([^"]+)"', shown))
+    group = {"가", "나", "다"}
+    candidates = group if expected <= group else {"하루", "주", "달", "해", "오래", "없음"}
+    assert visible(world, ctx.path, candidates) == expected
+
+
+@given("제목이 매우 긴 피드가 있다")
+def _long_title(world, ctx):
+    ctx.long_name = ("매우 긴 제목을 가진 피드 " * 12).strip()
+    world.feeds.add("https://long.example.com/rss", ctx.long_name)
+
+
+@when("피드 관리를 연다")
+def _open_feeds(world, ctx):
+    ctx.response = world.get("/feeds")
+
+
+@then('세 버튼은 "목록으로 돌아가기"와 같은 버튼 디자인이다')
+def _back_design(world, ctx):
+    tools = ctx.response.text.split('<span class="row">')[1].split("</span>\n</div>")[0]
+    assert tools.count('class="back"') == 3 and 'class="button"' not in tools
+    assert (
+        "<span>OPML 가져오기</span>" in tools
+        and "<span>OPML 내보내기</span>" in tools
+        and "<span>카테고리 관리</span>" in tools
+    )
+
+
+@then(
+    "카드는 최소 너비 440px로 화면 너비에 따라 열 수가 바뀌고 긴 제목은 줄임표로 줄여 보이며 전체 제목은 말풍선으로 볼 수 있다"
+)
+def _cards(world, ctx):
+    css = world.client.get("/static/app.css").text
+    assert (
+        "repeat(auto-fill, minmax(min(100%, 440px), 1fr))" in css
+        and "text-overflow: ellipsis" in css
+    )
+    assert 'class="page page-wide"' in ctx.response.text
+    assert f'title="{html_module.escape(ctx.long_name)}"' in ctx.response.text

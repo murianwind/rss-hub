@@ -50,6 +50,8 @@ ICONS: dict[str, str] = {
         '<circle cx="15" cy="18" r="1"/>'
     ),
     "refresh": '<path d="M20 11a8 8 0 0 0-14.9-3M4 5v4h4M4 13a8 8 0 0 0 14.9 3M20 19v-4h-4"/>',
+    "download": '<path d="M12 4v11M7 10l5 5 5-5M4 20h16"/>',
+    "upload": '<path d="M12 20V9M7 14l5-5 5 5M4 4h16"/>',
     "inbox": '<path d="M3 13h5l1 3h6l1-3h5M5 5h14l2 8v6H3v-6z"/>',
 }
 

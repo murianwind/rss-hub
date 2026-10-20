@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}피드 관리 · RSS Hub{% endblock %}
+{% block page_class %} page-wide{% endblock %}
 {% block content %}
 <h1>피드 관리</h1>
 
@@ -10,20 +11,28 @@
 
 <form class="searchform feed-search" method="get" action="/feeds" role="search">
   <input class="compact" type="search" name="q" value="{{ q }}" placeholder="피드 검색(이름, 주소, 카테고리)..." aria-label="피드 검색" maxlength="100" autocomplete="off" enterkeyhint="search">
+  <select name="cycle" aria-label="수집 주기로 거르기">
+    <option value="">수집 주기: 전체</option>
+    {% for key, label in cycle_options %}<option value="{{ key }}"{% if cycle == key %} selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
+  <select name="last" aria-label="마지막 게시로 거르기">
+    <option value="">마지막 게시: 전체</option>
+    {% for key, label in last_options %}<option value="{{ key }}"{% if last == key %} selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select>
   {% if state %}<input type="hidden" name="state" value="{{ state }}">{% endif %}
 </form>
 
 <div class="feed-tools">
   <nav class="chips" aria-label="상태로 거르기">
-    <a class="chip-link{% if not state %} on{% endif %}" href="/feeds{% if q %}?q={{ q | qs }}{% endif %}">전체 {{ counts.all }}</a>
-    <a class="chip-link{% if state == 'ok' %} on{% endif %}" href="/feeds?state=ok{% if q %}&q={{ q | qs }}{% endif %}"><span class="state-dot ok"></span>정상 {{ counts.ok }}</a>
-    <a class="chip-link{% if state == 'error' %} on{% endif %}" href="/feeds?state=error{% if q %}&q={{ q | qs }}{% endif %}"><span class="state-dot error"></span>오류 {{ counts.error }}</a>
-    <a class="chip-link{% if state == 'never' %} on{% endif %}" href="/feeds?state=never{% if q %}&q={{ q | qs }}{% endif %}"><span class="state-dot never"></span>수집 전 {{ counts.never }}</a>
+    <a class="chip-link{% if not state %} on{% endif %}" href="{{ chips[''] }}">전체 {{ counts.all }}</a>
+    <a class="chip-link{% if state == 'ok' %} on{% endif %}" href="{{ chips['ok'] }}"><span class="state-dot ok"></span>정상 {{ counts.ok }}</a>
+    <a class="chip-link{% if state == 'error' %} on{% endif %}" href="{{ chips['error'] }}"><span class="state-dot error"></span>오류 {{ counts.error }}</a>
+    <a class="chip-link{% if state == 'never' %} on{% endif %}" href="{{ chips['never'] }}"><span class="state-dot never"></span>수집 전 {{ counts.never }}</a>
   </nav>
   <span class="row">
-    <a class="button" href="/import">OPML 가져오기</a>
-    <a class="button" href="/feeds/export.opml">OPML 내보내기</a>
-    <a class="button" href="/categories">카테고리 관리</a>
+    <a class="back" href="/import">{{ icon('upload') }}<span>OPML 가져오기</span></a>
+    <a class="back" href="/feeds/export.opml">{{ icon('download') }}<span>OPML 내보내기</span></a>
+    <a class="back" href="/categories">{{ icon('folder') }}<span>카테고리 관리</span></a>
   </span>
 </div>
 
@@ -33,7 +42,7 @@
   <li class="feed-row">
     <div class="feed-head">
       <span class="state-dot {{ f.state }}" data-state="{{ f.id }}" role="img" aria-label="{{ {'ok': '정상', 'error': '오류', 'never': '아직 수집 전'}[f.state] }}" title="{{ ('오류: ' ~ (fail_notes.get(f.last_error, f.last_error))) if f.state == 'error' else ('정상' if f.state == 'ok' else '아직 수집 전') }}"></span>
-      <a class="feed-name" href="/reader/feed/{{ f.id }}">{{ f.emoji }} {{ f.name }}</a>{% if f.kind == 'page' %}<span class="kind-badge" title="RSS가 없는 사이트의 글 목록 페이지를 구독 중입니다">웹페이지</span>{% endif %}
+      <a class="feed-name" href="/reader/feed/{{ f.id }}" title="{{ f.name }}">{{ f.emoji }} {{ f.name }}</a>{% if f.kind == 'page' %}<span class="kind-badge" title="RSS가 없는 사이트의 글 목록 페이지를 구독 중입니다">웹페이지</span>{% endif %}
       <span class="count{% if f.unread %} unread{% endif %}" data-count="feed:{{ f.id }}"{% if not f.unread %} hidden{% endif %}>{% if f.unread %}{{ f.unread }}{% endif %}</span>
       <span class="row-actions feed-actions">
         <button type="button" class="icon-btn mini" data-refresh="{{ f.id }}" title="지금 다시 읽기" aria-label="지금 다시 읽기">{{ icon('refresh') }}</button>
@@ -58,7 +67,7 @@
     </dl>
   </li>
 {% else %}
-  <li class="empty">{% if q %}"{{ q }}"에 맞는 피드가 없습니다.{% elif state %}이 상태의 피드가 없습니다.{% else %}등록된 피드가 없습니다. 사이드바의 RSS 피드 <b>+</b>로 추가하거나 <a href="/import">OPML 가져오기</a>를 이용하세요.{% endif %}</li>
+  <li class="empty">{% if q %}"{{ q }}"에 맞는 피드가 없습니다.{% elif filtered %}이 조건에 맞는 피드가 없습니다.{% elif state %}이 상태의 피드가 없습니다.{% else %}등록된 피드가 없습니다. 사이드바의 RSS 피드 <b>+</b>로 추가하거나 <a href="/import">OPML 가져오기</a>를 이용하세요.{% endif %}</li>
 {% endfor %}
 </ul>
 {% endblock %}
