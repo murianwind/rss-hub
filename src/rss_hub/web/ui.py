@@ -55,6 +55,7 @@ TOASTS = {
     "bookmarked": "북마크에 추가했습니다.",
     "unbookmarked": "북마크를 해제했습니다.",
     "marked_unread": "안 읽음으로 표시했습니다.",
+    "marked_read": "읽음으로 표시했습니다.",
     "saved": "저장했습니다.",
     "added": "추가했습니다.",
     "deleted": "삭제했습니다.",
@@ -63,23 +64,17 @@ TOASTS = {
 
 SETTINGS_PATHS = ("/settings", "/feeds", "/categories", "/topics", "/models", "/status", "/import")
 SIDEBAR_COOKIE = "sidebar"
+SIDEBAR_WIDTH_COOKIE = "sbw"
+SIDEBAR_MIN, SIDEBAR_MAX, SIDEBAR_STEP = 220, 480, 10  # 폭 조절의 범위와 단위(px)
 SETTINGS_ITEMS = (
-    ("/settings/general", "일반 설정"),
-    ("/feeds", "구독 & OPML 관리"),
-    ("/settings/notifications", "알림 설정"),
-    ("/settings/llm", "LLM · 모델"),
-    ("/settings/display", "디스플레이 및 테마"),
+    ("/settings", "설정"),
+    ("/feeds", "피드 관리"),
     ("/topics", "주제 관리"),
+    ("/models", "모델"),
     ("/status", "상태"),
 )
-# 같은 탭으로 묶이는 화면들
-SETTINGS_ALIASES = {
-    "/settings": "/settings/general",
-    "/": "/status",
-    "/import": "/feeds",
-    "/categories": "/feeds",
-    "/models": "/settings/llm",
-}
+# 같은 메뉴 항목으로 묶이는 화면들
+SETTINGS_ALIASES = {"/": "/status", "/import": "/feeds", "/categories": "/feeds"}
 
 _SAFE_PATH = re.compile(
     r"^/(?:reader(?:/(?:feed|category|topic)/\d+|/bookmarks)?|a/\d+|topics/\d+/suggestions)"
@@ -163,6 +158,15 @@ def _open_sections(request: Request, scope_kind: str) -> set[str]:
     return sections.get(scope_kind, set())
 
 
+def sidebar_width(raw: object) -> int:
+    """쿠키의 사이드바 폭(px)을 범위 안의 10px 단위로 맞춘다. 없거나 이상하면 0(기본 폭)."""
+    text = str(raw or "")
+    if not (text.isascii() and text.isdigit()) or len(text) > 5:
+        return 0
+    snapped = (int(text) + SIDEBAR_STEP // 2) // SIDEBAR_STEP * SIDEBAR_STEP  # 반올림(5는 올림)
+    return min(SIDEBAR_MAX, max(SIDEBAR_MIN, snapped))
+
+
 def _current(request: Request) -> str:
     """지금 화면의 주소(패널 폼이 일을 마치고 돌아갈 곳). 알려진 쿼리만 남긴다."""
     params = request.query_params
@@ -192,10 +196,12 @@ def build_ui_context(
             "ui_settings_tab": SETTINGS_ALIASES.get(request.url.path, request.url.path),
             "ui_next": safe_return(_current(request), "/reader"),
             "ui_collapsed": request.cookies.get(SIDEBAR_COOKIE) == "collapsed",
+            "ui_sbw": sidebar_width(request.cookies.get(SIDEBAR_WIDTH_COOKIE)),
             "ui_toast": TOASTS.get(request.query_params.get("toast", ""), ""),
             "ui_now": clock.now(),
             "ui_zone": config.timezone,
             "ui_theme": config.ui_theme,
+            "ui_auto_read": config.ui_auto_read,
             "ui_font": config.ui_font_size,
             "ui_version": version,
         }

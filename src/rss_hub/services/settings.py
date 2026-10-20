@@ -66,6 +66,7 @@ def _choice(options: tuple[tuple[str, str], ...]) -> Callable[[str], str]:
 
 THEME_CHOICES = (("system", "기기 설정 따르기"), ("light", "밝게"), ("dark", "어둡게"))
 FONT_CHOICES = (("normal", "보통"), ("large", "크게"))
+AUTO_READ_CHOICES = (("on", "켜기"), ("off", "끄기"))
 
 
 def _base_url(raw: str) -> str:
@@ -106,6 +107,13 @@ SETTING_DEFS: tuple[SettingDef, ...] = (
     ),
     SettingDef("ui_theme", "화면 테마", "system", _choice(THEME_CHOICES), THEME_CHOICES),
     SettingDef("ui_font_size", "글자 크기", "normal", _choice(FONT_CHOICES), FONT_CHOICES),
+    SettingDef(
+        "ui_auto_read",
+        "스크롤하면 자동으로 읽음 처리",
+        "on",
+        _choice(AUTO_READ_CHOICES),
+        AUTO_READ_CHOICES,
+    ),
     SettingDef(
         "article_retention_days",
         "글 보관 기간(일, 0이면 계속 보관)",
@@ -148,6 +156,7 @@ class AppSettings:
     baseline_archive_count: int
     ui_theme: str
     ui_font_size: str
+    ui_auto_read: str
     topic_feedback_examples: int
     article_retention_days: int
     model_chain: tuple[str, ...]
@@ -217,6 +226,7 @@ class SettingsService:
             baseline_archive_count=int(v["baseline_archive_count"]),
             ui_theme=v["ui_theme"],
             ui_font_size=v["ui_font_size"],
+            ui_auto_read=v["ui_auto_read"],
             topic_feedback_examples=int(v["topic_feedback_examples"]),
             article_retention_days=int(v["article_retention_days"]),
             model_chain=tuple(v["model_chain"].split(",")),

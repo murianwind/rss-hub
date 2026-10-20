@@ -85,18 +85,19 @@ Feature: 읽기 화면의 관리: 슬라이드 패널, 순서와 이동, 설정 
   # ---------- 설정 탭 ----------
 
   @PNL-09 @new
-  Scenario Outline: 설정 탭은 자기 구역만 보여 주고 저장하면 그 탭으로 돌아온다
-    When 설정 탭 "<tab>"을 연다
-    Then "<shown>"이 보이고 "<hidden>"은 보이지 않는다
-    When 그 탭에서 설정 "<key>"를 "<value>"로 저장한다
-    Then 같은 탭으로 돌아와 "저장했습니다." 알림이 보인다
+  Scenario Outline: 설정은 한 페이지의 아코디언이고 구역마다 자기 설정을 가지며 저장하면 돌아와 토스트가 뜬다
+    When 설정 화면을 연다
+    Then "<shown>"은 "<section>" 구역에 있고 "<hidden>"은 그 구역에 없다
+    When 설정 "<key>"를 "<value>"로 저장한다
+    Then 설정 화면으로 돌아와 "저장했습니다." 알림이 보인다
 
     Examples:
-      | tab         | shown          | hidden        | key                  | value |
-      | general     | 서비스 시간대    | OpenRouter 키 | service_timezone     | Asia/Seoul |
-      | notifications | 웹훅          | OpenRouter 키 | alert_cooldown_hours | 3     |
-      | llm         | OpenRouter 키  | 웹훅 역할      | llm_daily_cap        | 900   |
-      | display     | 화면 테마       | 서비스 시간대   | ui_font_size         | large |
+      | section | shown                | hidden           | key                  | value      |
+      | general | service_timezone     | OpenRouter 키    | service_timezone     | Asia/Seoul |
+      | collect | collect_interval_minutes | ui_theme     | llm_daily_cap        | 900        |
+      | llm     | OpenRouter 키        | alert_cooldown_hours | llm_daily_cap    | 900        |
+      | alerts  | alert_cooldown_hours | OpenRouter 키    | alert_cooldown_hours | 3          |
+      | display | ui_auto_read         | service_timezone | ui_font_size         | large      |
 
   @PNL-10 @new
   Scenario: 화면 테마와 글자 크기는 모든 화면에 적용된다

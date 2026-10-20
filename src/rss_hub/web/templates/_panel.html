@@ -11,12 +11,31 @@
     </div>
 
     {% if panel.mode == 'add' and panel.kind == 'feed' %}
+    {% if panel.error %}<div class="banner error" role="alert">{{ panel.error }}</div>{% endif %}
     <form method="post" action="/feeds/discover" class="slide-grid">
+      <input type="hidden" name="next" value="{{ next }}">
       <div class="field wide"><label for="p_url">피드 또는 웹사이트 주소</label>
-        <input id="p_url" name="url" placeholder="https://example.com/ 또는 https://example.com/feed.xml" maxlength="2048" required></div>
-      <p class="hint wide">주소를 확인하면 다음 화면에서 찾은 피드를 고르고 카테고리와 웹훅을 정합니다. 사설망 주소는 허용하지 않습니다.</p>
+        <input id="p_url" name="url" value="{{ panel.url }}" placeholder="https://example.com/ 또는 https://example.com/feed.xml" maxlength="2048" required></div>
+      <p class="hint wide">웹사이트 주소를 넣으면 그 페이지가 알려 준 피드를 찾아 보여 줍니다. 사설망(192.168.x.x, localhost 등) 주소는 허용하지 않습니다.</p>
       <div class="row wide"><button type="submit" class="primary">확인</button><a class="button" href="{{ next }}" data-action="close-panel">취소</a></div>
     </form>
+    {% if panel.discovery and panel.discovery.candidates %}
+    <h3 class="slide-sub">찾은 피드</h3>
+    {% for c in panel.discovery.candidates %}
+    <form method="post" action="/feeds/register" class="slide-grid candidate">
+      <input type="hidden" name="url" value="{{ c.url }}">
+      <input type="hidden" name="next" value="{{ next }}">
+      <p class="wide"><strong>{{ c.title }}</strong><br><span class="hint">{{ c.url }}</span></p>
+      <div class="field"><label for="reg_name_{{ loop.index }}">이름</label>
+        <input id="reg_name_{{ loop.index }}" name="name" value="{{ c.title }}" maxlength="200"></div>
+      <div class="field"><label for="reg_cat_{{ loop.index }}">카테고리</label>
+        <select id="reg_cat_{{ loop.index }}" name="category_id"><option value="">없음</option>{% for cat in panel.categories %}<option value="{{ cat.id }}">{{ cat.name }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="reg_wh_{{ loop.index }}">웹훅 <span class="hint">카테고리가 없을 때만</span></label>
+        <select id="reg_wh_{{ loop.index }}" name="webhook_id"><option value="">지정 안 함(기본 웹훅)</option>{% for w in webhooks %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}</select></div>
+      <div class="row wide"><button type="submit" class="primary">등록</button></div>
+    </form>
+    {% endfor %}
+    {% endif %}
 
     {% elif panel.mode == 'add' and panel.kind == 'category' %}
     <form method="post" action="/categories/add" class="slide-grid">

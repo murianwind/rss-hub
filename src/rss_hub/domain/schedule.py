@@ -9,6 +9,7 @@ import hashlib
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 MINUTES_PER_HOUR = 60
 DEFAULT_BATCH_SIZE = 15
@@ -167,3 +168,54 @@ def schedule_fingerprint(
     members = ",".join(sorted(f"{f.key}:{f.priority}" for f in feeds))
     raw = f"{hour_key}|{target_date}|{interval_minutes}|{base_batch_size}|{members}"
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()
+
+
+# ---------- 피드마다 실제로 배정된 수집 주기(화면에 보여 주는 값) ----------
+
+
+@dataclass(frozen=True)
+class FeedCycle:
+    """한 피드가 이번 스케줄에서 받은 점검 횟수와 시각."""
+
+    checks_per_hour: int
+    minutes: tuple[int, ...]  # 매 시각의 몇 분에 점검하는지(오름차순)
+    wanted: int  # 활동량이 정한 목표 횟수. 용량이 모자라면 실제 횟수가 더 적다
+
+
+def feed_cycles(
+    schedule: Schedule,
+    interval_minutes: int,
+    activity: Mapping[str, Activity],
+    keys: Sequence[str],
+) -> dict[str, FeedCycle]:
+    """스케줄에서 피드마다 점검 시각을 모은다. 스케줄에 없는 피드는 결과에 넣지 않는다."""
+    minutes: dict[str, list[int]] = {}
+    for slot, batch in enumerate(schedule.batches):
+        for key in batch:
+            minutes.setdefault(key, []).append(slot * interval_minutes)
+    return {
+        key: FeedCycle(
+            checks_per_hour=len(minutes[key]),
+            minutes=tuple(sorted(minutes[key])),
+            wanted=desired_checks(FeedRef(key), activity.get(key, Activity()), schedule.slots),
+        )
+        for key in keys
+        if key in minutes
+    }
+
+
+def describe_cycle(cycle: FeedCycle) -> str:
+    """ "시간당 2회(약 30분마다)"처럼 읽기 쉽게."""
+    average = round(MINUTES_PER_HOUR / cycle.checks_per_hour)
+    return f"시간당 {cycle.checks_per_hour}회(약 {average}분마다)"
+
+
+def next_check(now: datetime, minutes: Sequence[int]) -> datetime | None:
+    """지금 이후 가장 가까운 점검 시각. 이번 시각에 남은 점검이 없으면 다음 시각의 첫 점검."""
+    if not minutes:
+        return None
+    later = [m for m in sorted(minutes) if m > now.minute]
+    if later:
+        return now.replace(minute=later[0], second=0, microsecond=0)
+    following = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+    return following.replace(minute=min(minutes))

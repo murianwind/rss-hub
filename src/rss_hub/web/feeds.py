@@ -11,6 +11,8 @@ from fastapi.templating import Jinja2Templates
 from rss_hub.domain.feed_edit import FeedEditError, validate_feed_edit
 from rss_hub.domain.feed_url import FeedUrlError, feed_url_key, validate_feed_url
 from rss_hub.domain.opml_export import ExportFeed, build_opml
+from rss_hub.domain.schedule import FeedRef, build_schedule, describe_cycle, feed_cycles, next_check
+from rss_hub.services.clock import Clock
 from rss_hub.services.feed_registration import DiscoveryResult, FeedRegistrationService
 from rss_hub.services.settings import SettingsService
 from rss_hub.storage.feeds import (
@@ -19,7 +21,9 @@ from rss_hub.storage.feeds import (
     FeedRepository,
     FeedRuleError,
 )
-from rss_hub.web.ui import done
+from rss_hub.storage.overview import OverviewRepository
+from rss_hub.web.panels import render_panel
+from rss_hub.web.ui import done, safe_return
 
 CONFIRM_MESSAGE = "삭제하려면 확인란을 선택해 주세요"
 
@@ -29,13 +33,61 @@ def _id_or_none(value: object) -> int | None:
     return int(text) if text.isdigit() else None
 
 
+STATE_FILTERS = ("ok", "error", "never")
+
+
 def build_feed_router(
     feeds: FeedRepository,
     settings: SettingsService,
     templates: Jinja2Templates,
     registration: FeedRegistrationService,
+    overview: OverviewRepository,
+    clock: Clock,
 ) -> APIRouter:
     router = APIRouter()
+
+    def rows(state: str) -> tuple[list[dict[str, object]], dict[str, int]]:
+        """피드 관리 화면의 행들과 상태별 개수. 수집 주기는 스케줄러가 실제로 배정한 값이다."""
+        config = settings.snapshot()
+        listed = overview.feeds()
+        refs = [FeedRef(str(f.id), f.poll_priority) for f in feeds.list_all()]
+        activity = feeds.activity_by_key()
+        schedule = build_schedule(
+            refs, activity, config.collect_interval_minutes, config.slot_batch_size
+        )
+        cycles = feed_cycles(
+            schedule, config.collect_interval_minutes, activity, [str(f.id) for f in listed]
+        )
+        now = clock.now().astimezone(config.timezone)
+        names = {w.id: w.name for w in settings.list_webhooks()}
+        counts = {"all": len(listed), "ok": 0, "error": 0, "never": 0}
+        out: list[dict[str, object]] = []
+        for item in listed:
+            counts[item.state] += 1
+            if state and item.state != state:
+                continue
+            cycle = cycles.get(str(item.id))
+            following = None if cycle is None else next_check(now, cycle.minutes)
+            if item.category_id:
+                alert = f"카테고리 '{item.category_name}'의 웹훅을 따름"
+            elif item.webhook_id:
+                alert = f"개별 웹훅 '{names.get(item.webhook_id, '?')}'"
+            else:
+                alert = "기본 웹훅"
+            out.append(
+                {
+                    "feed": item,
+                    "alert": alert,
+                    "cycle": None if cycle is None else describe_cycle(cycle),
+                    "minutes": ""
+                    if cycle is None
+                    else ", ".join(f"{m:02d}분" for m in cycle.minutes),
+                    "short": cycle is not None and cycle.checks_per_hour < cycle.wanted,
+                    "wanted": 0 if cycle is None else cycle.wanted,
+                    "next": "" if following is None else following.strftime("%H:%M"),
+                }
+            )
+        return out, counts
 
     def page(
         request: Request,
@@ -43,33 +95,50 @@ def build_feed_router(
         error: str = "",
         notice: str = "",
         status_code: int = 200,
-        discovery: DiscoveryResult | None = None,
-        discover_url: str = "",
+        state: str = "",
     ) -> HTMLResponse:
-        zone = settings.snapshot().timezone
-        categories = feeds.list_categories()
-        listed = sorted(feeds.list_all(), key=lambda f: f.name.lower())
+        config = settings.snapshot()
+        listed, counts = rows(state if state in STATE_FILTERS else "")
         context = {
-            "feeds": listed,
-            "checked": {
-                f.id: f.last_checked_at.astimezone(zone).strftime("%m-%d %H:%M")
-                for f in listed
-                if f.last_checked_at
-            },
-            "categories": categories,
-            "category_names": {c.id: c.name for c in categories},
-            "webhooks": settings.list_webhooks(),
-            "default_max_entries": settings.snapshot().default_max_entries,
-            "discovery": discovery,
-            "discover_url": discover_url,
+            "rows": listed,
+            "counts": counts,
+            "state": state if state in STATE_FILTERS else "",
+            "interval": config.collect_interval_minutes,
+            "default_max_entries": config.default_max_entries,
             "error": error,
             "notice": notice,
         }
         return templates.TemplateResponse(request, "feeds.html", context, status_code=status_code)
 
+    def add_panel(
+        request: Request,
+        *,
+        url: str = "",
+        error: str = "",
+        discovery: DiscoveryResult | None = None,
+        status_code: int = 200,
+        next_path: str = "/feeds",
+    ) -> Response:
+        panel: dict[str, object] = {
+            "mode": "add",
+            "kind": "feed",
+            "url": url,
+            "error": error,
+            "discovery": discovery,
+            "categories": feeds.list_categories(),
+        }
+        return render_panel(
+            templates,
+            request,
+            panel,
+            settings.list_webhooks(),
+            status_code=status_code,
+            next_path=next_path,
+        )
+
     @router.get("/feeds", response_class=HTMLResponse)
     def feed_page(
-        request: Request, saved: str = "", added: str = "", deleted: str = ""
+        request: Request, saved: str = "", added: str = "", deleted: str = "", state: str = ""
     ) -> HTMLResponse:
         notice = (
             "피드를 추가했습니다. 첫 점검에서 지금 있는 글은 기록만 하고, 새 글부터 알림이 갑니다."
@@ -80,7 +149,7 @@ def build_feed_router(
             if saved
             else ""
         )
-        return page(request, notice=notice)
+        return page(request, notice=notice, state=state)
 
     # ---------- 개별 등록 ----------
 
@@ -89,12 +158,13 @@ def build_feed_router(
         form = await request.form()
         url = str(form.get("url", ""))
         result = registration.discover(url)
-        return page(
+        return add_panel(
             request,
+            url=url,
             error=result.error,
-            status_code=400 if result.error else 200,
             discovery=result,
-            discover_url=url,
+            status_code=400 if result.error else 200,
+            next_path=safe_return(form.get("next"), "/feeds"),
         )
 
     @router.post("/feeds/register", response_class=HTMLResponse)
@@ -108,7 +178,13 @@ def build_feed_router(
             webhook_id=_id_or_none(form.get("webhook_id")),
         )
         if result.error:
-            return page(request, error=result.error, status_code=400, discover_url=url)
+            return add_panel(
+                request,
+                url=url,
+                error=result.error,
+                status_code=400,
+                next_path=safe_return(form.get("next"), "/feeds"),
+            )
         return done(form, "/feeds?added=1", "added")
 
     # ---------- 설정 한 번에 저장(패널) ----------

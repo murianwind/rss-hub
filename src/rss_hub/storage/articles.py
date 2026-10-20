@@ -180,11 +180,43 @@ class ArticleRepository:
     # ---------- 읽음과 북마크 ----------
 
     def mark_read(self, article_id: int) -> bool:
-        """읽음으로 표시한다. 처음 읽은 시각을 지키고, 바뀐 것이 없으면 False."""
-        return self._set("read_at", article_id, on=True)
+        """사용자가 읽음으로 표시한다(글을 열거나 읽음 버튼). 처음 읽은 시각을 지키고,
+        "안 읽음으로 고정"한 표시도 푼다. 바뀐 것이 없으면 False."""
+        now = _iso(self._clock.now())
+        with self._db.connect() as conn:
+            return (
+                conn.execute(
+                    "UPDATE articles SET read_at = COALESCE(read_at, ?), keep_unread = 0 "
+                    "WHERE id = ? AND (read_at IS NULL OR keep_unread = 1)",
+                    (now, article_id),
+                ).rowcount
+                > 0
+            )
 
     def mark_unread(self, article_id: int) -> bool:
-        return self._set("read_at", article_id, on=False)
+        """사용자가 안 읽음으로 바꾼다. 자동 읽음 처리에서 빠지도록 고정한다.
+        이미 안 읽음이고 고정되어 있으면 False."""
+        with self._db.connect() as conn:
+            return (
+                conn.execute(
+                    "UPDATE articles SET read_at = NULL, keep_unread = 1 "
+                    "WHERE id = ? AND (read_at IS NOT NULL OR keep_unread = 0)",
+                    (article_id,),
+                ).rowcount
+                > 0
+            )
+
+    def auto_mark_read(self, article_ids: Sequence[int]) -> int:
+        """스크롤로 지나간 글을 읽음 처리한다. 사용자가 안 읽음으로 고정한 글은 건드리지 않는다."""
+        if not article_ids:
+            return 0
+        marks = ",".join("?" for _ in article_ids)
+        with self._db.connect() as conn:
+            return conn.execute(
+                f"UPDATE articles SET read_at = ? WHERE id IN ({marks}) "
+                "AND read_at IS NULL AND keep_unread = 0",
+                [_iso(self._clock.now()), *article_ids],
+            ).rowcount
 
     def set_bookmark(self, article_id: int, on: bool) -> bool:
         """북마크를 켜거나 끈다. 바뀐 것이 없거나 없는 글이면 False."""

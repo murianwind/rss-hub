@@ -225,6 +225,15 @@ MIGRATIONS: tuple[str, ...] = (
     ALTER TABLE categories ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE topics ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
     """,
+    # 11: 점검 우선순위를 화면에서 없앴다. 예전에 "매 슬롯"으로 정해 둔 피드도 활동량에 따른
+    # 자동 배정으로 돌린다(그렇지 않으면 화면에서 되돌릴 방법이 없다)
+    """
+    UPDATE feeds SET poll_priority = 'normal' WHERE poll_priority != 'normal';
+    """,
+    # 12: 사용자가 직접 "안 읽음"으로 바꾼 글은 스크롤로 자동 읽음 처리하지 않는다
+    """
+    ALTER TABLE articles ADD COLUMN keep_unread INTEGER NOT NULL DEFAULT 0;
+    """,
 )
 
 

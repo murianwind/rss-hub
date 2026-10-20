@@ -296,6 +296,163 @@
       });
   }
 
+  // ---------- 읽음: 카드의 읽음 버튼과 스크롤 자동 읽음 ----------
+  function setCardRead(card, read) {
+    card.classList.toggle("unread", !read);
+    var title = card.querySelector("h2 a");
+    var dot = title.querySelector(".dot");
+    if (read && dot) dot.remove();
+    if (!read && !dot) {
+      dot = document.createElement("span");
+      dot.className = "dot";
+      dot.title = "안 읽은 글";
+      title.insertBefore(dot, title.firstChild);
+    }
+    var form = card.querySelector("form[data-read-toggle]");
+    if (form) {
+      form.elements.state.value = read ? "unread" : "read";
+      form.querySelector("button").textContent = read ? "안 읽음으로 표시" : "읽음으로 표시";
+    }
+  }
+
+  function readStateOf(result) {
+    try {
+      return JSON.parse(result.text);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  document.addEventListener("submit", function (event) {
+    var form = event.target.closest ? event.target.closest("form[data-read-toggle]") : null;
+    if (!form) return;
+    event.preventDefault();
+    var card = form.closest("article.card");
+    post("/ui/read-state", {
+      id: form.getAttribute("data-read-toggle"),
+      state: form.elements.state.value,
+    })
+      .then(function (result) {
+        var data = readStateOf(result);
+        if (!data || !data.ok) throw new Error("rejected");
+        setCardRead(card, data.read);
+        // 사용자가 직접 안 읽음으로 바꾼 글은 스크롤해도 자동으로 읽음 처리하지 않는다
+        if (data.read) card.removeAttribute("data-keep");
+        else card.setAttribute("data-keep", "1");
+        applyState(data.state);
+      })
+      .catch(function () {
+        showToast("읽음 상태를 바꾸지 못했습니다.");
+      });
+  });
+
+  var cardList = document.querySelector(".list");
+  var scrollBox = document.querySelector(".main .scroll");
+  if (cardList && scrollBox && document.body.getAttribute("data-auto-read") === "on") {
+    var waiting = new Set();
+    var flushTimer = null;
+    var queued = false;
+
+    var flush = function () {
+      var ids = Array.from(waiting);
+      waiting.clear();
+      if (!ids.length) return;
+      post("/ui/auto-read", { ids: ids.join(",") }).then(function (result) {
+        var data = readStateOf(result);
+        if (data && data.state) applyState(data.state);
+      });
+    };
+
+    // 목록이 한 화면에 다 들어오면 전부, 아니면 화면 가운데 위로 올라온 글을 읽음 처리한다
+    var inspect = function () {
+      queued = false;
+      var area = scrollBox.getBoundingClientRect();
+      var middle = area.top + area.height / 2;
+      var fits = scrollBox.scrollHeight <= scrollBox.clientHeight + 1;
+      cardList.querySelectorAll("article.card.unread:not([data-keep])").forEach(function (card) {
+        if (fits || card.getBoundingClientRect().top < middle) {
+          setCardRead(card, true);
+          waiting.add(card.getAttribute("data-id"));
+        }
+      });
+      if (waiting.size) {
+        window.clearTimeout(flushTimer);
+        flushTimer = window.setTimeout(flush, 500);
+      }
+    };
+
+    scrollBox.addEventListener(
+      "scroll",
+      function () {
+        if (!queued) {
+          queued = true;
+          window.requestAnimationFrame(inspect);
+        }
+      },
+      { passive: true }
+    );
+    window.addEventListener("resize", inspect);
+    window.addEventListener("pagehide", flush);
+    window.setTimeout(inspect, 250);
+  }
+
+  // ---------- 사이드바 폭 조절(PC만): 끌거나 방향키로 바꾸고 쿠키에 기억한다 ----------
+  var resizer = document.getElementById("resizer");
+  var sidebarBox = document.getElementById("sidebar");
+  if (resizer && sidebarBox && window.matchMedia("(min-width: 821px) and (pointer: fine)").matches) {
+    var MIN = 220;
+    var MAX = 480;
+    var STEP = 10;
+    var snap = function (px) {
+      return Math.min(MAX, Math.max(MIN, Math.round(px / STEP) * STEP));
+    };
+    var applyWidthClass = function (px) {
+      Array.from(body.classList).forEach(function (name) {
+        if (/^sw-\d+$/.test(name)) body.classList.remove(name);
+      });
+      body.classList.add("sw-" + px);
+      sidebarBox.style.removeProperty("width");
+    };
+    var remember = function (px) {
+      document.cookie = "sbw=" + px + "; path=/; max-age=31536000; SameSite=Lax";
+      applyWidthClass(px);
+    };
+
+    resizer.addEventListener("pointerdown", function (event) {
+      if (collapsed()) return;
+      event.preventDefault();
+      body.classList.add("resizing");
+      resizer.classList.add("dragging-bar");
+      resizer.setPointerCapture(event.pointerId);
+    });
+    resizer.addEventListener("pointermove", function (event) {
+      if (!resizer.hasPointerCapture(event.pointerId)) return;
+      var left = sidebarBox.getBoundingClientRect().left;
+      sidebarBox.style.width = Math.min(MAX, Math.max(MIN, event.clientX - left)) + "px";
+    });
+    var finish = function (event) {
+      if (!resizer.hasPointerCapture(event.pointerId)) return;
+      resizer.releasePointerCapture(event.pointerId);
+      body.classList.remove("resizing");
+      resizer.classList.remove("dragging-bar");
+      remember(snap(sidebarBox.getBoundingClientRect().width));
+    };
+    resizer.addEventListener("pointerup", finish);
+    resizer.addEventListener("pointercancel", finish);
+    resizer.addEventListener("dblclick", function () {
+      document.cookie = "sbw=; path=/; max-age=0; SameSite=Lax";
+      Array.from(body.classList).forEach(function (name) {
+        if (/^sw-\d+$/.test(name)) body.classList.remove(name);
+      });
+    });
+    resizer.addEventListener("keydown", function (event) {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      var delta = event.key === "ArrowRight" ? STEP : -STEP;
+      remember(snap(sidebarBox.getBoundingClientRect().width + delta));
+    });
+  }
+
   // ---------- 검색과 필터: 입력하면 바로 목록을 고친다 ----------
   var searchForm = document.querySelector("form[role=search]");
   if (searchForm) {
@@ -344,7 +501,7 @@
 
   function saveUi() {
     var open = {};
-    document.querySelectorAll("details.sec[id], details.tree[id]").forEach(function (box) {
+    document.querySelectorAll("details.sec[id], details.tree[id], details.acc[id]").forEach(function (box) {
       open[box.id] = box.open;
     });
     var side = document.querySelector(".sb-body");

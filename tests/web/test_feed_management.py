@@ -27,9 +27,15 @@ def world(tmp_path):
 # ---------- 등록 ----------
 
 
-def test_the_page_has_the_add_form_and_the_export_link(world):
+def test_the_page_has_no_add_form_but_links_to_import_export_and_categories(world):
     html = world.client.get("/feeds").text
-    assert 'action="/feeds/discover"' in html and 'href="/feeds/export.opml"' in html
+    assert 'action="/feeds/discover"' not in html and 'action="/feeds/register"' not in html
+    assert (
+        'href="/feeds/export.opml"' in html
+        and 'href="/import"' in html
+        and 'href="/categories"' in html
+    )
+    assert "사이드바의 RSS 피드 <b>+</b>" in html  # 추가는 사이드바의 +에서 한다
 
 
 def test_a_feed_address_shows_the_title_in_an_editable_registration_form(world):
@@ -98,10 +104,10 @@ def add_feed(world, name="블로그"):
     return world.feeds.add("https://f.example.com/rss", name)
 
 
-def test_the_edit_form_shows_the_current_values_and_the_default_for_max(world):
+def test_the_settings_panel_shows_the_current_values_and_the_default_for_max(world):
     feed_id = add_feed(world)
-    html = world.client.get("/feeds").text
-    assert f'action="/feeds/{feed_id}/edit"' in html and 'name="emoji" value="📢"' in html
+    html = world.client.get(f"/panel/settings/feed/{feed_id}", headers={"x-panel": "1"}).text
+    assert f'action="/feeds/{feed_id}/settings"' in html and 'name="emoji" value="📢"' in html
     assert "비워 두면 기본값 50" in html
 
 
@@ -113,7 +119,7 @@ def test_a_valid_edit_is_saved_and_shown(world):
     )
     assert response.status_code == 303
     html = world.client.get("/feeds").text
-    assert 'value="새 이름"' in html and 'value="120"' in html and 'value="🧪"' in html
+    assert "새 이름" in html and "🧪" in html and "점검할 최대 항목 수 120" in html
 
 
 @pytest.mark.parametrize(
@@ -247,4 +253,4 @@ def test_a_forged_register_request_for_a_private_address_sends_nothing(world):
 
 def test_the_page_mentions_how_many_feeds_there_are(world):
     add_feed(world)
-    assert re.search(r"구독 목록\s*<span[^>]*>1개", world.client.get("/feeds").text)
+    assert re.search(r"전체 1\s*</a>", world.client.get("/feeds").text)

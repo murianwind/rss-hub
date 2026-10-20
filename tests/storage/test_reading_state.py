@@ -77,9 +77,9 @@ def test_marking_read_twice_keeps_the_first_time_and_reports_no_change(env):
     assert env.articles.get(article).read_at == first
 
 
-def test_marking_an_unknown_or_already_unread_article_changes_nothing(env):
+def test_marking_an_unknown_article_changes_nothing(env):
     assert env.articles.mark_read(999) is False and env.articles.mark_unread(999) is False
-    assert env.articles.mark_unread(env.article()) is False
+    assert env.articles.auto_mark_read([999]) == 0
 
 
 def test_archived_articles_start_as_read_so_old_back_catalog_does_not_inflate_the_counts(env):
@@ -339,3 +339,72 @@ def test_a_search_text_is_cut_at_one_hundred_characters(env):
     env.article(title="a" * 100)
     assert env.titles(query="a" * 100 + "zzz") == ["a" * 100]  # 뒤의 글자는 잘려서 무시된다
     assert env.titles(query="a" * 99 + "b") == []
+
+
+# ---------- 안 읽음으로 고정(자동 읽음 처리에서 빠진다) ----------
+
+
+def keep(env, article):
+    with env.db.connect() as conn:
+        return bool(
+            conn.execute("SELECT keep_unread FROM articles WHERE id = ?", (article,)).fetchone()[0]
+        )
+
+
+def test_auto_read_marks_only_unread_articles_that_are_not_pinned(env):
+    free, pinned, read = env.article(minutes=1), env.article(minutes=2), env.article(minutes=3)
+    env.articles.mark_read(read)
+    env.articles.mark_unread(pinned)
+    assert env.articles.auto_mark_read([free, pinned, read]) == 1
+    assert env.articles.get(free).read_at is not None and env.articles.get(pinned).read_at is None
+    assert env.articles.get(read).read_at is not None
+
+
+def test_auto_read_keeps_the_first_read_time_and_ignores_empty_and_repeated_calls(env):
+    article = env.article()
+    assert env.articles.auto_mark_read([]) == 0
+    assert env.articles.auto_mark_read([article, article]) == 1
+    first = env.articles.get(article).read_at
+    env.clock.advance(minutes=5)
+    assert (
+        env.articles.auto_mark_read([article]) == 0 and env.articles.get(article).read_at == first
+    )
+
+
+def test_marking_unread_pins_the_article_even_when_it_was_never_read(env):
+    article = env.article()
+    assert keep(env, article) is False
+    assert env.articles.mark_unread(article) is True  # 아직 안 읽은 글도 고정된다
+    assert keep(env, article) is True
+    assert env.articles.mark_unread(article) is False  # 이미 고정되어 바뀔 것이 없다
+
+
+def test_reading_it_myself_releases_the_pin_and_makes_it_auto_readable_again(env):
+    article = env.article()
+    env.articles.mark_unread(article)
+    assert env.articles.mark_read(article) is True
+    assert keep(env, article) is False and env.articles.get(article).read_at is not None
+    env.articles.mark_unread(article)
+    assert keep(env, article) is True and env.articles.get(article).read_at is None
+
+
+def test_the_read_all_button_is_an_explicit_action_and_releases_pins_too(env):
+    pinned = env.article(env.a)
+    env.articles.mark_unread(pinned)
+    assert env.reader.mark_all_read(feed_id=env.a) == 1
+    assert env.articles.get(pinned).read_at is not None and keep(env, pinned) is False
+
+
+def test_listed_articles_report_the_pin(env):
+    pinned = env.article(title="Pinned", minutes=1)
+    env.article(title="Free", minutes=2)
+    env.articles.mark_unread(pinned)
+    items = {i.title: i for i in env.reader.list_articles().items}
+    assert (items["Pinned"].keep_unread, items["Free"].keep_unread) == (True, False)
+
+
+def test_a_pinned_article_stays_unread_in_the_counts(env):
+    article = env.article(env.a)
+    env.articles.mark_read(article)
+    env.articles.mark_unread(article)
+    assert next(f for f in env.reader.sidebar().feeds if f.id == env.a).unread == 1

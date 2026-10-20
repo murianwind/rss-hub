@@ -28,6 +28,7 @@ class ListedArticle:
     topics: tuple[str, ...]
     read: bool
     bookmarked: bool
+    keep_unread: bool = False  # 사용자가 안 읽음으로 고정(자동 읽음 처리에서 빠진다)
 
 
 @dataclass(frozen=True)
@@ -155,7 +156,7 @@ class ReaderRepository:
         select = (
             "SELECT a.id, a.feed_id, f.name AS feed_name, "
             "COALESCE(a.title_ko, a.title) AS title, a.summary_ko, a.published_dt, a.status, "
-            "a.read_at, a.bookmarked_at "
+            "a.read_at, a.bookmarked_at, a.keep_unread "
             f"{source} WHERE {where} ORDER BY a.published_dt DESC, a.id DESC LIMIT ? OFFSET ?"
         )
         with self._db.connect() as conn:
@@ -202,7 +203,7 @@ class ReaderRepository:
         now = self._clock.now().astimezone(UTC).isoformat()
         with self._db.connect() as conn:
             return conn.execute(
-                "UPDATE articles SET read_at = ? WHERE read_at IS NULL AND id IN "
+                "UPDATE articles SET read_at = ?, keep_unread = 0 WHERE read_at IS NULL AND id IN "
                 f"(SELECT a.id FROM articles a JOIN feeds f ON f.id = a.feed_id WHERE {where})",
                 [now, *params],
             ).rowcount
@@ -301,4 +302,5 @@ def _listed(row: sqlite3.Row, topics: tuple[str, ...]) -> ListedArticle:
         topics=topics,
         read=row["read_at"] is not None,
         bookmarked=row["bookmarked_at"] is not None,
+        keep_unread=bool(row["keep_unread"]),
     )

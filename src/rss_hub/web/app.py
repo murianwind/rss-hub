@@ -39,6 +39,7 @@ from rss_hub.storage.job_runs import JobRunRepository
 from rss_hub.storage.llm_usage import LlmUsageRepository
 from rss_hub.storage.models import ModelRepository
 from rss_hub.storage.ordering import OrderRepository
+from rss_hub.storage.overview import OverviewRepository
 from rss_hub.storage.reader import ReaderRepository
 from rss_hub.storage.topics import TopicRepository
 from rss_hub.version import get_version
@@ -199,7 +200,11 @@ def create_app(
         feeds=feeds, articles=articles, fetcher=fetcher, settings=service, clock=app_clock
     )
     app.include_router(build_live_router(reader=reader, feeds=feeds, collector=collector))
-    app.include_router(build_feed_router(feeds, service, templates, registration))
+    app.include_router(
+        build_feed_router(
+            feeds, service, templates, registration, OverviewRepository(database), app_clock
+        )
+    )
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 

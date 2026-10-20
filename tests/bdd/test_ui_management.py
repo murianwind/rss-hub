@@ -335,25 +335,34 @@ def _refused_with_reason(world, ctx, feed):
 # ---------- 설정 탭 ----------
 
 
-@when(parsers.re(r'설정 탭 "(?P<tab>[^"]+)"을 연다'))
-def _open_tab(world, ctx, tab):
-    ctx.tab = tab
-    ctx.response = world.get(f"/settings/{tab}")
+def acc_section(html, name):
+    return html.split(f'<details class="acc" id="acc-{name}"')[1].split("</details>")[0]
 
 
-@then(parsers.re(r'"(?P<shown>[^"]+)"이 보이고 "(?P<hidden>[^"]+)"은 보이지 않는다'))
-def _tab_content(ctx, shown, hidden):
-    assert shown in ctx.response.text and hidden not in ctx.response.text
+@when("설정 화면을 연다")
+def _open_settings(world, ctx):
+    ctx.response = world.get("/settings")
 
 
-@when(parsers.re(r'그 탭에서 설정 "(?P<key>[^"]+)"를 "(?P<value>[^"]+)"로 저장한다'))
-def _save_tab(world, ctx, key, value):
-    ctx.response = post(world, "/settings", next=f"/settings/{ctx.tab}", **{key: value})
+@then(
+    parsers.re(
+        r'"(?P<shown>[^"]+)"은 "(?P<section>[^"]+)" 구역에 있고 '
+        r'"(?P<hidden>[^"]+)"은 그 구역에 없다'
+    )
+)
+def _section_content(ctx, shown, section, hidden):
+    body = acc_section(ctx.response.text, section)
+    assert shown in body and hidden not in body
 
 
-@then(parsers.re(r'같은 탭으로 돌아와 "(?P<message>[^"]+)" 알림이 보인다'))
-def _back_to_tab(world, ctx, message):
-    assert ctx.response.headers["location"] == f"/settings/{ctx.tab}?toast=saved"
+@when(parsers.re(r'설정 "(?P<key>[^"]+)"를 "(?P<value>[^"]+)"로 저장한다'))
+def _save_setting(world, ctx, key, value):
+    ctx.response = post(world, "/settings", next="/settings", **{key: value})
+
+
+@then(parsers.re(r'설정 화면으로 돌아와 "(?P<message>[^"]+)" 알림이 보인다'))
+def _back_to_settings(world, ctx, message):
+    assert ctx.response.headers["location"] == "/settings?toast=saved"
     assert message in world.get(ctx.response.headers["location"]).text
 
 
@@ -365,7 +374,7 @@ def _save_display(world):
 @then("읽기 화면과 글 페이지와 설정 화면의 틀에 어두운 테마와 큰 글자가 지정된다")
 def _display_applied(world):
     article = world.article()
-    for path in ("/reader", f"/a/{article}", "/settings/general"):
+    for path in ("/reader", f"/a/{article}", "/settings"):
         assert 'data-theme="dark" data-font="large"' in world.get(path).text, path
 
 

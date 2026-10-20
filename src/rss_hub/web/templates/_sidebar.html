@@ -21,7 +21,7 @@
           <li><a class="nav-item" href="/reader" title="전체 글" {% if scope_kind == 'all' %}aria-current="page"{% endif %}>{{ icon('list') }}<span class="sb-text">전체 글</span>{{ badge('all', ui_side.all_unread, 0) }}</a></li>
           <li><a class="nav-item" href="/reader/bookmarks" title="북마크" {% if scope_kind == 'bookmarks' %}aria-current="page"{% endif %}>{{ icon('bookmark') }}<span class="sb-text">북마크</span>{{ badge('bookmarks', 0, ui_side.bookmarks) }}</a></li>
           {% for f in ui_side.feeds %}
-          <li class="nav-row" draggable="true" data-drag-kind="feed" data-drag-id="{{ f.id }}">{{ grip() }}{{ dot(f) }}<a class="nav-item" href="/reader/feed/{{ f.id }}" {% if scope_kind == 'feed' and scope_id == f.id %}aria-current="page"{% endif %}><span class="sb-text">{{ f.name }}</span>{{ badge('feed:' ~ f.id, f.unread, f.total) }}</a>{{ refresh(f.id) }}{{ actions('feed', f.id) }}</li>
+          <li class="nav-row" draggable="true" data-drag-kind="feed" data-drag-id="{{ f.id }}">{{ grip() }}{{ dot(f) }}<a class="nav-item" href="/reader/feed/{{ f.id }}" title="{{ f.name }}" {% if scope_kind == 'feed' and scope_id == f.id %}aria-current="page"{% endif %}><span class="sb-text">{{ f.name }}</span>{{ badge('feed:' ~ f.id, f.unread, f.total) }}</a>{{ refresh(f.id) }}{{ actions('feed', f.id) }}</li>
           {% else %}<li class="empty-note">등록된 피드가 없습니다.</li>{% endfor %}
         </ul>
       </details>
@@ -34,7 +34,7 @@
           <details class="tree" id="tree-{{ c.id }}" draggable="true" data-drag-kind="category" data-drag-id="{{ c.id }}" {% if (scope_kind == 'category' and scope_id == c.id) or (scope_kind == 'feed' and c.feeds | selectattr('id', 'equalto', scope_id) | list) %}open{% endif %}>
             <summary data-drop-category="{{ c.id }}">{{ grip() }}{{ icon('chevron-right', 'chev') }}<a class="nav-item" href="/reader/category/{{ c.id }}" {% if scope_kind == 'category' and scope_id == c.id %}aria-current="page"{% endif %}><span class="sb-text">{{ c.name }}</span>{{ badge('category:' ~ c.id, c.unread, c.total) }}</a>{{ actions('category', c.id) }}</summary>
             <ul class="tree-body">
-              {% for f in c.feeds %}<li class="nav-row" draggable="true" data-drag-kind="feed" data-drag-id="{{ f.id }}">{{ dot(f) }}<a class="nav-item" href="/reader/feed/{{ f.id }}" {% if scope_kind == 'feed' and scope_id == f.id %}aria-current="page"{% endif %}><span class="sb-text">{{ f.name }}</span>{{ badge('feed:' ~ f.id, f.unread, f.total) }}</a>{{ refresh(f.id) }}{{ actions('feed', f.id) }}</li>
+              {% for f in c.feeds %}<li class="nav-row" draggable="true" data-drag-kind="feed" data-drag-id="{{ f.id }}">{{ dot(f) }}<a class="nav-item" href="/reader/feed/{{ f.id }}" title="{{ f.name }}" {% if scope_kind == 'feed' and scope_id == f.id %}aria-current="page"{% endif %}><span class="sb-text">{{ f.name }}</span>{{ badge('feed:' ~ f.id, f.unread, f.total) }}</a>{{ refresh(f.id) }}{{ actions('feed', f.id) }}</li>
               {% else %}<li class="empty-note">이 카테고리에 사이트가 없습니다.</li>{% endfor %}
             </ul>
           </details>

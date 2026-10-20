@@ -36,7 +36,7 @@
     {% else %}<p class="empty">아직 글이 없습니다. 피드를 추가하면 첫 점검 뒤에 최근 글이 나타나고, 새 글은 올라오는 대로 쌓입니다.</p>{% endif %}
   {% else %}
   {% for item in page.items %}
-  <article class="card{% if not item.read %} unread{% endif %}">
+  <article class="card{% if not item.read %} unread{% endif %}" data-id="{{ item.id }}"{% if item.keep_unread %} data-keep="1"{% endif %}>
     <div class="card-top">
       <a class="chip" href="/reader/feed/{{ item.feed_id }}">{{ item.feed_name }}</a>
       {% for name in item.topics %}<span class="chip topic"># {{ name }}</span>{% endfor %}
@@ -50,6 +50,11 @@
           <input type="hidden" name="on" value="{{ 0 if item.bookmarked else 1 }}">
           <input type="hidden" name="next" value="{{ back }}">
           <button type="submit" class="link-btn{% if item.bookmarked %} on{% endif %}" aria-pressed="{{ 'true' if item.bookmarked else 'false' }}">{{ icon('bookmark', 'fill' if item.bookmarked else '') }}{{ '북마크 해제' if item.bookmarked else '북마크' }}</button>
+        </form>
+        <form method="post" action="/a/{{ item.id }}/read" data-read-toggle="{{ item.id }}">
+          <input type="hidden" name="state" value="{{ 'unread' if item.read else 'read' }}">
+          <input type="hidden" name="next" value="{{ back }}">
+          <button type="submit" class="link-btn" title="{{ '안 읽음으로 바꾸면 스크롤해도 자동으로 읽음 처리되지 않습니다' if item.read else '읽음으로 표시합니다' }}">{{ '안 읽음으로 표시' if item.read else '읽음으로 표시' }}</button>
         </form>
         {% if scope.kind == 'topic' %}
         <form method="post" action="/a/{{ item.id }}/topics/{{ scope.ident }}/reject">

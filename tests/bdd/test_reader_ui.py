@@ -13,7 +13,7 @@ from tests.bdd.binding import bind
 from tests.fakes.viewer_world import BASE, World
 from tests.fakes.web_parts import start_app
 
-bind(globals(), "15_reader_ui.feature", [f"RUI-{n:02d}" for n in range(1, 13)])
+bind(globals(), "15_reader_ui.feature", [f"RUI-{n:02d}" for n in range(1, 18)])
 
 BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 FILTERS = {"전체": "", "안 읽은 글": "unread", "북마크": "bookmarks"}
@@ -387,7 +387,7 @@ def _opened(ctx, open):
 
 @then("사이드바는 접힌 상태로 그려진다")
 def _collapsed(ctx):
-    assert '<body class="app sidebar-collapsed">' in ctx.response.text
+    assert '<body class="app sidebar-collapsed" data-auto-read="on">' in ctx.response.text
 
 
 @then("사이드바는 펼쳐진 상태로 그려진다")
@@ -408,3 +408,84 @@ def _policy(ctx):
     policy = ctx.pages[0].headers["content-security-policy"]
     assert "script-src 'self'" in policy and "style-src 'self'" in policy
     assert "unsafe-inline" not in policy and "unsafe-eval" not in policy
+
+
+# ---------- 자동 읽음, 읽음 버튼, 폭 ----------
+
+
+@given(parsers.re(r'사이트 "(?P<feed>[^"]+)"에 새 글 "(?P<a>[^"]+)"와 "(?P<b>[^"]+)"가 있다'))
+def _two_articles_wa(world, ctx, feed, a, b):
+    for title in (a, b):
+        ctx.ids[title] = world.article(feed_id(world, feed), len(ctx.ids), title=title)
+    ctx.feed = feed
+
+
+@given(parsers.re(r'글 "(?P<title>[^"]+)"를 안 읽음으로 바꿨다'))
+def _pin(world, ctx, title):
+    post(world, "/ui/read-state", id=str(ctx.ids[title]), state="unread")
+
+
+@when("스크롤로 두 글이 모두 지나가서 화면이 자동 읽음을 요청한다")
+def _auto_read(world, ctx):
+    ctx.response = post(world, "/ui/auto-read", ids=",".join(str(i) for i in ctx.ids.values()))
+
+
+@then(parsers.re(r'글 "(?P<read>[^"]+)"만 읽음이 되고 글 "(?P<kept>[^"]+)"는 계속 안 읽음이다'))
+def _only_one_read(world, ctx, read, kept):
+    assert world.articles.get(ctx.ids[read]).read_at is not None
+    assert world.articles.get(ctx.ids[kept]).read_at is None
+
+
+@then(parsers.re(r'사이드바의 "(?P<feed>[^"]+)" 옆에 안 읽은 글 (?P<n>\d+)이 보인다'))
+def _sidebar_unread(world, feed, n):
+    assert sidebar_count(world.get("/reader").text, re.escape(feed)) == (True, int(n))
+
+
+@when(parsers.re(r'글 "(?P<title>[^"]+)"의 읽음 버튼을 누른다'))
+def _read_button(world, ctx, title):
+    ctx.response = post(world, "/ui/read-state", id=str(ctx.ids[title]), state="read")
+
+
+@then(parsers.re(r'글 "(?P<title>[^"]+)"는 읽음이고 안 읽음 고정은 풀렸다'))
+def _released(world, ctx, title):
+    assert world.articles.get(ctx.ids[title]).read_at is not None
+    with world.parts.db.connect() as conn:
+        pinned = conn.execute(
+            "SELECT keep_unread FROM articles WHERE id = ?", (ctx.ids[title],)
+        ).fetchone()[0]
+    assert pinned == 0
+    post(world, "/ui/read-state", id=str(ctx.ids[title]), state="unread")
+    post(world, "/ui/read-state", id=str(ctx.ids[title]), state="read")  # 다시 읽음으로 돌려 둔다
+
+
+@then("응답에는 갱신된 사이드바 개수가 들어 있다")
+def _counts_in_response(world, ctx):
+    state = ctx.response.json()["state"]
+    assert state["feeds"][str(world.f_free)]["unread"] == 1 and state["all_unread"] == 1
+
+
+@then("읽기 화면은 자동 읽음이 켜져 있다고 알린다")
+def _auto_on(world, ctx):
+    assert 'data-auto-read="on"' in world.get("/reader").text
+
+
+@when("설정에서 스크롤 자동 읽음을 끈다")
+def _auto_off(world):
+    assert post(world, "/settings", ui_auto_read="off", next="/settings").status_code == 303
+
+
+@then("읽기 화면은 자동 읽음이 꺼져 있다고 알린다")
+def _auto_is_off(world):
+    assert 'data-auto-read="off"' in world.get("/reader").text
+
+
+@given(parsers.re(r'브라우저에 사이드바 폭 "(?P<value>[^"]*)"가 기억되어 있다'))
+def _remember_width(world, value):
+    world.client.cookies.set("sbw", value)
+
+
+@then(parsers.re(r'사이드바 폭 클래스는 "(?P<expected>[^"]+)"이다'))
+def _width_class(ctx, expected):
+    body = ctx.response.text.split("<body")[1].split(">")[0]
+    classes = re.findall(r"sw-\d+", body)
+    assert classes == ([] if expected == "없음" else [expected])

@@ -1,104 +1,59 @@
 {% extends "base.html" %}
-{% block title %}피드 · RSS Hub{% endblock %}
+{% block title %}피드 관리 · RSS Hub{% endblock %}
 {% block content %}
-<h1>피드</h1>
+<h1>피드 관리</h1>
 
 {% if notice %}<div class="banner" role="status">{{ notice }}</div>{% endif %}
 {% if error %}<div class="banner error" role="alert">{{ error }}</div>{% endif %}
 
-<h2>피드 추가</h2>
-<form method="post" action="/feeds/discover" class="panel">
-  <p class="note">피드 주소나 웹사이트 주소를 넣으면 확인합니다. 웹사이트 주소면 그 페이지가 알려 준 피드를 찾아서 보여 줍니다. 사설망(192.168.x.x, localhost 등) 주소는 허용하지 않습니다.</p>
-  <div class="field">
-    <label for="discover_url">주소</label>
-    <input id="discover_url" name="url" value="{{ discover_url }}" placeholder="https://example.com/ 또는 https://example.com/feed.xml" maxlength="2048">
-  </div>
-  <div class="row"><button type="submit" class="primary">확인</button></div>
-</form>
+<p class="note">수집 주기는 원본 사이트의 게시 활동량에 따라 <strong>자동으로 가변 배정</strong>됩니다. 수집은 {{ interval }}분마다 돌고, 활동이 많은 피드는 시간당 최대 3회, 조용한 피드는 1회 점검합니다. 활동량은 피드를 점검할 때마다 새로 계산합니다. 피드 추가는 사이드바의 RSS 피드 <b>+</b>에서 합니다.</p>
 
-{% if discovery and discovery.candidates %}
-<h3>찾은 피드</h3>
-{% for c in discovery.candidates %}
-<form method="post" action="/feeds/register" class="panel">
-  <input type="hidden" name="url" value="{{ c.url }}">
-  <p><strong>{{ c.title }}</strong><br><span class="hint">{{ c.url }}</span></p>
-  <div class="field">
-    <label for="reg_name_{{ loop.index }}">이름</label>
-    <input id="reg_name_{{ loop.index }}" name="name" value="{{ c.title }}" maxlength="200">
-  </div>
-  <div class="field">
-    <label for="reg_cat_{{ loop.index }}">카테고리</label>
-    <select id="reg_cat_{{ loop.index }}" name="category_id">
-      <option value="">없음</option>
-      {% for cat in categories %}<option value="{{ cat.id }}">{{ cat.name }}</option>{% endfor %}
-    </select>
-  </div>
-  <div class="field">
-    <label for="reg_wh_{{ loop.index }}">웹훅 <span class="hint">카테고리가 없을 때만</span></label>
-    <select id="reg_wh_{{ loop.index }}" name="webhook_id">
-      <option value="">지정 안 함(기본 웹훅)</option>
-      {% for w in webhooks %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}
-    </select>
-  </div>
-  <div class="row"><button type="submit" class="primary">등록</button></div>
-</form>
-{% endfor %}
-{% endif %}
-
-<h2>구독 목록 <span class="hint">{{ feeds | length }}개</span></h2>
-<p class="note">웹훅을 지정한 피드의 알림은 그 웹훅으로 가고 기본 웹훅에서는 빠집니다. 카테고리에 속한 피드는 카테고리의 웹훅을 따르며, 피드마다 웹훅을 지정할 수 없습니다. 카테고리에서 빼면 다시 지정할 수 있습니다.</p>
-<p><a href="/feeds/export.opml">OPML로 내보내기</a> · <a href="/import">OPML 가져오기</a> · <a href="/categories">카테고리 관리</a></p>
-
-{% for f in feeds %}
-<div class="panel">
-  <p><strong>{{ f.name }}</strong>
-    {% if f.status == 'baseline_pending' %}<span class="hint">첫 점검 대기</span>{% endif %}
-    {% if f.fail_count %}<span class="hint">연속 실패 {{ f.fail_count }}회{% if f.last_error %}: {{ f.last_error }}{% endif %}</span>{% endif %}
-    <br><span class="hint">{{ f.url }}</span>
-    {% if f.id in checked %}<br><span class="hint">마지막 점검 {{ checked[f.id] }}</span>{% endif %}</p>
-  <form method="post" action="/feeds/{{ f.id }}/category" class="field">
-    <label for="cat_{{ f.id }}">카테고리</label>
-    <select id="cat_{{ f.id }}" name="category_id">
-      <option value="">없음</option>
-      {% for c in categories %}<option value="{{ c.id }}" {% if f.category_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
-    </select>
-    <button type="submit">저장</button>
-  </form>
-  {% if f.category_id %}
-  <p class="hint">웹훅: 카테고리 '{{ category_names[f.category_id] }}'의 설정을 따릅니다.</p>
-  {% else %}
-  <form method="post" action="/feeds/{{ f.id }}/webhook" class="field">
-    <label for="wh_{{ f.id }}">웹훅</label>
-    <select id="wh_{{ f.id }}" name="webhook_id">
-      <option value="">지정 안 함(기본 웹훅)</option>
-      {% for w in webhooks %}<option value="{{ w.id }}" {% if f.webhook_id == w.id %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
-    </select>
-    <button type="submit">저장</button>
-  </form>
-  {% endif %}
-  <details>
-    <summary>편집, 삭제</summary>
-    <form method="post" action="/feeds/{{ f.id }}/edit">
-      <div class="field"><label for="name_{{ f.id }}">이름</label>
-        <input id="name_{{ f.id }}" name="name" value="{{ f.name }}" maxlength="200"></div>
-      <div class="field"><label for="emoji_{{ f.id }}">머리말 이모지</label>
-        <input id="emoji_{{ f.id }}" name="emoji" value="{{ f.emoji }}" maxlength="8"></div>
-      <div class="field"><label for="prio_{{ f.id }}">점검 우선순위</label>
-        <select id="prio_{{ f.id }}" name="priority">
-          <option value="normal" {% if f.poll_priority == 'normal' %}selected{% endif %}>보통</option>
-          <option value="every_slot" {% if f.poll_priority == 'every_slot' %}selected{% endif %}>매 슬롯</option>
-        </select></div>
-      <div class="field"><label for="max_{{ f.id }}">최대 검사 항목 수 <span class="hint">비워 두면 기본값 {{ default_max_entries }}</span></label>
-        <input id="max_{{ f.id }}" name="max_entries" value="{{ f.max_entries if f.max_entries else '' }}" maxlength="3"></div>
-      <div class="row"><button type="submit" class="primary">저장</button></div>
-    </form>
-    <form method="post" action="/feeds/{{ f.id }}/delete" class="row">
-      <label class="check-row"><input type="checkbox" name="confirm" value="yes">이 피드와 수집한 글을 삭제합니다</label>
-      <button type="submit" class="danger">삭제</button>
-    </form>
-  </details>
+<div class="feed-tools">
+  <nav class="chips" aria-label="상태로 거르기">
+    <a class="chip-link{% if not state %} on{% endif %}" href="/feeds">전체 {{ counts.all }}</a>
+    <a class="chip-link{% if state == 'ok' %} on{% endif %}" href="/feeds?state=ok"><span class="state-dot ok"></span>정상 {{ counts.ok }}</a>
+    <a class="chip-link{% if state == 'error' %} on{% endif %}" href="/feeds?state=error"><span class="state-dot error"></span>오류 {{ counts.error }}</a>
+    <a class="chip-link{% if state == 'never' %} on{% endif %}" href="/feeds?state=never"><span class="state-dot never"></span>수집 전 {{ counts.never }}</a>
+  </nav>
+  <span class="row">
+    <a class="button" href="/import">OPML 가져오기</a>
+    <a class="button" href="/feeds/export.opml">OPML 내보내기</a>
+    <a class="button" href="/categories">카테고리 관리</a>
+  </span>
 </div>
+
+<ul class="feed-list">
+{% for r in rows %}
+  {% set f = r.feed %}
+  <li class="feed-row">
+    <div class="feed-head">
+      <span class="state-dot {{ f.state }}" data-state="{{ f.id }}" role="img" aria-label="{{ {'ok': '정상', 'error': '오류', 'never': '아직 수집 전'}[f.state] }}" title="{{ ('오류: ' ~ f.last_error) if f.state == 'error' else ('정상' if f.state == 'ok' else '아직 수집 전') }}"></span>
+      <a class="feed-name" href="/reader/feed/{{ f.id }}">{{ f.emoji }} {{ f.name }}</a>
+      <span class="count{% if f.unread %} unread{% endif %}" data-count="feed:{{ f.id }}"{% if not f.unread and not f.total %} hidden{% endif %}>{% if f.unread %}{{ f.unread }}{% elif f.total %}{{ f.total }}{% endif %}</span>
+      <span class="row-actions feed-actions">
+        <button type="button" class="icon-btn mini" data-refresh="{{ f.id }}" title="지금 다시 읽기" aria-label="지금 다시 읽기">{{ icon('refresh') }}</button>
+        <a class="icon-btn mini" href="/panel/settings/feed/{{ f.id }}?next=/feeds" data-panel title="설정" aria-label="설정">{{ icon('gear') }}</a>
+        <a class="icon-btn mini" href="/panel/delete/feed/{{ f.id }}?next=/feeds" data-panel title="삭제" aria-label="삭제">{{ icon('minus') }}</a>
+      </span>
+    </div>
+    <dl class="facts">
+      <dt>주소</dt><dd><a href="{{ f.url }}" target="_blank" rel="noopener noreferrer">{{ f.url }}</a>{% if f.site_url %} · <a href="{{ f.site_url }}" target="_blank" rel="noopener noreferrer">사이트</a>{% endif %}</dd>
+      <dt>수집 주기</dt>
+      <dd>{% if r.cycle %}<strong>{{ r.cycle }}</strong> · 매시 {{ r.minutes }}{% if r.next %} · 다음 점검 {{ r.next }}{% endif %}
+        {% if r.short %}<span class="hint">(활동량으로는 시간당 {{ r.wanted }}회지만 이번 시간의 점검 용량이 모자라 줄었습니다)</span>{% endif %}
+        {% else %}<span class="hint">다음 정각에 배정됩니다</span>{% endif %}</dd>
+      <dt>활동량</dt>
+      <dd>오늘 {{ f.today_count }}개 · 최근 7일 {{ f.recent_count_7d }}개{% if f.last_published %} · 마지막 게시 {{ f.last_published | ago(ui_now, ui_zone) }}{% else %} · 게시 기록 없음{% endif %}</dd>
+      <dt>마지막 점검</dt>
+      <dd>{% if f.last_checked_at %}{{ f.last_checked_at | ago(ui_now, ui_zone) }}{% else %}아직 점검하지 않았습니다{% endif %}
+        {% if f.state == 'error' %}<span class="error-text"> · 연속 실패 {{ f.fail_count }}회: {{ f.last_error }}</span>{% elif f.state == 'ok' %} · 정상{% endif %}
+        {% if f.status == 'baseline_pending' %}<span class="hint"> · 첫 점검 대기(점검 뒤 새 글부터 알림이 갑니다)</span>{% endif %}</dd>
+      <dt>분류와 알림</dt><dd>{{ f.category_name if f.category_name else '카테고리 없음' }} · {{ r.alert }}</dd>
+      <dt>글</dt><dd>수집한 글 {{ f.total }}개{% if f.unread %}(안 읽은 글 {{ f.unread }}개){% endif %} · 점검할 최대 항목 수 {{ f.max_entries if f.max_entries else default_max_entries ~ '(기본값)' }}</dd>
+    </dl>
+  </li>
 {% else %}
-<p class="hint">등록된 피드가 없습니다. 위에서 추가하거나 <a href="/import">OPML 가져오기</a>를 이용하세요.</p>
+  <li class="empty">{% if state %}이 상태의 피드가 없습니다.{% else %}등록된 피드가 없습니다. 사이드바의 RSS 피드 <b>+</b>로 추가하거나 <a href="/import">OPML 가져오기</a>를 이용하세요.{% endif %}</li>
 {% endfor %}
+</ul>
 {% endblock %}

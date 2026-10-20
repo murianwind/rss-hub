@@ -52,24 +52,19 @@ SETTING_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     ("알림", ("alert_cooldown_hours",)),
-    ("디스플레이", ("ui_theme", "ui_font_size")),
+    ("디스플레이", ("ui_theme", "ui_font_size", "ui_auto_read")),
 )
 
 
-# 설정 탭: (이름, 보여 줄 그룹, 보여 줄 구역). 탭 없이 /settings로 열면 전부 보여 준다(전체)
-TABS: dict[str, tuple[str, tuple[str, ...], frozenset[str]]] = {
-    "general": ("일반 설정", ("일반", "주기", "수집과 보관"), frozenset({"suggestion", "audit"})),
-    "notifications": ("알림 설정", ("알림",), frozenset({"webhooks", "roles"})),
-    "llm": ("LLM · 모델", ("LLM",), frozenset({"key"})),
-    "display": ("디스플레이 및 테마", ("디스플레이",), frozenset()),
-}
-ALL_SECTIONS = frozenset({"suggestion", "audit", "key", "webhooks", "roles"})
-
-
-def _tab_of(form: object) -> str:
-    """폼이 보낸 돌아갈 곳(next)에서 어느 탭에서 온 요청인지 알아낸다. 탭이 아니면 전체."""
-    value = str(form.get("next", ""))  # type: ignore[attr-defined]
-    return next((key for key in TABS if value == f"/settings/{key}"), "all")
+# 설정 화면의 아코디언 구역: (id, 제목, 이 구역에 들어가는 설정 그룹). 위에서 아래로 쓰는 순서다
+ACCORDIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("general", "서비스 주소와 시간대", ("일반",)),
+    ("collect", "수집과 보관", ("주기", "수집과 보관")),
+    ("llm", "LLM: 키, 모델, 호출 한도", ("LLM",)),
+    ("alerts", "알림: 웹훅과 시스템 알림", ("알림",)),
+    ("display", "화면: 테마, 글자 크기, 읽음 처리", ("디스플레이",)),
+)
+SECTION_ACCORDION = {"openrouter_key": "llm", "webhook": "alerts", "roles": "alerts"}
 
 
 def _suggest_base_url(request: Request) -> str | None:
@@ -138,13 +133,16 @@ def build_admin_router(
         snapshot = service.snapshot()
         values = {**service.raw_values(), **(form_values or {})}
         by_key = {d.key: d for d in SETTING_DEFS}
-        tab = getattr(request.state, "settings_tab", "all")
-        wanted = TABS[tab][1] if tab in TABS else None
-        groups = [
-            (title, [by_key[key] for key in keys])
-            for title, keys in SETTING_GROUPS
-            if wanted is None or title in wanted
-        ]
+        groups = [(title, [by_key[key] for key in keys]) for title, keys in SETTING_GROUPS]
+        group_accordion = {title: acc for acc, _, titles in ACCORDIONS for title in titles}
+        opened = {"general"}
+        for title, keys in SETTING_GROUPS:
+            if any(key in (errors or {}) for key in keys):
+                opened.add(group_accordion[title])
+        if section_error is not None:
+            opened.add(SECTION_ACCORDION.get(section_error[0], "general"))
+        if test_result is not None:
+            opened.add("llm" if "키" in test_result[1] else "alerts")
         audit = [
             {
                 "time": e.changed_at.astimezone(snapshot.timezone).strftime("%Y-%m-%d %H:%M"),
@@ -169,10 +167,8 @@ def build_admin_router(
             "audit": audit,
             "webhook_name": webhook_name,
             "test_result": test_result,
-            "tab": tab,
-            "tab_title": TABS[tab][0] if tab in TABS else "설정",
-            "tab_path": f"/settings/{tab}" if tab in TABS else "",
-            "show": TABS[tab][2] if tab in TABS else ALL_SECTIONS,
+            "accordions": ACCORDIONS,
+            "opened": opened,
         }
         return templates.TemplateResponse(
             request, "settings.html", context, status_code=status_code
@@ -228,20 +224,9 @@ def build_admin_router(
     def settings_page(request: Request, saved: str = "") -> HTMLResponse:
         return render_settings(request, notice="저장했습니다" if saved else "")
 
-    def add_tab_route(tab: str) -> None:
-        # 탭마다 정해진 주소만 만든다(/settings/webhooks 같은 저장 경로와 겹치지 않게)
-        @router.get(f"/settings/{tab}", response_class=HTMLResponse)
-        def settings_tab(request: Request) -> Response:
-            request.state.settings_tab = tab
-            return render_settings(request)
-
-    for tab_key in TABS:
-        add_tab_route(tab_key)
-
     @router.post("/settings", response_class=HTMLResponse)
     async def save_settings(request: Request) -> Response:
         form = await request.form()
-        request.state.settings_tab = _tab_of(form)
         submitted = {k: str(v) for k, v in form.items() if k in SETTING_BY_KEY}
         result = service.update(submitted)
         if result.errors:
@@ -253,7 +238,6 @@ def build_admin_router(
     @router.post("/settings/openrouter-key", response_class=HTMLResponse)
     async def save_key(request: Request) -> Response:
         form = await request.form()
-        request.state.settings_tab = _tab_of(form)
         try:
             service.set_openrouter_key(str(form.get("openrouter_key", "")))
         except SettingError as error:
@@ -263,7 +247,6 @@ def build_admin_router(
     @router.post("/settings/openrouter-key/delete", response_class=HTMLResponse)
     async def delete_key(request: Request) -> Response:
         form = await request.form()
-        request.state.settings_tab = _tab_of(form)
         if form.get("confirm") != "yes":
             return error_page(request, "openrouter_key", CONFIRM_MESSAGE)
         service.delete_openrouter_key()
@@ -272,7 +255,6 @@ def build_admin_router(
     @router.post("/settings/webhooks", response_class=HTMLResponse)
     async def add_webhook(request: Request) -> Response:
         form = await request.form()
-        request.state.settings_tab = _tab_of(form)
         name = str(form.get("name", ""))
         try:
             service.add_webhook(name, str(form.get("url", "")))
@@ -283,7 +265,6 @@ def build_admin_router(
     @router.post("/settings/webhooks/{webhook_id}/delete", response_class=HTMLResponse)
     async def delete_webhook(request: Request, webhook_id: int) -> Response:
         form = await request.form()
-        request.state.settings_tab = _tab_of(form)
         if form.get("confirm") != "yes":
             return error_page(request, "webhook", CONFIRM_MESSAGE)
         service.delete_webhook(webhook_id)
@@ -292,7 +273,6 @@ def build_admin_router(
     @router.post("/settings/webhooks/{webhook_id}/test", response_class=HTMLResponse)
     async def test_webhook(request: Request, webhook_id: int) -> Response:
         """선택한 웹훅으로 시험 메시지 한 건만 보낸다. 결과 화면에 웹훅 주소는 나타나지 않는다."""
-        request.state.settings_tab = _tab_of(await request.form())
         url = service.get_webhook_url(webhook_id)
         name = next((w.name for w in service.list_webhooks() if w.id == webhook_id), "")
         if url is None:
@@ -312,7 +292,6 @@ def build_admin_router(
     @router.post("/settings/openrouter-key/check", response_class=HTMLResponse)
     async def check_key(request: Request) -> Response:
         """키 정보만 조회한다(채팅 호출이 아니라서 호출 한도와 오늘 호출 수를 쓰지 않는다)."""
-        request.state.settings_tab = _tab_of(await request.form())
         check = llm_client.check_key()
         if check.valid:
             usage_text = (
@@ -327,7 +306,6 @@ def build_admin_router(
     @router.post("/settings/webhook-roles", response_class=HTMLResponse)
     async def save_roles(request: Request) -> Response:
         form = await request.form()
-        request.state.settings_tab = _tab_of(form)
         try:
             service.set_webhook_roles(
                 default_id=_parse_role(str(form.get("default_id", ""))),

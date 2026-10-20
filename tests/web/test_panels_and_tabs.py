@@ -267,109 +267,125 @@ def test_the_panel_return_address_follows_the_current_list_and_drops_unknown_par
     assert "toast%3D" not in html and "x%3D1" not in html
 
 
-# ---------- 설정 탭 ----------
+# ---------- 설정: 아코디언 한 페이지 ----------
 
 
-def test_each_tab_shows_only_its_own_sections(world):
-    general = world.get("/settings/general").text
-    assert "서비스 시간대" in general and "변경 이력" in general
-    for absent in ("OpenRouter 키", "웹훅 역할", 'id="ui_theme"', "모델 체인"):
-        assert absent not in general
-    notifications = world.get("/settings/notifications").text
-    assert (
-        "<h2>웹훅</h2>" in notifications
-        and "alert_cooldown_hours" in notifications
-        and "OpenRouter 키" not in notifications
-        and "llm_daily_cap" not in notifications
+def section(html, acc_id):
+    """설정 화면의 아코디언 구역 하나."""
+    return html.split(f'<details class="acc" id="acc-{acc_id}"')[1].split("</details>")[0]
+
+
+def test_the_settings_are_one_page_of_accordions_in_a_logical_order(world):
+    html = world.get("/settings").text
+    ids = re.findall(r'<details class="acc" id="acc-(\w+)"', html)
+    assert ids == ["general", "collect", "llm", "alerts", "display", "audit"]
+    titles = re.findall(r"<summary><span>(\d)\. ([^<]+)</span>", html)
+    assert [n for n, _ in titles] == ["1", "2", "3", "4", "5", "6"]
+    assert "서비스 주소" in titles[0][1] and "변경 이력" in titles[-1][1]
+
+
+def test_only_the_first_section_starts_open(world):
+    html = world.get("/settings").text
+    assert re.findall(r'<details class="acc" id="acc-(\w+)" open>', html) == ["general"]
+
+
+def test_each_section_holds_its_own_settings(world):
+    html = world.get("/settings").text
+    assert "service_timezone" in section(html, "general") and "service_base_url" in section(
+        html, "general"
     )
-    llm = world.get("/settings/llm").text
+    collect = section(html, "collect")
+    assert (
+        "collect_interval_minutes" in collect
+        and "article_retention_days" in collect
+        and "자동으로 정해집니다" in collect
+    )
+    llm = section(html, "llm")
     assert (
         "OpenRouter 키" in llm
         and "model_chain" in llm
+        and "llm_daily_cap" in llm
         and 'href="/models"' in llm
-        and "<h2>웹훅</h2>" not in llm
-        and "alert_cooldown_hours" not in llm  # 다른 탭의 항목이 섞이지 않는다
     )
-    display = world.get("/settings/display").text
+    alerts = section(html, "alerts")
     assert (
-        'id="ui_theme"' in display
-        and 'id="ui_font_size"' in display
-        and "OpenRouter 키" not in display
+        "Discord 웹훅" in alerts
+        and "alert_cooldown_hours" in alerts
+        and 'action="/settings/webhooks"' in alerts
     )
+    display = section(html, "display")
+    for key in ("ui_theme", "ui_font_size", "ui_auto_read"):
+        assert f'id="{key}"' in display
+    assert "service_timezone" not in llm and "ui_theme" not in alerts
 
 
-def test_the_plain_settings_page_still_shows_everything(world):
+def test_every_form_on_the_page_returns_to_the_settings_page(world):
     html = world.get("/settings").text
-    for present in (
-        "서비스 시간대",
-        "OpenRouter 키",
-        "<h2>웹훅</h2>",
-        "model_chain",
-        'id="ui_theme"',
-        "변경 이력",
-    ):
-        assert present in html
-
-
-def test_every_tab_form_returns_to_its_tab_and_shows_a_toast(world):
-    for tab, data in (
-        ("general", {"service_timezone": "Asia/Seoul"}),
-        ("display", {"ui_theme": "dark"}),
-        ("llm", {"llm_daily_cap": "900"}),
-        ("notifications", {"alert_cooldown_hours": "3"}),
-    ):
-        response = post(world, "/settings", next=f"/settings/{tab}", **data)
-        assert response.headers["location"] == f"/settings/{tab}?toast=saved", tab
-    assert "저장했습니다." in world.get("/settings/display?toast=saved").text
-
-
-def test_webhook_and_key_forms_return_to_their_tabs(world):
-    added = post(
-        world, "/settings/webhooks", name="새 웹훅", url=WEBHOOK, next="/settings/notifications"
+    forms = re.findall(
+        r'<form method="post" action="(/settings[^"]*)"[^>]*>\s*'
+        r'<input type="hidden" name="next" value="([^"]*)"',
+        html,
     )
-    assert added.headers["location"] == "/settings/notifications?toast=saved"
+    assert forms and all(next_path == "/settings" for _, next_path in forms)
+    assert html.count("<form") == len(forms)
+
+
+def test_saving_a_section_returns_with_a_toast(world):
+    for data in (
+        {"service_timezone": "Asia/Seoul"},
+        {"ui_theme": "dark"},
+        {"llm_daily_cap": "900"},
+        {"alert_cooldown_hours": "3"},
+        {"ui_auto_read": "off"},
+    ):
+        response = post(world, "/settings", next="/settings", **data)
+        assert response.headers["location"] == "/settings?toast=saved", data
+    assert "저장했습니다." in world.get("/settings?toast=saved").text
+
+
+def test_webhook_and_key_forms_return_to_the_settings_page(world):
+    added = post(world, "/settings/webhooks", name="새 웹훅", url=WEBHOOK, next="/settings")
+    assert added.headers["location"] == "/settings?toast=saved"
     saved = post(
         world,
         "/settings/openrouter-key",
         openrouter_key="sk-or-v1-abcdefghijklmnop",
-        next="/settings/llm",
+        next="/settings",
     )
-    assert saved.headers["location"] == "/settings/llm?toast=saved"
+    assert saved.headers["location"] == "/settings?toast=saved"
 
 
-def test_an_error_keeps_the_tab_the_user_was_on(world):
-    response = post(world, "/settings", ui_theme="neon", next="/settings/display")
+def test_an_error_opens_the_section_it_belongs_to(world):
+    response = post(world, "/settings", ui_theme="neon", next="/settings")
     assert response.status_code == 400 and "목록에 있는 값" in response.text
-    assert "<h1>디스플레이 및 테마</h1>" in response.text and "OpenRouter 키" not in response.text
+    assert set(re.findall(r'<details class="acc" id="acc-(\w+)" open>', response.text)) == {
+        "general",
+        "display",
+    }
+    bad_url = post(
+        world,
+        "/settings/webhooks",
+        name="x",
+        url="https://not-discord.example.com/",
+        next="/settings",
+    )
+    assert bad_url.status_code == 400
+    assert "alerts" in re.findall(r'<details class="acc" id="acc-(\w+)" open>', bad_url.text)
 
 
-def test_there_is_no_top_navigation_on_the_settings_pages_only_the_sidebar_menu(world):
-    for path in (
-        "/settings/general",
-        "/settings/notifications",
-        "/feeds",
-        "/topics",
-        "/status",
-        "/models",
-    ):
-        html = world.get(path).text
-        assert 'class="tabs"' not in html and "_settings_tabs" not in html
-    menu = world.get("/settings/general").text.split('id="sec-settings"')[1].split("</details>")[0]
-    links = [h for h in re.findall(r'href="([^"]+)"', menu) if h.startswith("/")]
-    assert links == [
-        "/settings/general",
-        "/feeds",
-        "/settings/notifications",
-        "/settings/llm",
-        "/settings/display",
-        "/topics",
-        "/status",
-    ]
-
-
-def test_an_unknown_tab_gives_404_and_save_paths_still_reject_get(world):
-    assert world.get("/settings/unknown").status_code in (404, 405)
+def test_the_old_tab_addresses_are_gone(world):
+    for tab in ("general", "notifications", "llm", "display"):
+        assert world.get(f"/settings/{tab}").status_code in (404, 405)
     assert world.get("/settings/webhooks").status_code == 405
+
+
+def test_there_is_no_top_navigation_only_the_sidebar_menu_with_five_items(world):
+    for path in ("/settings", "/feeds", "/topics", "/status", "/models"):
+        assert 'class="tabs"' not in world.get(path).text
+    menu = world.get("/settings").text.split('id="sec-settings"')[1].split("</details>")[0]
+    links = [h for h in re.findall(r'href="([^"]+)"', menu) if h.startswith("/")]
+    assert links == ["/settings", "/feeds", "/topics", "/models", "/status"]
+    assert "피드 관리" in menu
 
 
 # ---------- 테마와 글자 크기는 스타일시트가 실제로 따른다 ----------

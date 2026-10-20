@@ -387,7 +387,10 @@ def test_the_sidebar_collapsed_state_comes_from_the_cookie(world):
     assert "sidebar-collapsed" not in world.get("/reader").text
     world.client.cookies.set("sidebar", "collapsed")
     html = world.get("/reader").text
-    assert '<body class="app sidebar-collapsed">' in html and 'aria-expanded="false"' in html
+    assert (
+        '<body class="app sidebar-collapsed" data-auto-read="on">' in html
+        and 'aria-expanded="false"' in html
+    )
     world.client.cookies.set("sidebar", "expanded")
     assert "sidebar-collapsed" not in world.get("/reader").text
 
@@ -402,25 +405,21 @@ def test_an_unknown_toast_key_shows_nothing_and_text_cannot_be_injected(world):
     assert "data-toast" in html and "모두 읽음으로 표시했습니다." in html
 
 
-def test_every_management_page_shows_the_same_sidebar_and_marks_its_tab(world):
-    tab = {
-        "/": "/status",
-        "/settings": "/settings/general",
-        "/import": "/feeds",
-        "/categories": "/feeds",
-        "/models": "/settings/llm",
-    }
-    paths = (
+def test_every_management_page_shows_the_same_sidebar_and_marks_its_menu_item(world):
+    alias = {"/": "/status", "/import": "/feeds", "/categories": "/feeds"}
+    for path in (
         "/settings",
-        "/settings/general",
-        "/settings/notifications",
-        "/settings/llm",
-        "/settings/display",
-    )
-    for path in (*paths, "/feeds", "/categories", "/topics", "/models", "/status", "/import", "/"):
+        "/feeds",
+        "/categories",
+        "/topics",
+        "/models",
+        "/status",
+        "/import",
+        "/",
+    ):
         html = world.get(path).text
         assert '<nav aria-label="구독 목록">' in html
-        expected = tab.get(path, path)
+        expected = alias.get(path, path)
         assert re.search(rf'href="{expected}"[^>]*aria-current="page"', html), path
         assert 'class="tabs"' not in html  # 설정 위쪽의 탭 네비게이션은 없다
 
@@ -472,7 +471,75 @@ def test_pages_have_no_inline_script_inline_style_or_event_handler_attributes(wo
         assert "javascript:" not in html
 
 
-def test_the_script_only_changes_classes_and_never_writes_inline_styles_or_html(world):
+def test_the_script_never_writes_html_or_style_attributes_and_only_sets_the_sidebar_width(
+    world,
+):
     js = world.get("/static/app.js").text
     assert "innerHTML" not in js and "eval(" not in js and 'setAttribute("style"' not in js
-    assert ".style." not in js and "document.write" not in js
+    assert "document.write" not in js and "insertAdjacentHTML" not in js
+    # 보안 정책이 막는 것은 style 속성과 인라인 <style>이다. 폭 조절만 스크립트로 폭을 직접 바꾼다
+    uses = re.findall(r"\w+\.style\.\w+", js)
+    assert sorted(set(uses)) == ["sidebarBox.style.removeProperty", "sidebarBox.style.width"]
+
+
+# ---------- 사이드바 폭 조절(PC만, 기억함) ----------
+
+
+@pytest.mark.parametrize(
+    ("cookie", "expected"),
+    [
+        ("300", 300),
+        ("304", 300),
+        ("305", 310),
+        ("315", 320),
+        ("304", 300),
+        ("100", 220),
+        ("9999", 480),
+        ("220", 220),
+        ("480", 480),
+        ("", 0),
+        ("abc", 0),
+        ("-300", 0),
+        ("30.5", 0),
+        ("٣٠٠", 0),
+        ("1" * 20, 0),
+    ],
+)
+def test_the_remembered_sidebar_width_is_snapped_into_range_or_ignored(cookie, expected):
+    from rss_hub.web.ui import sidebar_width
+
+    assert sidebar_width(cookie) == expected
+
+
+def test_the_page_uses_the_remembered_width_class(world):
+    assert " sw-" not in world.get("/reader").text.split("<body")[1].split(">")[0]
+    world.client.cookies.set("sbw", "340")
+    assert 'class="app sw-340"' in world.get("/reader").text.replace(' data-auto-read="on"', "")
+    world.client.cookies.set("sbw", 'evil" onload="x')
+    assert " sw-" not in world.get("/reader").text.split("<body")[1].split(">")[0]
+
+
+def test_the_stylesheet_has_a_rule_for_every_width_step_and_hides_the_handle_on_small_screens(
+    world,
+):
+    css = world.client.get("/static/app.css").text
+    for width in range(220, 481, 10):
+        assert f"body:not(.sidebar-collapsed).sw-{width} .sidebar {{ width: {width}px; }}" in css
+    assert "sw-210 " not in css and "sw-490 " not in css
+    assert "@media (max-width: 820px), (pointer: coarse) { .resizer { display: none; } }" in css
+
+
+def test_the_handle_and_full_feed_names_are_on_every_page(world):
+    html = world.get("/reader").text
+    assert 'id="resizer" role="separator"' in html and 'tabindex="0"' in html
+    assert f'href="/reader/feed/{world.f_free}" title="자유 블로그"' in html
+
+
+def test_the_script_only_resizes_on_a_desktop_pointer_and_limits_the_range(world):
+    js = world.client.get("/static/app.js").text
+    assert (
+        "(min-width: 821px) and (pointer: fine)" in js
+        and "var MIN = 220;" in js
+        and "var MAX = 480;" in js
+    )
+    assert 'document.cookie = "sbw="' in js and "innerHTML" not in js

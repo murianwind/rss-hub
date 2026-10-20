@@ -324,11 +324,11 @@ def test_the_webhook_of_an_unknown_category_gives_404(client):
 # ---------- 피드 화면 ----------
 
 
-def test_the_feed_page_lists_feeds_with_category_and_webhook_controls(client, app, feeds):
+def test_the_feed_page_lists_feeds_with_their_category_and_alert_target(client, app, feeds):
     app.state.settings_service.add_webhook("dev", WEBHOOK)
     feeds.add("https://a.example.com/rss", "A 블로그")
     html = client.get("/feeds").text
-    assert "A 블로그" in html and 'name="category_id"' in html and 'name="webhook_id"' in html
+    assert "A 블로그" in html and "카테고리 없음" in html and "기본 웹훅" in html
     assert "첫 점검 대기" in html
 
 
@@ -339,23 +339,21 @@ def test_without_feeds_the_page_points_to_the_import(client):
     )
 
 
-def test_a_feed_webhook_can_be_set_from_the_page(client, app, feeds):
+def test_a_feed_webhook_can_be_set_and_the_page_shows_it(client, app, feeds):
     webhook_id = app.state.settings_service.add_webhook("dev", WEBHOOK)
     feed_id = feeds.add("https://a.example.com/rss", "A")
     response = client.post(f"/feeds/{feed_id}/webhook", data={"webhook_id": str(webhook_id)})
     assert response.status_code == 303 and response.headers["location"] == "/feeds?saved=1"
     assert feeds.get(feed_id).webhook_id == webhook_id
-    assert f'value="{webhook_id}" selected' in client.get("/feeds").text
+    assert "개별 웹훅 &#39;dev&#39;" in client.get("/feeds").text  # 따옴표는 이스케이프된다
     client.post(f"/feeds/{feed_id}/webhook", data={"webhook_id": ""})
     assert feeds.get(feed_id).webhook_id is None
 
 
-def test_a_feed_in_a_category_shows_the_category_instead_of_a_webhook_choice(client, feeds):
+def test_a_feed_in_a_category_shows_that_it_follows_the_categorys_webhook(client, feeds):
     category = feeds.add_category("뉴스")
-    feed_id = feeds.add("https://a.example.com/rss", "A", category_id=category)
-    html = client.get("/feeds").text
-    assert f'action="/feeds/{feed_id}/webhook"' not in html
-    assert "카테고리 '뉴스'의 설정을 따릅니다" in html
+    feeds.add("https://a.example.com/rss", "A", category_id=category)
+    assert "카테고리 &#39;뉴스&#39;의 웹훅을 따름" in client.get("/feeds").text
 
 
 def test_a_webhook_cannot_be_forced_onto_a_feed_in_a_category(client, app, feeds):
