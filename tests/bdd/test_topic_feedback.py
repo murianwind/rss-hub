@@ -50,7 +50,7 @@ def listed(world, topic):
     return [
         a
         for a in re.findall(
-            r'<a class="title" href="/a/(\d+)"',
+            r'<a class="title" href="/a/(\d+)(?:\?[^"]*)?"',
             world.get(f"/reader/topic/{topic_id(world, topic)}").text,
         )
     ]
@@ -119,8 +119,8 @@ def _in_topic_alt(world, ctx, topic):
 
 @then('전체 목록과 사이트 "자유 블로그" 목록에는 그 글이 그대로 있다')
 def _still_elsewhere(world, ctx):
-    assert f'href="/a/{ctx.last}"' in world.get("/reader").text
-    assert f'href="/a/{ctx.last}"' in world.get(f"/reader/feed/{world.f_free}").text
+    assert f'href="/a/{ctx.last}?' in world.get("/reader").text
+    assert f'href="/a/{ctx.last}?' in world.get(f"/reader/feed/{world.f_free}").text
 
 
 @then(parsers.re(r'글 페이지에는 주제 "(?P<topic>[^"]+)"의 싫어요 버튼이 보인다'))

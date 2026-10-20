@@ -67,8 +67,11 @@ class World:
         return self.client.get(path)
 
 
+SECTION_NAMES = {"rss": "RSS", "categories": "카테고리", "topics": "주제", "settings": "환경 설정"}
+
+
 def groups(html):
-    """사이드바(첫 번째 nav)의 세 그룹을 이름으로 나눈다."""
+    """사이드바의 구역(RSS, 카테고리, 주제, 환경 설정)을 이름으로 나눈다."""
     nav = html.split('<nav aria-label="구독 목록">')[1].split("</nav>")[0]
-    parts = nav.split('<details open class="group">')[1:]
-    return {re.search(r"<summary>(.*?)</summary>", part).group(1): part for part in parts}
+    parts = re.split(r'<details class="sec" id="sec-', nav)[1:]
+    return {SECTION_NAMES[part.split('"', 1)[0]]: part for part in parts}

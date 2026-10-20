@@ -163,7 +163,8 @@ def test_rejecting_an_article_that_is_not_in_the_topic_changes_nothing(world):
         "javascript:alert(1)",
         "/settings",
         "/a/1/../../x",
-        "/reader?x=1",
+        "/reader?x=<script>",
+        "/reader?x=1;2",
         "",
     ],
 )

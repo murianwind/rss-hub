@@ -18,21 +18,22 @@ def world(tmp_path):
 # ---------- 사이드바 ----------
 
 
-def test_the_sidebar_has_three_groups_at_the_same_level(world):
+def test_the_sidebar_has_four_sections_in_order_and_they_start_collapsed(world):
     html = world.get("/reader").text
-    assert list(groups(html)) == ["RSS", "카테고리", "주제"]
+    assert list(groups(html)) == ["RSS", "카테고리", "주제", "환경 설정"]
+    assert 'class="sec" id="sec-rss" open' not in html  # 전체 글 목록에서는 모두 접혀 있다
 
 
 def test_the_rss_group_lists_every_registered_site_including_those_in_categories(world):
     rss = groups(world.get("/reader").text)["RSS"]
-    assert "뉴스 블로그" in rss and "자유 블로그" in rss and ">전체<" in rss
+    assert "뉴스 블로그" in rss and "자유 블로그" in rss
 
 
 def test_the_category_group_nests_each_categorys_sites(world):
     category = groups(world.get("/reader").text)["카테고리"]
     assert "뉴스" in category and "기술" in category and "뉴스 블로그" in category
     assert "자유 블로그" not in category  # 카테고리에 속하지 않은 사이트는 카테고리 아래에 없다
-    assert "피드 없음" in category  # 비어 있는 카테고리는 그렇게 표시한다
+    assert "이 카테고리에 사이트가 없습니다" in category  # 비어 있는 카테고리는 그렇게 표시한다
 
 
 def test_the_topic_group_has_topic_names_only_without_any_site(world):
@@ -40,12 +41,13 @@ def test_the_topic_group_has_topic_names_only_without_any_site(world):
     assert "OTT" in topic and "뉴스 블로그" not in topic and "자유 블로그" not in topic
 
 
-def test_the_sidebar_is_on_every_viewer_page_and_also_as_a_collapsible_mobile_menu(world):
+def test_the_sidebar_is_on_every_page_once_and_opens_as_a_drawer_on_narrow_screens(world):
     article_id = world.article()
-    for path in ("/reader", f"/reader/feed/{world.f_free}", f"/a/{article_id}", "/reader/feed/999"):
+    paths = ("/reader", f"/reader/feed/{world.f_free}", f"/a/{article_id}", "/reader/feed/999")
+    for path in (*paths, "/settings", "/topics", "/status"):
         html = world.get(path).text
-        assert html.count('<nav aria-label="구독 목록">') == 2
-        assert 'class="side"' in html and 'class="menu-mobile"' in html
+        assert html.count('<nav aria-label="구독 목록">') == 1 and 'class="sidebar"' in html
+        assert 'data-action="open-drawer"' in html and 'data-action="toggle-sidebar"' in html
 
 
 def test_the_current_list_is_marked_in_the_sidebar(world):
@@ -57,7 +59,9 @@ def test_the_current_list_is_marked_in_the_sidebar(world):
         f"/reader/topic/{topic_id}": f"/reader/topic/{topic_id}",
     }
     for path, current in expectations.items():
-        marked = re.findall(r'<a href="([^"]+)" aria-current="page"', world.get(path).text)
+        marked = re.findall(
+            r'<a class="nav-item" href="([^"]+)"[^>]*aria-current="page"', world.get(path).text
+        )
         assert set(marked) == {current}
 
 
@@ -79,8 +83,9 @@ def test_the_list_shows_newest_first_with_site_time_and_a_link_to_the_article_pa
     new = world.article(world.f_news, minutes=30, title="Newer post")
     html = world.get("/reader").text
     assert html.index("Newer post") < html.index("Older post")
-    assert f'href="/a/{new}"' in html and f'href="/a/{old}"' in html
-    assert "뉴스 블로그 · 10-16 10:30" in html  # 서비스 시간대(Asia/Seoul)로 표시한다
+    assert f'href="/a/{new}?back=' in html and f'href="/a/{old}?back=' in html
+    assert 'title="2026-10-16 10:30"' in html  # 서비스 시간대(Asia/Seoul)로 표시한다
+    assert ">뉴스 블로그</a>" in html
 
 
 def test_a_translated_title_and_a_summary_snippet_are_shown(world):
@@ -99,7 +104,7 @@ def test_topic_badges_are_shown_in_the_list(world):
     ott = world.topics.list_all()[0]
     article_id = world.article(title="Netflix post")
     world.topics.record_matches(article_id, {ott.id: ("netflix",)})
-    assert f'<span class="badge">{ott.name}</span>' in world.get("/reader").text
+    assert f'<span class="chip topic"># {ott.name}</span>' in world.get("/reader").text
 
 
 def test_archived_articles_are_listed_too(world):
@@ -111,14 +116,14 @@ def test_a_site_list_shows_only_that_site(world):
     world.article(world.f_news, title="News post")
     world.article(world.f_free, title="Free post")
     html = world.get(f"/reader/feed/{world.f_news}").text
-    assert "News post" in html and "Free post" not in html and "<h1>뉴스 블로그</h1>" in html
+    assert "News post" in html and "Free post" not in html and "<span>뉴스 블로그</span>" in html
 
 
 def test_a_category_list_shows_only_its_sites_articles(world):
     world.article(world.f_news, title="News post")
     world.article(world.f_free, title="Free post")
     html = world.get(f"/reader/category/{world.news}").text
-    assert "News post" in html and "Free post" not in html and "<h1>뉴스</h1>" in html
+    assert "News post" in html and "Free post" not in html and "<span>뉴스</span>" in html
 
 
 def test_a_topic_list_shows_only_articles_of_that_topic(world):
@@ -127,14 +132,14 @@ def test_a_topic_list_shows_only_articles_of_that_topic(world):
     world.article(title="Other post")
     world.topics.record_matches(inside, {ott.id: ()})
     html = world.get(f"/reader/topic/{ott.id}").text
-    assert "OTT post" in html and "Other post" not in html and f"<h1>{ott.name}</h1>" in html
+    assert "OTT post" in html and "Other post" not in html and f"<span>{ott.name}</span>" in html
 
 
 @pytest.mark.parametrize("kind", ["feed", "category", "topic"])
 def test_an_unknown_list_gives_404_with_the_sidebar_still_there(world, kind):
     response = world.get(f"/reader/{kind}/9999")
     assert response.status_code == 404 and "찾을 수 없는 목록" in response.text
-    assert 'class="side"' in response.text
+    assert 'class="sidebar"' in response.text
 
 
 @pytest.mark.parametrize(
@@ -156,14 +161,14 @@ def test_pagination_links_follow_thirty_per_page(world):
         world.article(minutes=number, title=f"Post {number:02d}")
     first = world.get("/reader").text
     assert (
-        first.count('class="item"') == 30
+        first.count('<article class="card') == 30
         and 'href="/reader?page=2"' in first
         and "← 이전" not in first
     )
     second = world.get("/reader?page=2").text
     assert (
-        second.count('class="item"') == 5
-        and 'href="/reader?page=1"' in second
+        second.count('<article class="card') == 5
+        and '<a href="/reader">← 이전</a>' in second  # 1쪽 주소에는 쪽 번호를 붙이지 않는다
         and "다음 →" not in second
     )
 
@@ -291,7 +296,7 @@ def test_no_original_button_for_an_address_that_cannot_be_followed(world, link):
 
 def test_an_unknown_article_gives_404_with_the_sidebar(world):
     response = world.get("/a/999999")
-    assert response.status_code == 404 and 'class="side"' in response.text
+    assert response.status_code == 404 and 'class="sidebar"' in response.text
 
 
 # ---------- 보안 헤더 ----------
@@ -302,7 +307,10 @@ def test_the_policy_allows_https_images_but_no_scripts_frames_or_other_sources(w
     article_id = world.article()
     policy = world.get(f"/a/{article_id}").headers["content-security-policy"]
     assert "img-src https:" in policy and "default-src 'none'" in policy
-    assert "script-src" not in policy and "unsafe-eval" not in policy and "frame-src" not in policy
+    # 스크립트와 스타일은 우리 서버의 파일만 허용한다(인라인과 eval은 계속 막는다)
+    assert "script-src 'self'" in policy and "style-src 'self'" in policy
+    assert "unsafe-inline" not in policy and "unsafe-eval" not in policy
+    assert "frame-src" not in policy and "connect-src 'self'" in policy
 
 
 @pytest.mark.security
@@ -316,15 +324,18 @@ def test_the_viewer_pages_cannot_change_anything(world):
 
 def test_a_category_without_sites_has_an_empty_list_and_says_why(world):
     html = world.get(f"/reader/category/{world.tech}").text
-    assert "<h1>기술</h1>" in html and "이 카테고리의 피드에서 수집된 글이 아직 없습니다" in html
+    assert (
+        "<span>기술</span>" in html and "이 카테고리의 피드에서 수집된 글이 아직 없습니다" in html
+    )
 
 
 def test_links_use_the_theme_color_so_they_stay_readable_in_dark_mode(world):
-    html = world.get("/reader").text
-    assert "a { color: var(--accent); }" in html
-    assert "--accent: #7ea2ff" in html  # 다크 모드에서는 밝은 강조색
+    css = world.client.get("/static/app.css").text
+    assert "a { color: var(--accent); }" in css
+    assert "--accent: #7ea2ff" in css  # 다크 모드에서는 밝은 강조색
 
 
-def test_the_top_menu_wraps_on_narrow_screens_instead_of_breaking_words(world):
-    html = world.get("/reader").text
-    assert "flex-wrap: wrap" in html and "header nav a { white-space: nowrap; }" in html
+def test_the_sidebar_becomes_a_drawer_on_narrow_screens(world):
+    css = world.client.get("/static/app.css").text
+    assert "@media (max-width: 820px)" in css and ".drawer-open .sidebar" in css
+    assert ".sidebar-collapsed .sidebar { width: 64px; }" in css

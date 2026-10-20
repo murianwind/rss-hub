@@ -50,6 +50,8 @@ class Article:
     summary_ko: str | None
     llm_topics: tuple[int, ...] | None  # LLM이 고른 주제 번호. None은 판별하지 않았다는 뜻
     llm_model: str | None
+    read_at: datetime | None = None  # None이면 안 읽은 글
+    bookmarked_at: datetime | None = None
 
 
 def _iso(moment: datetime) -> str:
@@ -74,6 +76,10 @@ def _article(row: sqlite3.Row) -> Article:
         summary_ko=row["summary_ko"],
         llm_topics=None if row["llm_topics"] is None else tuple(json.loads(row["llm_topics"])),
         llm_model=row["llm_model"],
+        read_at=None if row["read_at"] is None else datetime.fromisoformat(row["read_at"]),
+        bookmarked_at=(
+            None if row["bookmarked_at"] is None else datetime.fromisoformat(row["bookmarked_at"])
+        ),
     )
 
 
@@ -142,8 +148,8 @@ class ArticleRepository:
             )
             cursor = conn.execute(
                 "INSERT INTO articles(feed_id, guid, title, link, content_html, published_raw, "
-                "published_dt, published_date, discovered_at, status) "
-                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "published_dt, published_date, discovered_at, status, read_at) "
+                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     article.feed_id,
                     article.guid,
@@ -155,6 +161,7 @@ class ArticleRepository:
                     article.published_date,
                     now,
                     STATUS_ARCHIVED,
+                    now,  # 보관 글은 읽은 것으로 시작한다(안 읽은 글 수를 부풀리지 않게)
                 ),
             )
             return int(cursor.lastrowid or 0)
@@ -162,12 +169,36 @@ class ArticleRepository:
     def delete_older_than(self, cutoff: datetime) -> int:
         """저장한 지 cutoff보다 오래된 글을 지운다(발송 기록과 주제 소속도 함께). 지운 개수.
 
-        본 글 기록(seen_guids)은 남겨서 같은 글이 다시 수집되지 않게 한다.
+        북마크한 글은 지우지 않는다. 본 글 기록(seen_guids)은 남겨서 다시 수집되지 않게 한다.
         """
         with self._db.connect() as conn:
             return conn.execute(
-                "DELETE FROM articles WHERE discovered_at < ?", (_iso(cutoff),)
+                "DELETE FROM articles WHERE discovered_at < ? AND bookmarked_at IS NULL",
+                (_iso(cutoff),),
             ).rowcount
+
+    # ---------- 읽음과 북마크 ----------
+
+    def mark_read(self, article_id: int) -> bool:
+        """읽음으로 표시한다. 처음 읽은 시각을 지키고, 바뀐 것이 없으면 False."""
+        return self._set("read_at", article_id, on=True)
+
+    def mark_unread(self, article_id: int) -> bool:
+        return self._set("read_at", article_id, on=False)
+
+    def set_bookmark(self, article_id: int, on: bool) -> bool:
+        """북마크를 켜거나 끈다. 바뀐 것이 없거나 없는 글이면 False."""
+        return self._set("bookmarked_at", article_id, on=on)
+
+    def _set(self, column: str, article_id: int, *, on: bool) -> bool:
+        value = _iso(self._clock.now()) if on else None
+        condition = "IS NULL" if on else "IS NOT NULL"
+        with self._db.connect() as conn:
+            cursor = conn.execute(
+                f"UPDATE articles SET {column} = ? WHERE id = ? AND {column} {condition}",
+                (value, article_id),
+            )
+            return cursor.rowcount > 0
 
     def get(self, article_id: int) -> Article | None:
         with self._db.connect() as conn:

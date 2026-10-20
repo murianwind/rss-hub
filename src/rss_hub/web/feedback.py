@@ -6,8 +6,6 @@
 - 키워드 개선 제안은 근거를 보여 주기만 하고, 사용자가 승인해야 주제의 키워드가 바뀐다.
 """
 
-import re
-
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -16,10 +14,8 @@ from rss_hub.domain.topic_suggestions import suggest_additions, suggest_removals
 from rss_hub.domain.topics import Topic, TopicInputError, validate_topic_fields
 from rss_hub.storage.articles import ArticleRepository
 from rss_hub.storage.topics import TopicRepository
+from rss_hub.web.ui import safe_path
 
-_SAFE_NEXT = re.compile(
-    r"^/(?:reader(?:/(?:feed|category|topic)/\d+)?|a/\d+|topics/\d+/suggestions)(?:\?page=\d+)?$"
-)
 ACTIONS = ("reject", "restore", "add")
 LAST_KEYWORD_MESSAGE = (
     "마지막 키워드는 지울 수 없습니다. 키워드가 하나도 없으면 모든 글을 LLM에게 묻게 됩니다. "
@@ -29,8 +25,7 @@ LAST_KEYWORD_MESSAGE = (
 
 def safe_next(value: object, default: str) -> str:
     """돌아갈 곳은 이 서비스의 읽기 화면 경로만 허용한다(다른 주소로 보내는 것을 막는다)."""
-    text = str(value or "")
-    return text if _SAFE_NEXT.fullmatch(text) else default
+    return safe_path(value, default)
 
 
 def build_feedback_router(

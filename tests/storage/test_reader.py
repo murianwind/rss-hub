@@ -20,7 +20,7 @@ class Env:
         self.feeds = FeedRepository(self.db, self.clock)
         self.articles = ArticleRepository(self.db, self.clock)
         self.topics = TopicRepository(self.db, self.clock)
-        self.reader = ReaderRepository(self.db)
+        self.reader = ReaderRepository(self.db, self.clock)
         self.news = self.feeds.add_category("뉴스")
         self.a = self.feeds.add("https://a.example.com/rss", "A 블로그", category_id=self.news)
         self.b = self.feeds.add("https://b.example.com/rss", "B 블로그")

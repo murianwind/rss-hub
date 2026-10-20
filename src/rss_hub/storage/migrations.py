@@ -215,6 +215,16 @@ MIGRATIONS: tuple[str, ...] = (
         PRIMARY KEY (run_id, model)
     );
     """,
+    # 10: 읽음과 북마크(새 뷰어), 사이드바 정렬 순서. 이미 있는 글은 모두 읽음으로 두어서
+    # 업그레이드 직후 안 읽은 글 수가 한꺼번에 쌓이지 않게 한다
+    """
+    ALTER TABLE articles ADD COLUMN read_at TEXT;
+    ALTER TABLE articles ADD COLUMN bookmarked_at TEXT;
+    UPDATE articles SET read_at = discovered_at;
+    ALTER TABLE feeds ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE categories ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE topics ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
+    """,
 )
 
 

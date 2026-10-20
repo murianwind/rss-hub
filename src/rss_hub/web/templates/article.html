@@ -1,35 +1,53 @@
 {% extends "base.html" %}
 {% block title %}{{ title }} · RSS Hub{% endblock %}
-{% block body %}
-<div class="reader">
-  <aside class="side">{% include "_sidebar.html" %}</aside>
-  <section>
-    <details class="menu-mobile"><summary>메뉴</summary>{% include "_sidebar.html" %}</details>
-    <article>
-      <h1>{{ title }}</h1>
-      {% if show_original_title %}<p class="hint">{{ article.title }}</p>{% endif %}
-      <p class="meta"><a href="/reader/feed/{{ feed.id }}">{{ feed.name }}</a> · {{ published }}
-        {% for match in topic_matches %}<span class="badge" title="{{ match.keywords | join(', ') }}">{{ match.name }}</span>{% endfor %}</p>
-      {% if topic_matches %}<p class="hint">{% for match in topic_matches %}{{ match.name }}{% if match.keywords %}: 키워드 {{ match.keywords | join(', ') }}{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
-      <div class="panel topics-panel">
-        <strong>주제</strong>
-        {% for t in enabled_topics %}
-        {% set m = memberships.get(t.id) %}
-        <form method="post" action="/a/{{ article.id }}/topics/{{ t.id }}/{{ 'restore' if m and m.rejected else ('reject' if m else 'add') }}" class="row">
-          <input type="hidden" name="next" value="/a/{{ article.id }}">
-          {% if m and not m.rejected %}<span class="badge">{{ t.name }}</span><button type="submit" class="danger">싫어요</button>
-          {% elif m %}<span class="hint">{{ t.name }}에서 제외됨</span><button type="submit">되돌리기</button>
-          {% else %}<span class="hint">{{ t.name }}</span><button type="submit">주제로</button>{% endif %}
-        </form>
-        {% else %}<p class="hint">켜진 주제가 없습니다.</p>{% endfor %}
-        <p class="hint">싫어요는 그 주제 목록에서만 뺍니다. 주제로는 이미 보낸 알림을 다시 보내지 않습니다. <a href="/topics">주제 설정</a></p>
-      </div>
-      {% if article.summary_ko %}<div class="panel"><strong>요약</strong><p>{{ article.summary_ko }}</p></div>{% endif %}
-      {% if has_original %}<p><a class="button" href="/a/{{ article.id }}/original" target="_blank" rel="noopener noreferrer">원문 보기</a></p>{% endif %}
-      <div class="article-body" {% if lang %}lang="{{ lang }}"{% endif %}>
-        {% if body %}{{ body | safe }}{% else %}<p class="hint">본문이 없습니다. 원문에서 확인하세요.</p>{% endif %}
-      </div>
-    </article>
-  </section>
+{% block main %}
+<header class="detailbar">
+  <a class="back" href="{{ back }}">{{ icon('arrow-left') }}<span>목록으로 돌아가기</span></a>
+  <span class="source">출처: <b><a href="/reader/feed/{{ feed.id }}">{{ feed.name }}</a></b></span>
+  <div class="detail-actions">
+    <form method="post" action="/a/{{ article.id }}/bookmark">
+      <input type="hidden" name="on" value="{{ 0 if bookmarked else 1 }}">
+      <input type="hidden" name="next" value="{{ here }}">
+      <button type="submit" class="compact" aria-pressed="{{ 'true' if bookmarked else 'false' }}">{{ icon('bookmark', 'fill' if bookmarked else '') }} {{ '북마크 해제' if bookmarked else '북마크' }}</button>
+    </form>
+    <form method="post" action="/a/{{ article.id }}/read">
+      <input type="hidden" name="state" value="unread">
+      <input type="hidden" name="next" value="{{ back }}">
+      <button type="submit" class="compact" title="안 읽은 글로 되돌리고 목록으로 갑니다">안 읽음으로</button>
+    </form>
+  </div>
+</header>
+<div class="scroll detail-scroll">
+  <article class="doc">
+    <div class="doc-meta">
+      <a class="chip" href="/reader/feed/{{ feed.id }}">{{ feed.name }}</a>
+      <span>·</span><time datetime="{{ article.published_dt.isoformat() }}">{{ published }}</time>
+      {% for match in topic_matches %}<span class="chip topic" title="{{ match.keywords | join(', ') }}"># {{ match.name }}</span>{% endfor %}
+    </div>
+    <h1>{{ title }}</h1>
+    {% if show_original_title %}<p class="hint">{{ article.title }}</p>{% endif %}
+    {% if topic_matches %}<p class="hint">{% for match in topic_matches %}{{ match.name }}{% if match.keywords %}: 키워드 {{ match.keywords | join(', ') }}{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+    {% if article.summary_ko %}<div class="panel"><strong>요약</strong><p>{{ article.summary_ko }}</p></div>{% endif %}
+    <div class="panel topics-panel">
+      <strong>주제</strong>
+      {% for t in enabled_topics %}
+      {% set m = memberships.get(t.id) %}
+      <form method="post" action="/a/{{ article.id }}/topics/{{ t.id }}/{{ 'restore' if m and m.rejected else ('reject' if m else 'add') }}" class="row">
+        <input type="hidden" name="next" value="{{ here }}">
+        {% if m and not m.rejected %}<span class="badge">{{ t.name }}</span><button type="submit" class="danger compact">싫어요</button>
+        {% elif m %}<span class="hint">{{ t.name }}에서 제외됨</span><button type="submit" class="compact">되돌리기</button>
+        {% else %}<span class="hint">{{ t.name }}</span><button type="submit" class="compact">주제로</button>{% endif %}
+      </form>
+      {% else %}<p class="hint">켜진 주제가 없습니다.</p>{% endfor %}
+      <p class="hint">싫어요는 그 주제 목록에서만 뺍니다. 주제로는 이미 보낸 알림을 다시 보내지 않습니다. <a href="/topics">주제 설정</a></p>
+    </div>
+    {% if has_original %}<p><a class="button" href="/a/{{ article.id }}/original" target="_blank" rel="noopener noreferrer">원문 보기 {{ icon('external') }}</a></p>{% endif %}
+    <div class="article-body" {% if lang %}lang="{{ lang }}"{% endif %}>
+      {% if body %}{{ body | safe }}{% else %}<p class="hint">본문이 없습니다. 원문에서 확인하세요.</p>{% endif %}
+    </div>
+    <div class="doc-foot">
+      <a class="back soft" href="{{ back }}">{{ icon('arrow-left') }}<span>목록으로 돌아가기</span></a>
+    </div>
+  </article>
 </div>
 {% endblock %}

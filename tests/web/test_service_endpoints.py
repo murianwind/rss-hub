@@ -193,4 +193,6 @@ def test_the_docker_image_starts_the_service_entry_point():
 
 
 def test_the_status_page_is_also_available_at_status(env):
-    assert env.client.get("/status").text == env.client.get("/").text
+    for path in ("/", "/status"):
+        response = env.client.get(path)
+        assert response.status_code == 200 and "<h1>상태</h1>" in response.text

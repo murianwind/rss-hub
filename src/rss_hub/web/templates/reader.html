@@ -1,37 +1,72 @@
 {% extends "base.html" %}
 {% block title %}{{ heading }} · RSS Hub{% endblock %}
-{% block body %}
-<div class="reader">
-  <aside class="side">{% include "_sidebar.html" %}</aside>
-  <section>
-    <details class="menu-mobile"><summary>메뉴</summary>{% include "_sidebar.html" %}</details>
-    <h1>{{ heading }}</h1>
-    {% if page is none %}
-    <p class="hint">찾을 수 없는 목록입니다. 왼쪽 목록에서 다시 골라 주세요.</p>
-    {% elif not page.items %}
-      {% if scope.kind == 'topic' %}<p class="hint">이 주제에 해당한 글이 아직 없습니다.</p>
-      {% elif scope.kind == 'category' %}<p class="hint">이 카테고리의 피드에서 수집된 글이 아직 없습니다.</p>
-      {% elif scope.kind == 'feed' %}<p class="hint">이 사이트에서 수집된 글이 아직 없습니다.</p>
-      {% else %}<p class="hint">아직 글이 없습니다. 피드를 추가하면 첫 점검 뒤에 최근 글이 나타나고, 새 글은 올라오는 대로 쌓입니다.</p>{% endif %}
-    {% else %}
-    {% for item in page.items %}
-    <article class="item">
-      <a class="title" href="/a/{{ item.id }}">{{ item.title }}</a>
-      <div class="meta">{{ item.feed_name }} · {{ times[item.id] }}{% for name in item.topics %} <span class="badge">{{ name }}</span>{% endfor %}</div>
-      {% if snippets[item.id] %}<p class="snippet">{{ snippets[item.id] }}</p>{% endif %}
-      {% if scope.kind == 'topic' %}
-      <form method="post" action="/a/{{ item.id }}/topics/{{ scope.ident }}/reject" class="row">
-        <input type="hidden" name="next" value="{{ base_path }}{% if page.page > 1 %}?page={{ page.page }}{% endif %}">
-        <button type="submit">싫어요(이 주제에서 빼기)</button>
-      </form>
-      {% endif %}
-    </article>
-    {% endfor %}
-    <div class="pager">
-      {% if page.page > 1 %}<a href="{{ base_path }}?page={{ page.page - 1 }}">← 이전</a>{% else %}<span></span>{% endif %}
-      {% if page.has_next %}<a href="{{ base_path }}?page={{ page.page + 1 }}">다음 →</a>{% endif %}
-    </div>
+{% block main %}
+<header class="viewbar">
+  <h1>{{ icon(heading_icon) }}<span>{{ heading }}</span></h1>
+  {% if page is not none %}<span class="pill">{{ page.total }}개의 게시물</span>{% endif %}
+  <span class="spacer"></span>
+  {% if page is not none %}
+  <form class="searchform" method="get" action="{{ base_path }}" role="search">
+    <input class="compact" type="search" name="q" value="{{ q }}" placeholder="검색어 입력..." aria-label="검색어" maxlength="100">
+    {% if scope.kind != 'bookmarks' %}
+    <select class="compact" name="only" aria-label="필터">
+      <option value="" {% if not only %}selected{% endif %}>전체 글</option>
+      <option value="unread" {% if only == 'unread' %}selected{% endif %}>안 읽은 글</option>
+      <option value="bookmarks" {% if only == 'bookmarks' %}selected{% endif %}>북마크</option>
+    </select>
     {% endif %}
-  </section>
-</div>
+    <button type="submit" class="compact">{{ icon('search') }} 검색</button>
+  </form>
+  <form method="post" action="/reader/mark-read">
+    <input type="hidden" name="kind" value="{{ scope.kind }}">
+    <input type="hidden" name="ident" value="{{ scope.ident if scope.ident is not none else '' }}">
+    <input type="hidden" name="next" value="{{ back }}">
+    <button type="submit" class="compact" title="이 목록의 안 읽은 글을 모두 읽음으로 표시">{{ icon('check') }} 모두 읽음</button>
+  </form>
+  {% endif %}
+</header>
+<div class="scroll"><div class="list">
+  {% if page is none %}
+  <p class="empty">찾을 수 없는 목록입니다. 왼쪽 목록에서 다시 골라 주세요.</p>
+  {% elif not page.items %}
+    {% if q or only %}<p class="empty">조건에 맞는 글이 없습니다.</p>
+    {% elif scope.kind == 'bookmarks' %}<p class="empty">북마크한 글이 없습니다. 글 페이지나 목록의 북마크 버튼으로 모아 둘 수 있습니다.</p>
+    {% elif scope.kind == 'topic' %}<p class="empty">이 주제에 해당한 글이 아직 없습니다.</p>
+    {% elif scope.kind == 'category' %}<p class="empty">이 카테고리의 피드에서 수집된 글이 아직 없습니다.</p>
+    {% elif scope.kind == 'feed' %}<p class="empty">이 사이트에서 수집된 글이 아직 없습니다.</p>
+    {% else %}<p class="empty">아직 글이 없습니다. 피드를 추가하면 첫 점검 뒤에 최근 글이 나타나고, 새 글은 올라오는 대로 쌓입니다.</p>{% endif %}
+  {% else %}
+  {% for item in page.items %}
+  <article class="card{% if not item.read %} unread{% endif %}">
+    <div class="card-top">
+      <a class="chip" href="/reader/feed/{{ item.feed_id }}">{{ item.feed_name }}</a>
+      {% for name in item.topics %}<span class="chip topic"># {{ name }}</span>{% endfor %}
+      <time class="when" datetime="{{ item.published_dt.isoformat() }}" title="{{ times[item.id] }}">{{ item.published_dt | ago(ui_now, ui_zone) }}</time>
+    </div>
+    <h2><a class="title" href="/a/{{ item.id }}?back={{ back | urlencode }}">{% if not item.read %}<span class="dot" title="안 읽은 글"></span>{% endif %}{{ item.title }}</a></h2>
+    {% if snippets[item.id] %}<p class="snippet">{{ snippets[item.id] }}</p>{% endif %}
+    <div class="card-foot">
+      <span class="row">
+        <form method="post" action="/a/{{ item.id }}/bookmark">
+          <input type="hidden" name="on" value="{{ 0 if item.bookmarked else 1 }}">
+          <input type="hidden" name="next" value="{{ back }}">
+          <button type="submit" class="link-btn{% if item.bookmarked %} on{% endif %}" aria-pressed="{{ 'true' if item.bookmarked else 'false' }}">{{ icon('bookmark', 'fill' if item.bookmarked else '') }}{{ '북마크 해제' if item.bookmarked else '북마크' }}</button>
+        </form>
+        {% if scope.kind == 'topic' %}
+        <form method="post" action="/a/{{ item.id }}/topics/{{ scope.ident }}/reject">
+          <input type="hidden" name="next" value="{{ back }}">
+          <button type="submit" class="link-btn" title="이 주제 목록에서만 뺍니다">싫어요(이 주제에서 빼기)</button>
+        </form>
+        {% endif %}
+      </span>
+      <span class="more">상세 보기 {{ icon('chevron-right') }}</span>
+    </div>
+  </article>
+  {% endfor %}
+  <div class="pager">
+    {% if page.page > 1 %}<a href="{{ prev_url }}">← 이전</a>{% else %}<span></span>{% endif %}
+    {% if page.has_next %}<a href="{{ next_url }}">다음 →</a>{% endif %}
+  </div>
+  {% endif %}
+</div></div>
 {% endblock %}

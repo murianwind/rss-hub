@@ -17,7 +17,7 @@ class Env:
         self.clock = FakeClock()
         self.topics = TopicRepository(self.db, self.clock)
         self.articles = ArticleRepository(self.db, self.clock)
-        self.reader = ReaderRepository(self.db)
+        self.reader = ReaderRepository(self.db, self.clock)
         self.feed = FeedRepository(self.db, self.clock).add("https://a.example.com/rss", "A")
         self.ott = self.topics.add(TopicFields("OTT", "스트리밍", ("netflix",)))
         self.game = self.topics.add(TopicFields("게임", "게임", ("steam",)))

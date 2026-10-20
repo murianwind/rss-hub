@@ -39,11 +39,14 @@ def feed_id(world, name):
     return {"뉴스 블로그": world.f_news, "자유 블로그": world.f_free}[name]
 
 
+TITLE_LINK = (
+    r'<a class="title" href="/a/\d+(?:\?[^"]*)?">'
+    r'(?:<span class="dot"[^>]*></span>)?(.*?)</a>'
+)
+
+
 def listed_titles(response):
-    return [
-        html_module.unescape(t)
-        for t in re.findall(r'<a class="title" href="/a/\d+">(.*?)</a>', response.text)
-    ]
+    return [html_module.unescape(t) for t in re.findall(TITLE_LINK, response.text)]
 
 
 def sidebar_html(response):
@@ -165,17 +168,15 @@ def _open_article(world, ctx):
 @when(parsers.re(r'사이드바에서 (?P<kind>사이트|카테고리|주제) "(?P<name>[^"]+)"를 고른다'))
 def _choose(world, ctx, kind, name):
     ctx.response = world.get("/reader")
-    link = re.search(
-        rf'<a href="(/reader/[^"]+)"[^>]*>{re.escape(name)}</a>', sidebar_html(ctx.response)
-    )
     path = {"사이트": "/reader/feed/", "카테고리": "/reader/category/", "주제": "/reader/topic/"}[
         kind
     ]
+    label = re.escape(f"# {name}" if kind == "주제" else name)
     hrefs = re.findall(
-        rf'<a href="({path}\d+)"[^>]*>{re.escape(name)}</a>', sidebar_html(ctx.response)
+        rf'<a class="nav-item" href="({path}\d+)"[^>]*><span class="sb-text">{label}</span>',
+        sidebar_html(ctx.response),
     )
     assert hrefs, f"{kind} {name} 링크가 없다"
-    assert link
     ctx.response = world.get(hrefs[0])
 
 
@@ -192,9 +193,9 @@ def _open_missing_article(world, ctx):
 # ---------- 사이드바 ----------
 
 
-@then('사이드바에는 "RSS", "카테고리", "주제" 그룹이 이 순서로 있다')
-def _three_groups(ctx):
-    assert list(groups(ctx.response.text)) == ["RSS", "카테고리", "주제"]
+@then('사이드바에는 "RSS", "카테고리", "주제", "환경 설정" 구역이 이 순서로 있다')
+def _four_sections(ctx):
+    assert list(groups(ctx.response.text)) == ["RSS", "카테고리", "주제", "환경 설정"]
 
 
 @then('RSS 아래에는 등록된 사이트 전체("뉴스 블로그", "자유 블로그")가 있다')
@@ -206,8 +207,8 @@ def _rss_has_all(ctx):
 @then('카테고리 "뉴스" 아래에는 사이트 "뉴스 블로그"가 있고 "자유 블로그"는 없다')
 def _category_nests(ctx):
     category = groups(ctx.response.text)["카테고리"]
-    news = category.split("<details ")[1:]
-    section = next(part for part in news if "뉴스</a>" in part.split("</summary>")[0])
+    news = category.split('<details class="tree"')[1:]
+    section = next(part for part in news if ">뉴스</span>" in part.split("</summary>")[0])
     assert "뉴스 블로그" in section and "자유 블로그" not in category
 
 
@@ -215,15 +216,14 @@ def _category_nests(ctx):
 def _topics_only(ctx):
     topic = groups(ctx.response.text)["주제"]
     assert "OTT" in topic and "/reader/feed/" not in topic and "블로그" not in topic
-    assert len(re.findall(r'<a href="/reader/topic/\d+"', topic)) == 1
+    assert len(re.findall(r'<a class="nav-item" href="/reader/topic/\d+"', topic)) == 1
 
 
-@then("큰 화면용 사이드바와 접히는 메뉴 두 곳에 같은 목록이 있다")
-def _two_copies(ctx):
+@then("사이드바는 한 곳에만 있고 메뉴 버튼으로 서랍처럼 열 수 있다")
+def _drawer(ctx):
     text = ctx.response.text
-    assert 'class="side"' in text and 'class="menu-mobile"' in text
-    navs = re.findall(r'<nav aria-label="구독 목록">(.*?)</nav>', text, re.S)
-    assert len(navs) == 2 and navs[0] == navs[1]
+    assert text.count('<nav aria-label="구독 목록">') == 1 and 'class="sidebar"' in text
+    assert 'data-action="open-drawer"' in text and 'class="backdrop"' in text
 
 
 # ---------- 목록 ----------
@@ -237,7 +237,7 @@ def _two_copies(ctx):
 def _ordered(ctx, first, second, absent):
     assert (
         listed_titles(ctx.response) == [first, second]
-        and absent not in ctx.response.text.split("<section>")[1]
+        and absent not in ctx.response.text.split('<div class="scroll">')[1]
     )
 
 
@@ -258,7 +258,7 @@ def _five(ctx):
 
 @then("404로 답하고 사이드바가 그대로 있다")
 def _not_found(ctx):
-    assert ctx.response.status_code == 404 and 'class="side"' in ctx.response.text
+    assert ctx.response.status_code == 404 and 'class="sidebar"' in ctx.response.text
 
 
 # ---------- 글 페이지 ----------
@@ -282,7 +282,7 @@ def _has_button(ctx):
 
 @then("원문 보기 버튼은 있고 새 탭에서 안전하게 열린다")
 def _button_safe(world, ctx):
-    anchor = re.search(r'<a class="button"[^>]*>원문 보기</a>', ctx.response.text).group(0)
+    anchor = re.search(r'<a class="button"[^>]*>원문 보기.*?</a>', ctx.response.text, re.S).group(0)
     assert f'href="/a/{ctx.last}/original"' in anchor and 'target="_blank"' in anchor
     assert 'rel="noopener noreferrer"' in anchor
 

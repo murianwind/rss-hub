@@ -13,6 +13,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from rss_hub.adapters.discord_webhook import RequestsWebhookSender
@@ -48,8 +49,10 @@ from rss_hub.web.health import data_dir_is_writable
 from rss_hub.web.importer import build_import_router
 from rss_hub.web.models import build_model_router
 from rss_hub.web.reader import build_reader_router
+from rss_hub.web.reading import build_reading_router
 from rss_hub.web.security import SAFE_METHODS, SECURITY_HEADERS, request_is_same_origin
 from rss_hub.web.topics import build_topic_router
+from rss_hub.web.ui import ago, build_ui_context, icon, sprite
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +61,7 @@ SHUTDOWN_WAIT_SECONDS = 30.0
 DEFAULT_DATA_DIR = Path("/data")
 DATABASE_FILENAME = "rss_hub.db"
 TEMPLATE_DIR = Path(__file__).parent / "templates"
+STATIC_DIR = Path(__file__).parent / "static"
 REJECTED_MESSAGE = "요청이 거부되었습니다(출처가 다릅니다)."
 
 
@@ -80,6 +84,8 @@ def create_app(
     service = SettingsService(database, app_clock)
     app.state.settings_service = service
     templates = Jinja2Templates(directory=TEMPLATE_DIR)
+    templates.env.globals.update(icon=icon, sprite=sprite)
+    templates.env.filters["ago"] = ago
     articles = ArticleRepository(database, app_clock)
     feeds = FeedRepository(database, app_clock)
     job_runs = JobRunRepository(database, app_clock)
@@ -122,9 +128,14 @@ def create_app(
         )
     )
     app.include_router(build_feedback_router(topics=topics, articles=articles, templates=templates))
+    reader = ReaderRepository(database, app_clock)
+    templates.context_processors.append(
+        build_ui_context(reader=reader, settings=service, clock=app_clock, version=get_version())
+    )
+    app.include_router(build_reading_router(articles=articles, reader=reader))
     app.include_router(
         build_reader_router(
-            reader=ReaderRepository(database),
+            reader=reader,
             feeds=feeds,
             topics=topics,
             articles=articles,
@@ -178,6 +189,8 @@ def create_app(
     )
     app.include_router(build_feed_router(feeds, service, templates, registration))
 
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
     @app.middleware("http")
     async def protect(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -186,6 +199,9 @@ def create_app(
             response: Response = PlainTextResponse(REJECTED_MESSAGE, status_code=403)
         else:
             response = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            # 주소에 버전(?v=)이 붙어 있어서 오래 캐시해도 새 버전이 나오면 새로 받는다
+            response.headers["Cache-Control"] = "public, max-age=3600"
         for name, value in SECURITY_HEADERS.items():
             response.headers.setdefault(name, value)
         return response
