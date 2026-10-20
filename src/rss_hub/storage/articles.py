@@ -51,7 +51,7 @@ class Article:
     summary_ko: str | None
     llm_topics: tuple[int, ...] | None  # LLM이 고른 주제 번호. None은 판별하지 않았다는 뜻
     llm_model: str | None
-    read_at: datetime | None = None  # None이면 안 읽은 글
+    read_at: datetime | None = None  # None이면 읽지 않은 글
     bookmarked_at: datetime | None = None
     full_html: str | None = None  # 원문 페이지에서 뽑은 전문(정제됨)
     full_status: str | None = None  # None(가져온 적 없음), ok, failed
@@ -168,7 +168,7 @@ class ArticleRepository:
                     article.published_date,
                     now,
                     STATUS_ARCHIVED,
-                    now,  # 보관 글은 읽은 것으로 시작한다(안 읽은 글 수를 부풀리지 않게)
+                    now,  # 보관 글은 읽은 것으로 시작한다(읽지 않은 글 수를 부풀리지 않게)
                 ),
             )
             return int(cursor.lastrowid or 0)
@@ -188,7 +188,7 @@ class ArticleRepository:
 
     def mark_read(self, article_id: int) -> bool:
         """사용자가 읽음으로 표시한다(글을 열거나 읽음 버튼). 처음 읽은 시각을 지키고,
-        "안 읽음으로 고정"한 표시도 푼다. 바뀐 것이 없으면 False."""
+        "읽지 않음으로 고정"한 표시도 푼다. 바뀐 것이 없으면 False."""
         now = _iso(self._clock.now())
         with self._db.connect() as conn:
             return (
@@ -201,8 +201,8 @@ class ArticleRepository:
             )
 
     def mark_unread(self, article_id: int) -> bool:
-        """사용자가 안 읽음으로 바꾼다. 자동 읽음 처리에서 빠지도록 고정한다.
-        이미 안 읽음이고 고정되어 있으면 False."""
+        """사용자가 읽지 않음으로 바꾼다. 자동 읽음 처리에서 빠지도록 고정한다.
+        이미 읽지 않음이고 고정되어 있으면 False."""
         with self._db.connect() as conn:
             return (
                 conn.execute(
@@ -238,7 +238,7 @@ class ArticleRepository:
             )
 
     def auto_mark_read(self, article_ids: Sequence[int]) -> int:
-        """스크롤로 지나간 글을 읽음 처리한다. 사용자가 안 읽음으로 고정한 글은 건드리지 않는다."""
+        """스크롤로 지나간 글을 읽음 처리한다. 읽지 않음으로 고정한 글은 건드리지 않는다."""
         if not article_ids:
             return 0
         marks = ",".join("?" for _ in article_ids)

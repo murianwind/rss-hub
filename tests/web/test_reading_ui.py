@@ -29,7 +29,7 @@ def card(html, title):
 
 
 def side_count(world, href):
-    """사이드바 항목의 (안 읽은 글 스타일인가, 숫자). 숫자가 없으면 None."""
+    """사이드바 항목의 (읽지 않은 글 스타일인가, 숫자). 숫자가 없으면 None."""
     html = world.get("/reader").text
     link = re.search(rf'<a class="nav-item" href="{re.escape(href)}"[^>]*>(.*?)</a>', html, re.S)
     count = re.search(r'<span class="count( unread)?"[^>]*>(\d+)</span>', link.group(1))
@@ -58,10 +58,11 @@ def test_opening_an_article_lowers_the_unread_badges(world):
     assert side_count(world, f"/reader/feed/{world.f_free}") == (True, 1)
 
 
-def test_when_everything_is_read_the_badge_shows_the_total_without_the_unread_style(world):
+def test_when_everything_is_read_the_site_has_no_number_bubble_at_all(world):
     article = world.article(world.f_free)
+    assert side_count(world, f"/reader/feed/{world.f_free}") == (True, 1)  # 읽지 않은 글 수
     world.get(f"/a/{article}")
-    assert side_count(world, f"/reader/feed/{world.f_free}") == (False, 1)
+    assert side_count(world, f"/reader/feed/{world.f_free}") is None  # 다 읽으면 숫자가 없다
 
 
 def test_the_unread_filter_hides_read_articles(world):
@@ -82,7 +83,7 @@ def test_marking_unread_returns_to_the_list_and_shows_a_toast(world):
     assert response.status_code == 303
     assert response.headers["location"] == f"/reader/feed/{world.f_free}?toast=marked_unread"
     html = world.get(response.headers["location"]).text
-    assert "안 읽음으로 표시했습니다." in html and card(html, "Post").startswith(" unread")
+    assert "읽지 않음으로 표시했습니다." in html and card(html, "Post").startswith(" unread")
 
 
 def test_the_read_button_with_any_other_state_marks_read(world):
@@ -264,7 +265,7 @@ def test_search_and_filter_stay_in_the_pagination_links_and_the_back_link(world)
         world.article(minutes=number, title=f"Squid {number:02d}")
     html = world.get("/reader?q=squid&only=unread").text
     assert 'href="/reader?page=2&amp;q=squid&amp;only=unread"' in html
-    back = quote("/reader?q=squid&only=unread", safe="/")  # 템플릿 필터는 /를 그대로 둔다
+    back = quote("/reader?q=squid&only=unread", safe="")  # '/'도 인코딩한다(프록시 차단 규칙 회피)
     assert f"?back={back}" in html
 
 
@@ -296,7 +297,7 @@ def test_the_back_button_returns_to_the_list_and_page_the_user_came_from(world):
     href = re.search(r'<a class="title" href="(/a/\d+\?back=[^"]+)"', listing).group(1)
     html = world.get(href.replace("&amp;", "&")).text
     assert f'<a class="back" href="/reader/feed/{world.f_news}?page=2&amp;q=Title">' in html
-    assert html.count("목록으로 돌아가기") == 2  # 위와 아래
+    assert html.count("목록으로 돌아가기") == 1  # 위쪽에만 있다(아래쪽 중복 버튼은 없앴다)
 
 
 def test_without_a_back_address_the_button_goes_to_the_articles_site_list(world):
@@ -325,11 +326,11 @@ def test_a_dangerous_back_address_is_ignored(world, back):
     assert "<script>alert(1)</script>" not in html
 
 
-def test_the_article_page_shows_the_source_and_the_unread_button(world):
+def test_the_article_page_has_no_source_label_and_has_the_unread_button(world):
     article = world.article(world.f_news)
     html = world.get(f"/a/{article}").text
-    assert "출처:" in html and f'href="/reader/feed/{world.f_news}">뉴스 블로그</a></b>' in html
-    assert 'name="state" value="unread"' in html
+    assert "출처:" not in html and 'class="source"' not in html
+    assert 'name="state" value="unread"' in html and ">읽지 않음으로</button>" in html
 
 
 def test_opening_the_article_marks_it_read_even_when_the_list_was_not_used(world):
@@ -350,7 +351,7 @@ def test_the_sidebar_shows_unread_counts_for_feeds_categories_and_topics(world):
     assert side_count(world, f"/reader/feed/{world.f_news}") == (True, 2)
     assert side_count(world, f"/reader/category/{world.news}") == (True, 2)
     assert side_count(world, f"/reader/topic/{topic}") == (True, 1)
-    assert 'title="안 읽은 글 2개"' in html
+    assert 'title="읽지 않은 글 2개"' in html
 
 
 def test_the_all_articles_link_shows_the_unread_total(world):
@@ -362,8 +363,8 @@ def test_the_all_articles_link_shows_the_unread_total(world):
 def test_the_section_of_the_current_list_starts_open_and_the_others_closed(world):
     topic = world.topics.list_all()[0].id
     cases = {
-        "/reader": "rss",
-        "/reader/bookmarks": "rss",
+        "/reader": None,
+        "/reader/bookmarks": None,
         f"/reader/feed/{world.f_free}": "rss",
         f"/reader/category/{world.news}": "categories",
         f"/reader/topic/{topic}": "topics",
@@ -374,7 +375,7 @@ def test_the_section_of_the_current_list_starts_open_and_the_others_closed(world
     for path, section in cases.items():
         html = world.get(path).text
         opened = set(re.findall(r'<details class="sec" id="sec-(\w+)" open>', html))
-        assert opened == {section}, path
+        assert opened == ({section} if section else set()), path
 
 
 def test_a_feed_inside_a_category_opens_the_category_tree_and_is_marked_current(world):
@@ -406,7 +407,7 @@ def test_an_unknown_toast_key_shows_nothing_and_text_cannot_be_injected(world):
 
 
 def test_every_management_page_shows_the_same_sidebar_and_marks_its_menu_item(world):
-    alias = {"/": "/status", "/import": "/feeds", "/categories": "/feeds"}
+    alias = {"/status": "/status", "/import": "/feeds", "/categories": "/feeds"}
     for path in (
         "/settings",
         "/feeds",
@@ -415,7 +416,6 @@ def test_every_management_page_shows_the_same_sidebar_and_marks_its_menu_item(wo
         "/models",
         "/status",
         "/import",
-        "/",
     ):
         html = world.get(path).text
         assert '<nav aria-label="구독 목록">' in html

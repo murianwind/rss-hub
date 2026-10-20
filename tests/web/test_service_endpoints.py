@@ -90,7 +90,7 @@ def test_the_status_page_shows_waiting_articles_todays_calls_and_failing_feeds(e
             conn.execute(
                 "UPDATE feeds SET fail_count = 3, last_error = 'Timeout' WHERE id = ?", (feed_id,)
             )
-    html = env.client.get("/").text
+    html = env.client.get("/status").text
     assert "발송 대기 글" in html and "4개" in html
     assert "오늘 LLM 호출" in html and "120회" in html
     assert "실패 피드" in html and "2개" in html and "고장난 피드 A" in html and "Timeout" in html
@@ -99,14 +99,14 @@ def test_the_status_page_shows_waiting_articles_todays_calls_and_failing_feeds(e
 def test_the_status_page_lists_the_jobs_with_their_last_success_and_skips(env):
     env.ran("collect", 2)
     env.runs.mark_skipped("collect")
-    html = env.client.get("/").text
+    html = env.client.get("/status").text
     for label in ("수집", "요약", "발송"):
         assert label in html
     assert "마지막 성공" in html and "건너뜀 1회" in html
 
 
 def test_an_idle_service_shows_zero_everywhere(env):
-    html = env.client.get("/").text
+    html = env.client.get("/status").text
     assert "0개" in html and "0회" in html
 
 
@@ -192,7 +192,10 @@ def test_the_docker_image_starts_the_service_entry_point():
     assert '"rss_hub.main:create_service_app"' in dockerfile and '"--factory"' in dockerfile
 
 
-def test_the_status_page_is_also_available_at_status(env):
-    for path in ("/", "/status"):
-        response = env.client.get(path)
-        assert response.status_code == 200 and "<h1>상태</h1>" in response.text
+def test_the_root_address_opens_the_article_list_and_the_status_page_lives_at_status(tmp_path):
+    app = create_app(data_dir=tmp_path, clock=FakeClock(), runner_factory=lambda *_: FakeRunner())
+    with TestClient(app, base_url=BASE) as client:
+        root = client.get("/", follow_redirects=False)
+        assert root.status_code == 307 and root.headers["location"] == "/reader"
+        assert client.get("/").url.path == "/reader"  # 따라가면 글 목록
+        assert client.get("/status").status_code == 200

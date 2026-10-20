@@ -11,7 +11,7 @@
     {% if scope.kind != 'bookmarks' %}
     <select class="compact" name="only" aria-label="필터">
       <option value="" {% if not only %}selected{% endif %}>전체 글</option>
-      <option value="unread" {% if only == 'unread' %}selected{% endif %}>안 읽은 글</option>
+      <option value="unread" {% if only == 'unread' %}selected{% endif %}>읽지 않은 글</option>
       <option value="bookmarks" {% if only == 'bookmarks' %}selected{% endif %}>북마크</option>
     </select>
     {% endif %}
@@ -20,7 +20,7 @@
     <input type="hidden" name="kind" value="{{ scope.kind }}">
     <input type="hidden" name="ident" value="{{ scope.ident if scope.ident is not none else '' }}">
     <input type="hidden" name="next" value="{{ back }}">
-    <button type="submit" class="compact" title="이 목록의 안 읽은 글을 모두 읽음으로 표시">{{ icon('check') }} 모두 읽음</button>
+    <button type="submit" class="compact" title="이 목록의 읽지 않은 글을 모두 읽음으로 표시">{{ icon('check') }} 모두 읽음</button>
   </form>
   {% endif %}
 </header>
@@ -42,7 +42,7 @@
       {% for name in item.topics %}<span class="chip topic"># {{ name }}</span>{% endfor %}
       <time class="when" datetime="{{ item.published_dt.isoformat() }}" title="{{ times[item.id] }}">{{ item.published_dt | ago(ui_now, ui_zone) }}</time>
     </div>
-    <h2><a class="title" href="/a/{{ item.id }}?back={{ back | urlencode }}">{% if not item.read %}<span class="dot" title="안 읽은 글"></span>{% endif %}{{ item.title }}</a></h2>
+    <h2><a class="title" href="/a/{{ item.id }}?back={{ back | qs }}">{% if not item.read %}<span class="dot" title="읽지 않은 글"></span>{% endif %}{{ item.title }}</a></h2>
     {% if snippets[item.id] %}<p class="snippet">{{ snippets[item.id] }}</p>{% endif %}
     <div class="card-foot">
       <span class="row">
@@ -54,7 +54,7 @@
         <form method="post" action="/a/{{ item.id }}/read" data-read-toggle="{{ item.id }}">
           <input type="hidden" name="state" value="{{ 'unread' if item.read else 'read' }}">
           <input type="hidden" name="next" value="{{ back }}">
-          <button type="submit" class="link-btn" title="{{ '안 읽음으로 바꾸면 스크롤해도 자동으로 읽음 처리되지 않습니다' if item.read else '읽음으로 표시합니다' }}">{{ '안 읽음으로 표시' if item.read else '읽음으로 표시' }}</button>
+          <button type="submit" class="link-btn" title="{{ '읽지 않음으로 바꾸면 스크롤해도 자동으로 읽음 처리되지 않습니다' if item.read else '읽음으로 표시합니다' }}">{{ '읽지 않음으로 표시' if item.read else '읽음으로 표시' }}</button>
         </form>
         {% if scope.kind == 'topic' %}
         <form method="post" action="/a/{{ item.id }}/topics/{{ scope.ident }}/reject">

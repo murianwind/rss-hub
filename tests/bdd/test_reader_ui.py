@@ -16,7 +16,7 @@ from tests.fakes.web_parts import start_app
 bind(globals(), "15_reader_ui.feature", [f"RUI-{n:02d}" for n in range(1, 18)])
 
 BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
-FILTERS = {"전체": "", "안 읽은 글": "unread", "북마크": "bookmarks"}
+FILTERS = {"전체": "", "읽지 않은 글": "unread", "북마크": "bookmarks"}
 
 
 @pytest.fixture
@@ -45,9 +45,9 @@ def card(html, title):
 
 
 def sidebar_count(html, label_pattern):
-    """사이드바 항목(링크 이름이 label_pattern과 맞는 것)의 (안 읽은 글 스타일인가, 숫자)."""
+    """사이드바 항목(링크 이름이 label_pattern과 맞는 것)의 (읽지 않은 글 스타일인가, 숫자)."""
     nav = html.split('<nav aria-label="구독 목록">')[1].split("</nav>")[0]
-    for link in re.findall(r'<a class="nav-item"[^>]*>(.*?)</a>', nav, re.S):
+    for link in re.findall(r'<a class="(?:nav-item|sec sec-link)"[^>]*>(.*?)</a>', nav, re.S):
         if re.search(label_pattern, link):
             count = re.search(r'<span class="count( unread)?"[^>]*>(\d+)</span>', link)
             return (bool(count.group(1)), int(count.group(2))) if count else None
@@ -122,7 +122,8 @@ def _archived(world, ctx):
 
 @given(
     parsers.re(
-        r'글 "(?P<a>[^"]+)"\(읽음\), "(?P<b>[^"]+)"\(안 읽음\), "(?P<c>[^"]+)"\(안 읽음\)이 있다'
+        r'글 "(?P<a>[^"]+)"\(읽음\), "(?P<b>[^"]+)"\(읽지 않음\), '
+        r'"(?P<c>[^"]+)"\(읽지 않음\)이 있다'
     )
 )
 def _three(world, ctx, a, b, c):
@@ -144,7 +145,7 @@ def _open_article(world, ctx, title):
     ctx.response = world.get(f"/a/{ctx.ids[title]}")
 
 
-@when(parsers.re(r'글 "(?P<title>[^"]+)"의 페이지에서 "안 읽음으로"를 누른다'))
+@when(parsers.re(r'글 "(?P<title>[^"]+)"의 페이지에서 "읽지 않음으로"를 누른다'))
 def _press_unread(world, ctx, title):
     ctx.response = post(
         world, f"/a/{ctx.ids[title]}/read", state="unread", next=f"/reader/feed/{world.f_free}"
@@ -250,8 +251,8 @@ def _open_many(world, ctx):
 
 @then(
     parsers.re(
-        r'글 "(?P<title>[^"]+)"은 안 읽음으로 표시되고 사이드바의 '
-        r'"(?P<feed>[^"]+)" 옆에 안 읽은 글 (?P<n>\d+)이 보인다'
+        r'글 "(?P<title>[^"]+)"은 읽지 않음으로 표시되고 사이드바의 '
+        r'"(?P<feed>[^"]+)" 옆에 읽지 않은 글 (?P<n>\d+)이 보인다'
     )
 )
 def _unread_shown(ctx, title, feed, n):
@@ -262,12 +263,12 @@ def _unread_shown(ctx, title, feed, n):
 @then(
     parsers.re(
         r'글 "(?P<title>[^"]+)"은 읽음으로 표시되고 사이드바의 '
-        r'"(?P<feed>[^"]+)" 옆에는 전체 글 수 (?P<n>\d+)만 보인다'
+        r'"(?P<feed>[^"]+)" 옆에는 숫자가 보이지 않는다'
     )
 )
-def _read_shown(ctx, title, feed, n):
+def _read_shown(ctx, title, feed):
     assert not card(ctx.response.text, title).startswith(" unread")
-    assert sidebar_count(ctx.response.text, re.escape(feed)) == (False, int(n))
+    assert sidebar_count(ctx.response.text, re.escape(feed)) is None
 
 
 @then(parsers.re(r'목록으로 돌아가서 "(?P<message>[^"]+)" 알림이 보인다'))
@@ -280,14 +281,14 @@ def _toast(ctx, message):
     assert "data-toast" in ctx.response.text and message in ctx.response.text
 
 
-@then(parsers.re(r'글 "(?P<title>[^"]+)"은 안 읽음으로 표시된다'))
+@then(parsers.re(r'글 "(?P<title>[^"]+)"은 읽지 않음으로 표시된다'))
 def _is_unread(ctx, title):
     assert card(ctx.response.text, title).startswith(" unread")
 
 
 @then(
     parsers.re(
-        r'"(?P<feed>[^"]+)"의 글은 모두 읽음이고 "(?P<other>[^"]+)"의 글은 그대로 안 읽음이다'
+        r'"(?P<feed>[^"]+)"의 글은 모두 읽음이고 "(?P<other>[^"]+)"의 글은 그대로 읽지 않음이다'
     )
 )
 def _all_read_scope(world, feed, other):
@@ -305,7 +306,7 @@ def _all_read_scope(world, feed, other):
 
 @then(
     parsers.re(
-        r'글 "(?P<title>[^"]+)"은 읽음으로 표시되고 사이드바 "전체 글" 옆에는 안 읽은 글이 없다'
+        r'글 "(?P<title>[^"]+)"은 읽음으로 표시되고 사이드바 "전체 글" 옆에는 읽지 않은 글이 없다'
     )
 )
 def _archived_is_read(ctx, title):
@@ -350,14 +351,14 @@ def _list_result(ctx, expected, count):
 
 @then(
     parsers.re(
-        r'위와 아래의 "목록으로 돌아가기"는 사이트 "(?P<feed>[^"]+)" '
+        r'위쪽의 "목록으로 돌아가기"는 사이트 "(?P<feed>[^"]+)" '
         r'목록의 2쪽과 검색어 "(?P<query>[^"]+)"로 돌아간다'
     )
 )
 def _back_links(ctx, feed, query):
     expected = f'href="{ctx.list_path}?page=2&amp;q={quote(query)}"'
     links = re.findall(r'<a class="back[^"]*" ([^>]+)>', ctx.response.text)
-    assert len(links) == 2 and all(expected in link for link in links)
+    assert len(links) == 1 and all(expected in link for link in links)  # 위쪽에만 있다
 
 
 @then(
@@ -420,7 +421,7 @@ def _two_articles_wa(world, ctx, feed, a, b):
     ctx.feed = feed
 
 
-@given(parsers.re(r'글 "(?P<title>[^"]+)"를 안 읽음으로 바꿨다'))
+@given(parsers.re(r'글 "(?P<title>[^"]+)"를 읽지 않음으로 바꿨다'))
 def _pin(world, ctx, title):
     post(world, "/ui/read-state", id=str(ctx.ids[title]), state="unread")
 
@@ -430,13 +431,13 @@ def _auto_read(world, ctx):
     ctx.response = post(world, "/ui/auto-read", ids=",".join(str(i) for i in ctx.ids.values()))
 
 
-@then(parsers.re(r'글 "(?P<read>[^"]+)"만 읽음이 되고 글 "(?P<kept>[^"]+)"는 계속 안 읽음이다'))
+@then(parsers.re(r'글 "(?P<read>[^"]+)"만 읽음이 되고 글 "(?P<kept>[^"]+)"는 계속 읽지 않음이다'))
 def _only_one_read(world, ctx, read, kept):
     assert world.articles.get(ctx.ids[read]).read_at is not None
     assert world.articles.get(ctx.ids[kept]).read_at is None
 
 
-@then(parsers.re(r'사이드바의 "(?P<feed>[^"]+)" 옆에 안 읽은 글 (?P<n>\d+)이 보인다'))
+@then(parsers.re(r'사이드바의 "(?P<feed>[^"]+)" 옆에 읽지 않은 글 (?P<n>\d+)이 보인다'))
 def _sidebar_unread(world, feed, n):
     assert sidebar_count(world.get("/reader").text, re.escape(feed)) == (True, int(n))
 
@@ -446,7 +447,7 @@ def _read_button(world, ctx, title):
     ctx.response = post(world, "/ui/read-state", id=str(ctx.ids[title]), state="read")
 
 
-@then(parsers.re(r'글 "(?P<title>[^"]+)"는 읽음이고 안 읽음 고정은 풀렸다'))
+@then(parsers.re(r'글 "(?P<title>[^"]+)"는 읽음이고 읽지 않음 고정은 풀렸다'))
 def _released(world, ctx, title):
     assert world.articles.get(ctx.ids[title]).read_at is not None
     with world.parts.db.connect() as conn:

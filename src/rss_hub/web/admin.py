@@ -184,7 +184,6 @@ def build_admin_router(
             webhook_name=webhook_name,
         )
 
-    @router.get("/", response_class=HTMLResponse)
     @router.get("/status", response_class=HTMLResponse)
     def status_page(request: Request) -> HTMLResponse:
         checklist = service.setup_checklist()

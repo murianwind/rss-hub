@@ -240,7 +240,7 @@
     el.classList.toggle("unread", unread > 0);
     el.textContent = unread > 0 ? String(unread) : total > 0 ? String(total) : "";
     el.hidden = !(unread > 0 || total > 0);
-    el.title = unread > 0 ? "안 읽은 글 " + unread + "개" : "글 " + total + "개";
+    el.title = unread > 0 ? "읽지 않은 글 " + unread + "개" : "글 " + total + "개";
   }
 
   function setCount(key, unread, total) {
@@ -252,7 +252,7 @@
   function applyState(state) {
     Object.keys(state.feeds).forEach(function (id) {
       var feed = state.feeds[id];
-      setCount("feed:" + id, feed.unread, feed.total);
+      setCount("feed:" + id, feed.unread, 0);
       document.querySelectorAll('[data-state="' + id + '"]').forEach(function (dot) {
         dot.className = "state-dot " + feed.state;
         dot.setAttribute("aria-label", STATE_LABEL[feed.state]);
@@ -260,13 +260,17 @@
       });
     });
     Object.keys(state.categories).forEach(function (id) {
-      setCount("category:" + id, state.categories[id].unread, state.categories[id].total);
+      setCount("category:" + id, state.categories[id].unread, 0);
     });
     Object.keys(state.topics).forEach(function (id) {
-      setCount("topic:" + id, state.topics[id].unread, state.topics[id].total);
+      setCount("topic:" + id, state.topics[id].unread, 0);
     });
     setCount("all", state.all_unread, 0);
     setCount("bookmarks", 0, state.bookmarks);
+    var usage = document.querySelector("[data-model-usage]");
+    if (usage && state.model_usage) {
+      usage.textContent = state.model_usage.remaining + "/" + state.model_usage.cap;
+    }
   }
 
   function refreshFeed(button) {
@@ -305,13 +309,13 @@
     if (!read && !dot) {
       dot = document.createElement("span");
       dot.className = "dot";
-      dot.title = "안 읽은 글";
+      dot.title = "읽지 않은 글";
       title.insertBefore(dot, title.firstChild);
     }
     var form = card.querySelector("form[data-read-toggle]");
     if (form) {
       form.elements.state.value = read ? "unread" : "read";
-      form.querySelector("button").textContent = read ? "안 읽음으로 표시" : "읽음으로 표시";
+      form.querySelector("button").textContent = read ? "읽지 않음으로 표시" : "읽음으로 표시";
     }
   }
 
@@ -336,7 +340,7 @@
         var data = readStateOf(result);
         if (!data || !data.ok) throw new Error("rejected");
         setCardRead(card, data.read);
-        // 사용자가 직접 안 읽음으로 바꾼 글은 스크롤해도 자동으로 읽음 처리하지 않는다
+        // 사용자가 직접 읽지 않음으로 바꾼 글은 스크롤해도 자동으로 읽음 처리하지 않는다
         if (data.read) card.removeAttribute("data-keep");
         else card.setAttribute("data-keep", "1");
         applyState(data.state);
@@ -462,9 +466,10 @@
 
     var search = function () {
       var params = new URLSearchParams();
-      var text = queryBox.value.trim();
-      if (text) params.set("q", text);
-      if (filterBox && filterBox.value) params.set("only", filterBox.value);
+      new FormData(searchForm).forEach(function (value, key) {
+        var text = String(value).trim();
+        if (text && key !== "page") params.set(key, text);
+      });
       var target = searchForm.getAttribute("action") + (params.toString() ? "?" + params : "");
       if (target === window.location.pathname + window.location.search) return;
       window.sessionStorage.setItem("rsshub.refocus", document.activeElement === queryBox ? "1" : "0");
@@ -494,6 +499,19 @@
       if (!menu.contains(event.target)) menu.open = false;
     });
   });
+
+  // ---------- 가끔 개수와 모델 잔여 사용량을 새로 받아 온다(백그라운드 수집과 요약이 바꾸므로) ----------
+  window.setInterval(function () {
+    if (document.visibilityState !== "visible") return;
+    fetch("/ui/state", { credentials: "same-origin" })
+      .then(function (response) {
+        return response.ok ? response.json() : null;
+      })
+      .then(function (state) {
+        if (state) applyState(state);
+      })
+      .catch(function () {});
+  }, 30000);
 
   // ---------- 화면을 다시 불러와도 보던 자리를 유지한다 ----------
   // 사이드바의 펼침 상태와 스크롤, 같은 화면이면 본문 스크롤까지 기억했다가 되돌린다.

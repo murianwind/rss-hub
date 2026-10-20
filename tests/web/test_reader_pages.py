@@ -21,8 +21,14 @@ def world(tmp_path):
 def test_the_sidebar_has_four_sections_in_order_and_they_start_collapsed(world):
     html = world.get("/reader").text
     assert list(groups(html)) == ["RSS", "카테고리", "주제", "환경 설정"]
-    # 전체 글과 북마크는 RSS 피드 구역 안에 있어서 전체 글 목록에서는 RSS만 열린다
-    assert re.findall(r'<details class="sec" id="sec-(\w+)" open>', html) == ["rss"]
+    # 처음 접속하면 사이드바의 구역은 모두 접혀 있다
+    assert re.findall(r'<details class="sec" id="sec-(\w+)" open>', html) == []
+    # 북마크는 RSS 피드와 카테고리 사이의 단독 항목이다
+    assert (
+        html.index('id="sec-rss"')
+        < html.index('href="/reader/bookmarks"')
+        < html.index('id="sec-categories"')
+    )
 
 
 def test_the_rss_group_lists_every_registered_site_including_those_in_categories(world):
@@ -67,7 +73,7 @@ def test_the_current_list_is_marked_in_the_sidebar(world):
 
 
 def test_the_main_navigation_links_to_the_viewer(world):
-    assert 'href="/reader"' in world.get("/").text
+    assert 'href="/reader"' in world.get("/status").text
 
 
 def test_site_and_category_names_are_escaped_in_the_sidebar(world):

@@ -3,7 +3,6 @@
 {% block main %}
 <header class="detailbar">
   <a class="back" href="{{ back }}">{{ icon('arrow-left') }}<span>목록으로 돌아가기</span></a>
-  <span class="source">출처: <b><a href="/reader/feed/{{ feed.id }}">{{ feed.name }}</a></b></span>
   <div class="detail-actions">
     <form method="post" action="/a/{{ article.id }}/bookmark">
       <input type="hidden" name="on" value="{{ 0 if bookmarked else 1 }}">
@@ -13,7 +12,7 @@
     <form method="post" action="/a/{{ article.id }}/read">
       <input type="hidden" name="state" value="unread">
       <input type="hidden" name="next" value="{{ back }}">
-      <button type="submit" class="compact" title="안 읽은 글로 되돌리고 목록으로 갑니다">안 읽음으로</button>
+      <button type="submit" class="compact" title="읽지 않은 글로 되돌리고 목록으로 갑니다">읽지 않음으로</button>
     </form>
   </div>
 </header>
@@ -54,8 +53,7 @@
       {% if body %}{{ body | safe }}{% else %}<p class="hint">본문이 없습니다. 원문에서 확인하세요.</p>{% endif %}
     </div>
     <div class="doc-foot">
-      <a class="back soft" href="{{ back }}">{{ icon('arrow-left') }}<span>목록으로 돌아가기</span></a>
-      {% if fulltext_state in ('ok', 'failed') %}<form method="post" action="/a/{{ article.id }}/fulltext" class="inline-form"><input type="hidden" name="next" value="{{ here }}"><button type="submit" class="link-btn">전문 다시 가져오기</button></form>{% endif %}
+      {% if fulltext_state in ('ok', 'failed') %}<form method="post" action="/a/{{ article.id }}/fulltext" class="inline-form"><input type="hidden" name="next" value="{{ here }}"><button type="submit" class="button">전문 다시 가져오기</button></form>{% endif %}
       {% if has_original %}<a class="button" href="/a/{{ article.id }}/original" target="_blank" rel="noopener noreferrer">원문 보기 {{ icon('external') }}</a>{% endif %}
     </div>
   </article>

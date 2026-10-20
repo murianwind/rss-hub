@@ -60,7 +60,7 @@ def build_reading_router(*, articles: ArticleRepository, reader: ReaderRepositor
 
     @router.post("/ui/auto-read")
     async def auto_read(request: Request) -> Response:
-        """스크롤로 지나간 글을 읽음 처리한다. 안 읽음으로 고정한 글은 건드리지 않는다."""
+        """스크롤로 지나간 글을 읽음 처리한다. 읽지 않음으로 고정한 글은 건드리지 않는다."""
         form = await request.form()
         parts = [p.strip() for p in str(form.get("ids", "")).split(",") if p.strip()]
         if (

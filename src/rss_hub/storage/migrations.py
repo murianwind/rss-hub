@@ -216,7 +216,7 @@ MIGRATIONS: tuple[str, ...] = (
     );
     """,
     # 10: 읽음과 북마크(새 뷰어), 사이드바 정렬 순서. 이미 있는 글은 모두 읽음으로 두어서
-    # 업그레이드 직후 안 읽은 글 수가 한꺼번에 쌓이지 않게 한다
+    # 업그레이드 직후 읽지 않은 글 수가 한꺼번에 쌓이지 않게 한다
     """
     ALTER TABLE articles ADD COLUMN read_at TEXT;
     ALTER TABLE articles ADD COLUMN bookmarked_at TEXT;
@@ -230,7 +230,7 @@ MIGRATIONS: tuple[str, ...] = (
     """
     UPDATE feeds SET poll_priority = 'normal' WHERE poll_priority != 'normal';
     """,
-    # 12: 사용자가 직접 "안 읽음"으로 바꾼 글은 스크롤로 자동 읽음 처리하지 않는다
+    # 12: 사용자가 직접 "읽지 않음"으로 바꾼 글은 스크롤로 자동 읽음 처리하지 않는다
     """
     ALTER TABLE articles ADD COLUMN keep_unread INTEGER NOT NULL DEFAULT 0;
     """,

@@ -34,7 +34,7 @@ def post(client, path, data, **headers):
 
 
 def test_status_page_lists_missing_settings(client):
-    html = client.get("/").text
+    html = client.get("/status").text
     for label in ("OpenRouter 키", "기본 웹훅", "서비스 주소"):
         assert label in html
     assert html.count("미설정") == 3
@@ -45,14 +45,14 @@ def test_status_page_has_no_missing_marker_once_everything_is_set(client, servic
     wid = service.add_webhook("rss", WEBHOOK)
     service.set_webhook_roles(default_id=wid, system_id=None)
     service.update({"service_base_url": BASE})
-    html = client.get("/").text
+    html = client.get("/status").text
     assert "미설정" not in html
     assert html.count("설정됨") == 3
 
 
 def test_app_starts_and_serves_pages_with_a_blank_database(client):
     assert client.get("/healthz").status_code == 200
-    assert client.get("/").status_code == 200
+    assert client.get("/status").status_code == 200
     assert client.get("/settings").status_code == 200
 
 
@@ -367,18 +367,18 @@ def make_ready_article(tmp_path):
 
 
 def test_the_status_page_asks_for_the_service_address_when_articles_are_waiting(client, tmp_path):
-    client.get("/")  # DB를 만든다
+    client.get("/status")  # DB를 만든다
     make_ready_article(tmp_path)
-    html = client.get("/").text
+    html = client.get("/status").text
     assert "서비스 주소 필요" in html and "1개" in html
 
 
 def test_no_address_notice_without_waiting_articles(client):
-    assert "서비스 주소 필요" not in client.get("/").text
+    assert "서비스 주소 필요" not in client.get("/status").text
 
 
 def test_no_address_notice_once_the_address_is_set(client, service, tmp_path):
-    client.get("/")
+    client.get("/status")
     make_ready_article(tmp_path)
     service.update({"service_base_url": BASE})
-    assert "서비스 주소 필요" not in client.get("/").text
+    assert "서비스 주소 필요" not in client.get("/status").text

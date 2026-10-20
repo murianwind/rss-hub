@@ -528,7 +528,7 @@ def _empty_base_url(env):
 @then('상태 화면에 "서비스 주소 필요"가 표시된다')
 def _status_shows_notice(env, tmp_path):
     client = TestClient(create_app(data_dir=tmp_path, clock=env.clock), follow_redirects=False)
-    assert "서비스 주소 필요" in client.get("/").text
+    assert "서비스 주소 필요" in client.get("/status").text
 
 
 @given(parsers.parse('글 123이 "ready"이고 서비스 주소는 "{url}"이다'))

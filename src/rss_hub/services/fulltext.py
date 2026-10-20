@@ -47,7 +47,7 @@ class FullTextService:
             page = self._pages.fetch_page(link)
         except FetchError as error:
             return self._failed(article, error.reason)
-        html = extract_main_content(page.text, page.final_url)
+        html = extract_main_content(page.text, page.final_url, article.title)
         if html is None:
             return self._failed(article, NO_CONTENT)
         self._articles.save_full_text(article.id, html[:MAX_FULL_TEXT_CHARS])

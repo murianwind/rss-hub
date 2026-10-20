@@ -2,8 +2,8 @@
 
 import re
 from collections.abc import Callable
-from datetime import datetime, tzinfo
-from urllib.parse import urlencode
+from datetime import UTC, datetime, tzinfo
+from urllib.parse import quote, urlencode
 
 from fastapi import Request
 from fastapi.responses import RedirectResponse
@@ -11,6 +11,7 @@ from markupsafe import Markup, escape
 
 from rss_hub.services.clock import Clock
 from rss_hub.services.settings import SettingsService
+from rss_hub.storage.llm_usage import LlmUsageRepository
 from rss_hub.storage.reader import ReaderRepository
 
 # 24x24 선 아이콘(선 속성은 CSS의 .icon이 정한다). 외부 아이콘 글꼴을 쓰지 않는다.
@@ -54,7 +55,7 @@ TOASTS = {
     "read_all": "모두 읽음으로 표시했습니다.",
     "bookmarked": "북마크에 추가했습니다.",
     "unbookmarked": "북마크를 해제했습니다.",
-    "marked_unread": "안 읽음으로 표시했습니다.",
+    "marked_unread": "읽지 않음으로 표시했습니다.",
     "marked_read": "읽음으로 표시했습니다.",
     "fulltext": "원문에서 전문을 다시 가져왔습니다.",
     "fulltext_failed": "원문에서 전문을 가져오지 못했습니다.",
@@ -156,7 +157,6 @@ def _open_sections(request: Request, scope_kind: str) -> set[str]:
     if path.startswith(SETTINGS_PATHS):
         return {"settings"}
     sections = {"feed": {"rss"}, "category": {"categories"}, "topic": {"topics"}}
-    sections.update({"all": {"rss"}, "bookmarks": {"rss"}})
     return sections.get(scope_kind, set())
 
 
@@ -167,6 +167,36 @@ def sidebar_width(raw: object) -> int:
         return 0
     snapped = (int(text) + SIDEBAR_STEP // 2) // SIDEBAR_STEP * SIDEBAR_STEP  # 반올림(5는 올림)
     return min(SIDEBAR_MAX, max(SIDEBAR_MIN, snapped))
+
+
+def qs(value: object) -> str:
+    """쿼리스트링 값으로 쓸 글자를 모두 인코딩한다('/'도 %2F로).
+
+    프록시의 공격 차단 규칙(예: NPM의 Block Common Exploits)은 쿼리에 이름=/글자/ 모양이 있으면
+    요청을 막는다. 값의 '/'를 인코딩하면 그 모양이 생기지 않는다.
+    """
+    return quote(str(value), safe="")
+
+
+def model_usage_view(
+    *, usage: LlmUsageRepository, settings: SettingsService, clock: Clock
+) -> Callable[[], dict[str, int] | None]:
+    """사이드바에 보여 줄 모델 잔여 호출 수. 모델이 설정되어 있을 때만 값이 있다(없으면 None).
+
+    호출 수는 게이트웨이가 모델을 부를 때마다 기록하는 사용량(llm_usage)에서 읽는다.
+    요약, 주제 판정,
+    설정 화면의 벤치마크 모두 같은 게이트웨이를 거치므로 어디서 불러도 반영된다.
+    """
+
+    def view() -> dict[str, int] | None:
+        config = settings.snapshot()
+        if not settings.has_openrouter_key() or not any(config.model_chain):
+            return None
+        today = clock.now().astimezone(UTC).date()  # 게이트웨이와 같은 하루 기준
+        used = usage.count_day(today)
+        return {"remaining": max(0, config.llm_daily_cap - used), "cap": config.llm_daily_cap}
+
+    return view
 
 
 def _current(request: Request) -> str:
@@ -180,7 +210,12 @@ def _current(request: Request) -> str:
 
 
 def build_ui_context(
-    *, reader: ReaderRepository, settings: SettingsService, clock: Clock, version: str
+    *,
+    reader: ReaderRepository,
+    settings: SettingsService,
+    clock: Clock,
+    version: str,
+    model_usage: Callable[[], dict[str, int] | None],
 ) -> Callable[[Request], dict[str, object]]:
     """모든 화면에 사이드바와 공통 값을 넣는다. 키는 ui_로 시작해서 화면 값과 겹치지 않는다."""
 
@@ -206,6 +241,7 @@ def build_ui_context(
             "ui_auto_read": config.ui_auto_read,
             "ui_font": config.ui_font_size,
             "ui_version": version,
+            "ui_model_usage": model_usage(),
         }
 
     return context

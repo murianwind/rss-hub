@@ -1,5 +1,8 @@
 """18_full_text.feature: 원문 페이지의 전문 보기."""
 
+# ruff: noqa: E501  (HTML 견본은 한 줄로 두는 편이 읽기 쉽다)
+
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -10,7 +13,7 @@ from tests.fakes.discovery_fetcher import FakeDiscoveryFetcher
 from tests.fakes.viewer_world import World
 from tests.fakes.web_parts import start_app
 
-bind(globals(), "18_full_text.feature", [f"FTX-{n:02d}" for n in range(1, 9)])
+bind(globals(), "18_full_text.feature", [f"FTX-{n:02d}" for n in range(1, 11)])
 
 BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 LINK = "https://blog.example.com/post/1"
@@ -199,3 +202,77 @@ def _frame_article(world, ctx, frame):
 def _no_link_no_frame(ctx):
     text = body(ctx.response.text)
     assert "영상 보기" not in text and "<iframe" not in text and "영상 뒤 문단" in text
+
+
+# ---------- 군더더기 정리 ----------
+
+
+def _plain(html):
+    return re.sub(r"<[^>]*>", " ", html)
+
+
+@given(
+    "원문 페이지에 본문 뒤로 가이드 링크 목록과 태그 줄과 팔로우와 뉴스레터와 관련 글이 붙어 있는 글이 있다"
+)
+def _noisy_tail(world, ctx):
+    guides = "".join(
+        f"<li><a href='/vpn/{n}'>Best VPNs for Place {n} in 2026</a></li>" for n in range(5)
+    )
+    tail = (
+        f"<h4>Cybersecurity Guides</h4><ul>{guides}</ul>"
+        "<p>Explore more on these topics</p><div><a href='/t/a'>Crypto</a><a href='/t/b'>Privacy</a></div>"
+        "<p>Share this story</p><p><a href='/f'>Follow Us</a></p>"
+        "<h3>Sign up for our newsletters</h3><h3>Related Articles</h3>"
+    )
+    page = (
+        f"<html><body><article><p>{FULL}</p><p>마지막 본문 문단</p>{tail}</article></body></html>"
+    )
+    world.fetcher.page(LINK, page)
+    ctx.article = world.article(link=LINK)
+
+
+@then("본문의 글은 남고 링크 목록과 태그 줄과 하단 안내는 하나도 없다")
+def _tail_gone(ctx):
+    text = _plain(body(ctx.response.text))
+    assert "마지막 본문 문단" in text
+    for noise in (
+        "Cybersecurity",
+        "VPN",
+        "Explore more",
+        "Crypto",
+        "Share this",
+        "Follow Us",
+        "newsletters",
+        "Related",
+    ):
+        assert noise not in text, noise
+
+
+@given(
+    "원문 페이지가 로고와 같은 제목과 잘린 요약과 날짜와 공유 막대로 시작하고 출처 줄로 끝나는 글이 있다"
+)
+def _noisy_head(world, ctx):
+    share = (
+        "<ul><li><a href='http://twitter.com/x'>Post</a></li><li><a href='http://facebook.com/x'>Post</a></li>"
+        "<li><a href='https://linkedin.com/x'>Share</a></li><li>Annotate</li><li><a href='#'>Save</a></li><li>Print</li></ul>"
+    )
+    title = "Build a Board That Challenges Your Thinking"
+    page = (
+        "<html><body><article><img src='https://hbr.org/logo.svg' alt='Harvard Business Review'>"
+        f"<h1>{title}</h1><p>An effective board should challenge the forces shaping decision-making. Define what your […]</p>"
+        f"<p>October 20, 2026</p>{share}<p>{FULL}</p>"
+        "<p>Source: <a href='https://hbr.org/2026/11/building'>This tip is adapted from a book.</a></p>"
+        f"{share}</article></body></html>"
+    )
+    world.fetcher.page(LINK, page)
+    ctx.article = world.article(link=LINK, title=title)
+
+
+@then("본문의 글과 출처 줄은 남고 로고와 제목과 요약과 날짜와 공유 막대는 없다")
+def _head_gone(ctx):
+    raw = body(ctx.response.text)
+    text = _plain(raw)
+    assert "원문 전체에만 있는 본문" in text and "Source:" in text
+    assert "<img" not in raw
+    for noise in ("Build a Board", "Define what your", "October 20", "Annotate", "Print", "Save"):
+        assert noise not in text, noise

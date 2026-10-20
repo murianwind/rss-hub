@@ -238,46 +238,212 @@ def _media_link(node: _Node, base_url: str) -> tuple[str, str] | None:
     return (AUDIO_LABEL if tag == "audio" else VIDEO_LABEL), url
 
 
-def _emit(out: list[str], used: list[int], piece: str) -> None:
-    out.append(piece)
-    used[0] += len(piece)  # used = [누적 글자 수, 만든 영상 링크 수]
-    # 누적 길이만 센다(매번 전체를 다시 합산하면 제곱 시간이 된다)
+_MARKERS = frozenset({
+    "related", "related articles", "related posts", "related stories", "related reading",
+    "related content", "you may also like", "you might also like", "recommended",
+    "recommended for you", "read more", "read next", "advertisement", "comments",
+    "leave a reply", "share this story", "share this article", "share this post", "tags",
+    "explore more on these topics", "follow us", "about the author", "about the authors",
+    "관련 글", "관련 기사", "관련 포스트", "함께 읽으면 좋은 글", "공유하기", "댓글", "태그",
+    "이전 글", "다음 글",
+})  # fmt: skip
+_MARKER_PREFIXES = ("sign up for", "subscribe to", "subscribe and", "join our", "follow us",
+                    "share this", "explore more", "more from")  # fmt: skip
+CUT_AFTER_SHARE = 0.4  # 글의 이만큼 이후에 나온 끝 안내만 자른다(앞쪽의 같은 낱말은 본문일 수 있다)
+_BLOCKS = frozenset(
+    {"p", "div", "span", "section", "strong", "b", "h1", "h2", "h3", "h4", "h5", "h6"}
+)
+_LOGO = re.compile(r"(^|[^a-z])(logo|sprite|favicon|avatar|emoji|badge|icon)s?([^a-z]|$)", re.I)
+_DATE = re.compile(
+    r"^(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.? \d{1,2},? \d{4}"
+    r"|\d{4}[-./]\d{1,2}[-./]\d{1,2}\.?|\d{4}년 ?\d{1,2}월 ?\d{1,2}일)$",
+    re.I,
+)
+MAX_DATE_ZONE = 1500  # 글 맨 앞 이만큼 안의 날짜만 한 줄 날짜로 본다
+MAX_LABEL = 40  # 목록 바로 앞의 짧은 이름표(예: Cybersecurity Guides)
 
 
-def _serialize(node: _Node, out: list[str], used: list[int], base_url: str, depth: int = 0) -> None:
-    if depth > MAX_DEPTH or used[0] > MAX_OUTPUT_CHARS:
+def _own_text(node: _Node, limit: int = 200) -> str:
+    """노드 안의 글자(버리는 덩어리는 뺀 것)를 한 줄로 이어 limit자까지."""
+    pieces: list[str] = []
+    size = 0
+    stack: list[_Node | str] = [node]
+    while stack and size < limit:
+        item = stack.pop()
+        if isinstance(item, str):
+            pieces.append(item.strip())
+            size += len(item.strip()) + 1
+        elif not item.dropped:
+            stack.extend(reversed(item.children))
+    return " ".join(p for p in pieces if p)[:limit]
+
+
+def _normal(text: str) -> str:
+    return re.sub(r"[^\w]+", "", text.lower())
+
+
+def _is_marker(text: str) -> bool:
+    cleaned = re.sub(r"\s*\(\d+\)\s*$", "", text.strip().strip(":：").lower())
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned in _MARKERS or cleaned.startswith(_MARKER_PREFIXES)
+
+
+def _matches_title(text: str, title: str) -> bool:
+    a, b = _normal(text), _normal(title)
+    if len(a) < 8 or len(b) < 8:
+        return False
+    return a in b or b in a
+
+
+def _anchor_count(node: _Node) -> int:
+    count = 0
+    stack: list[_Node | str] = [node]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, str) or item.dropped:
+            continue
+        count += 1 if item.tag == "a" else 0
+        stack.extend(item.children)
+    return count
+
+
+def _is_noise_list(node: _Node) -> bool:
+    """링크 목록이나 공유 막대: 항목 3개 이상, 대부분이 링크로만 된 항목이거나 짧은 이름표."""
+    if node.tag not in ("ul", "ol") or node.dropped:
+        return False
+    items = [c for c in node.children if not isinstance(c, str) and c.tag == "li"]
+    if len(items) < 3:
+        return False
+    pure = short = 0
+    for item in items:
+        text, links, _ = _measure(item)
+        if text > 100:
+            return False
+        pure += 1 if text > 0 and links == text else 0
+        short += 1 if text <= 12 else 0
+    return pure * 10 >= len(items) * 6 and (pure + short) * 10 >= len(items) * 8
+
+
+def _is_link_row(node: _Node) -> bool:
+    """링크만 늘어놓은 줄(태그 목록 등): 링크 2개 이상이고 글자가 모두 링크 안에 있다."""
+    if node.tag not in ("p", "div", "span", "section") or node.dropped:
+        return False
+    text, links, _ = _measure(node)
+    return 0 < text <= 300 and links == text and _anchor_count(node) >= 2
+
+
+def _is_noise_block(node: _Node) -> bool:
+    return _is_noise_list(node) or _is_link_row(node)
+
+
+def _is_decor_image(node: _Node) -> bool:
+    if node.tag != "img":
+        return False
+    src = node.attrs.get("src", "") or node.attrs.get("data-src", "")
+    if src.split("?")[0].lower().endswith(".svg"):
+        return True
+    blob = " ".join(node.attrs.get(k, "") for k in ("alt", "class", "id")) + " " + src
+    return bool(_LOGO.search(blob))
+
+
+class _Walk:
+    """직렬화 상태: 출력과 길이, 영상 링크 수, 본문 글자 수, 제목 제거 여부, 끝 안내 만남 여부."""
+
+    def __init__(self, base_url: str, title: str, total_text: int) -> None:
+        self.out: list[str] = []
+        self.chars = 0
+        self.media = 0
+        self.text = 0
+        self.total = total_text
+        self.base_url = base_url
+        self.title = title
+        self.title_done = False
+        self.cut = False
+
+    def emit(self, piece: str) -> None:
+        self.out.append(piece)
+        self.chars += len(piece)  # 누적 길이만 센다(매번 전체를 다시 합산하면 제곱 시간이 된다)
+
+
+def _skip_block(node: _Node, walk: _Walk) -> bool:
+    """글에 속하지 않는 한 덩어리인가(끝 안내는 walk.cut을 켠다)."""
+    if node.tag in ("ul", "ol", "p", "div", "span", "section") and _is_noise_block(node):
+        return True
+    own = _own_text(node, 100)
+    if node.tag in _BLOCKS and 0 < len(own) <= 60:
+        if _is_marker(own) and walk.text >= CUT_AFTER_SHARE * walk.total:
+            walk.cut = True
+            return True
+        is_title = node.tag in ("h1", "h2", "h3") and _matches_title(own, walk.title)
+        if walk.title and not walk.title_done and is_title:
+            walk.title_done = True
+            return True
+        in_date_zone = node.tag in ("p", "div", "span", "time") and walk.text < MAX_DATE_ZONE
+        if in_date_zone and _DATE.match(own):
+            return True
+    # 요약문 끝의 "[…]"는 길이와 상관없이 문단의 끝에서 본다(RSS 요약이 잘린 흔적)
+    return node.tag == "p" and _own_text(node, 3000).endswith(("[…]", "[...]"))
+
+
+def _serialize(node: _Node, walk: _Walk, depth: int = 0) -> None:
+    if depth > MAX_DEPTH or walk.chars > MAX_OUTPUT_CHARS or walk.cut:
         return
-    media = _media_link(node, base_url)
+    media = _media_link(node, walk.base_url)
     if media is not None:  # 버리는 덩어리 안이 아니면, 영상 자리에 링크를 둔다
-        if used[1] < MAX_MEDIA_LINKS:
-            used[1] += 1
+        if walk.media < MAX_MEDIA_LINKS:
+            walk.media += 1
             label, url = media
-            _emit(out, used, f'<div><a href="{escape(url, quote=True)}">{label}</a></div>')
+            walk.emit(f'<div><a href="{escape(url, quote=True)}">{label}</a></div>')
         return
-    if node.dropped or node.tag in _MEDIA_TAGS:
+    if node.dropped or node.tag in _MEDIA_TAGS or _is_decor_image(node) or _skip_block(node, walk):
         return
     attrs = {k: v for k, v in node.attrs.items() if k in _KEEP_ATTRS}
     lazy = node.attrs.get("data-src") or node.attrs.get("data-original")
     if node.tag == "img" and lazy and (not attrs.get("src") or _PLACEHOLDER.match(attrs["src"])):
         attrs["src"] = lazy
     rendered = "".join(f' {k}="{escape(v, quote=True)}"' for k, v in attrs.items())
-    _emit(out, used, f"<{node.tag}{rendered}>")
+    walk.emit(f"<{node.tag}{rendered}>")
     if node.tag in _VOID:
         return
-    for child in node.children:
+    children = [c for c in node.children if not (isinstance(c, str) and not c.strip())]
+    for index, child in enumerate(node.children):
         if isinstance(child, str):
-            _emit(out, used, escape(child, quote=False))
-        else:
-            _serialize(child, out, used, base_url, depth + 1)
-    _emit(out, used, f"</{node.tag}>")
+            walk.text += len(child.strip())
+            walk.emit(escape(child, quote=False))
+            continue
+        if _is_label_of_noise(node, index):
+            continue  # 링크 목록 바로 앞의 이름표(예: Cybersecurity Guides)는 목록과 함께 뺀다
+        _serialize(child, walk, depth + 1)
+    del children
+    walk.emit(f"</{node.tag}>")
+
+
+def _is_label_of_noise(parent: _Node, index: int) -> bool:
+    child = parent.children[index]
+    if isinstance(child, str) or child.tag not in _BLOCKS:
+        return False
+    label = _own_text(child, MAX_LABEL + 1)
+    if (
+        not 0 < len(label) <= MAX_LABEL
+        or _anchor_count(child)
+        or label.endswith((".", "。", "!", "?"))
+    ):
+        return False  # 링크가 있거나 문장으로 끝나면 본문이다(예: "Source: ...")
+    following = parent.children[index + 1] if index + 1 < len(parent.children) else None
+    if following is None or isinstance(following, str):
+        return False  # 바로 뒤가 글자거나 없으면 이름표가 아니다
+    return _is_noise_block(following)
 
 
 def _plain_length(clean_html: str) -> int:
     return len(re.sub(r"\s+", "", re.sub(r"<[^>]*>", "", clean_html)))
 
 
-def extract_main_content(html: str, base_url: str) -> str | None:
-    """원문 페이지에서 본문 HTML(정제됨)을 뽑는다. 본문을 찾지 못하면 None."""
+def extract_main_content(html: str, base_url: str, title: str = "") -> str | None:
+    """원문 페이지에서 본문 HTML(정제됨)을 뽑는다. 본문을 찾지 못하면 None.
+
+    title(글 제목)을 주면 본문 맨 앞의 같은 제목 머리글은 뺀다(화면이 이미 제목을 보여 주므로).
+    """
     builder = _Builder()
     try:
         builder.feed(html)
@@ -287,7 +453,7 @@ def extract_main_content(html: str, base_url: str) -> str | None:
     best = _best(builder.root)
     if best is None:
         return None
-    out: list[str] = []
-    _serialize(best, out, [0, 0], base_url)
-    clean = sanitize_html("".join(out), base_url)
+    walk = _Walk(base_url, title, _measure(best)[0])
+    _serialize(best, walk)
+    clean = sanitize_html("".join(walk.out), base_url)
     return clean if _plain_length(clean) >= MIN_TEXT_LENGTH else None

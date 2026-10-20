@@ -46,7 +46,7 @@ def build_feed_router(
 ) -> APIRouter:
     router = APIRouter()
 
-    def rows(state: str) -> tuple[list[dict[str, object]], dict[str, int]]:
+    def rows(state: str, query: str) -> tuple[list[dict[str, object]], dict[str, int]]:
         """피드 관리 화면의 행들과 상태별 개수. 수집 주기는 스케줄러가 실제로 배정한 값이다."""
         config = settings.snapshot()
         listed = overview.feeds()
@@ -60,9 +60,14 @@ def build_feed_router(
         )
         now = clock.now().astimezone(config.timezone)
         names = {w.id: w.name for w in settings.list_webhooks()}
-        counts = {"all": len(listed), "ok": 0, "error": 0, "never": 0}
+        counts = {"all": 0, "ok": 0, "error": 0, "never": 0}  # 검색 결과 안에서의 개수
         out: list[dict[str, object]] = []
+        needle = query.strip().lower()[:100]
         for item in listed:
+            haystack = f"{item.name} {item.url} {item.site_url} {item.category_name}".lower()
+            if needle and needle not in haystack:
+                continue
+            counts["all"] += 1
             counts[item.state] += 1
             if state and item.state != state:
                 continue
@@ -96,13 +101,15 @@ def build_feed_router(
         notice: str = "",
         status_code: int = 200,
         state: str = "",
+        q: str = "",
     ) -> HTMLResponse:
         config = settings.snapshot()
-        listed, counts = rows(state if state in STATE_FILTERS else "")
+        listed, counts = rows(state if state in STATE_FILTERS else "", q)
         context = {
             "rows": listed,
             "counts": counts,
             "state": state if state in STATE_FILTERS else "",
+            "q": q.strip()[:100],
             "interval": config.collect_interval_minutes,
             "default_max_entries": config.default_max_entries,
             "error": error,
@@ -138,7 +145,12 @@ def build_feed_router(
 
     @router.get("/feeds", response_class=HTMLResponse)
     def feed_page(
-        request: Request, saved: str = "", added: str = "", deleted: str = "", state: str = ""
+        request: Request,
+        saved: str = "",
+        added: str = "",
+        deleted: str = "",
+        state: str = "",
+        q: str = "",
     ) -> HTMLResponse:
         notice = (
             "피드를 추가했습니다. 첫 점검에서 지금 있는 글은 기록만 하고, 새 글부터 알림이 갑니다."
@@ -149,7 +161,7 @@ def build_feed_router(
             if saved
             else ""
         )
-        return page(request, notice=notice, state=state)
+        return page(request, notice=notice, state=state, q=q)
 
     # ---------- 개별 등록 ----------
 

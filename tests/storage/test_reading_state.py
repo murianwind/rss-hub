@@ -341,7 +341,7 @@ def test_a_search_text_is_cut_at_one_hundred_characters(env):
     assert env.titles(query="a" * 99 + "b") == []
 
 
-# ---------- 안 읽음으로 고정(자동 읽음 처리에서 빠진다) ----------
+# ---------- 읽지 않음으로 고정(자동 읽음 처리에서 빠진다) ----------
 
 
 def keep(env, article):
@@ -374,7 +374,7 @@ def test_auto_read_keeps_the_first_read_time_and_ignores_empty_and_repeated_call
 def test_marking_unread_pins_the_article_even_when_it_was_never_read(env):
     article = env.article()
     assert keep(env, article) is False
-    assert env.articles.mark_unread(article) is True  # 아직 안 읽은 글도 고정된다
+    assert env.articles.mark_unread(article) is True  # 아직 읽지 않은 글도 고정된다
     assert keep(env, article) is True
     assert env.articles.mark_unread(article) is False  # 이미 고정되어 바뀔 것이 없다
 

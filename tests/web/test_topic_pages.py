@@ -89,7 +89,7 @@ def test_the_page_shows_each_topic_with_its_fields_and_the_webhooks(client, app)
 
 
 def test_the_menu_links_to_topics_and_categories(client):
-    assert 'href="/topics"' in client.get("/").text  # 사이드바의 환경 설정 메뉴
+    assert 'href="/topics"' in client.get("/status").text  # 사이드바의 환경 설정 메뉴
     assert 'href="/categories"' in client.get("/feeds").text  # 구독 & OPML 관리 화면
 
 

@@ -148,11 +148,14 @@ code { font-size: 0.9em; }
 .source b { color: var(--fg); }
 .detail-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .detail-actions form { margin: 0; }
-.detail-scroll { background-image: linear-gradient(to right, var(--line-soft) 1px, transparent 1px), linear-gradient(to bottom, var(--line-soft) 1px, transparent 1px); background-size: 24px 24px; }
+/* 글 화면: 위아래 여백이 같고, 창 크기에 맞춰 카드가 늘고 줄며 글은 카드 안에서 스크롤한다 */
+.detail-scroll { display: flex; flex-direction: column; overflow: hidden; padding: 24px; }
+.detail-scroll .doc { flex: 1; min-height: 0; width: 100%; margin: 0 auto; overflow-y: auto; }
+@media (max-width: 820px) { .detail-scroll { padding: 12px; } }
 .doc { max-width: 760px; margin: 0 auto; padding: 28px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); }
 .doc h1 { font-size: 1.5rem; line-height: 1.35; margin: 6px 0 8px; }
 .doc-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; color: var(--muted); font-size: 13px; }
-.doc-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line-soft); }
+.doc-foot { display: flex; justify-content: flex-end; gap: 8px; align-items: center; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line-soft); }
 .article-body { overflow-wrap: anywhere; }
 .article-body img { max-width: 100%; height: auto; }
 .article-body table { display: block; overflow-x: auto; border-collapse: collapse; }
@@ -345,3 +348,14 @@ body:not(.sidebar-collapsed).sw-450 .sidebar { width: 450px; }
 body:not(.sidebar-collapsed).sw-460 .sidebar { width: 460px; }
 body:not(.sidebar-collapsed).sw-470 .sidebar { width: 470px; }
 body:not(.sidebar-collapsed).sw-480 .sidebar { width: 480px; }
+
+
+/* ---------- 북마크(RSS 피드와 카테고리 사이의 단독 항목), 모델 잔여 사용량 ---------- */
+.sec-link { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px; color: var(--fg); text-decoration: none; font-weight: 700; }
+.sec-link .sec-title { flex: 1; }
+.sec-link:hover { background: var(--accent-soft); }
+.sec-link[aria-current=page] { background: var(--accent-soft); color: var(--accent); }
+.sb-foot { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+.model-usage { font-size: 12px; color: var(--muted); }
+.model-usage b { color: var(--fg); }
+.sidebar-collapsed .model-usage { display: none; }

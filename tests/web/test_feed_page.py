@@ -98,7 +98,7 @@ def test_article_counts_and_the_max_entries_are_shown(world):
     world.article(world.f_free)
     world.articles.mark_read(world.articles.get(1).id)
     line = row(world.get("/feeds").text, "자유 블로그")
-    assert "수집한 글 2개(안 읽은 글 1개)" in line and "최대 항목 수 50(기본값)" in line
+    assert "수집한 글 2개(읽지 않은 글 1개)" in line and "최대 항목 수 50(기본값)" in line
 
 
 def test_the_note_explains_the_automatic_variable_schedule(world):
@@ -130,8 +130,8 @@ def test_an_unknown_filter_shows_everything(world):
 def test_each_row_has_refresh_settings_and_delete_buttons_that_return_to_this_page(world):
     html = row(world.get("/feeds").text, "자유 블로그")
     assert f'data-refresh="{world.f_free}"' in html
-    assert f'href="/panel/settings/feed/{world.f_free}?next=/feeds" data-panel' in html
-    assert f'href="/panel/delete/feed/{world.f_free}?next=/feeds" data-panel' in html
+    assert f'href="/panel/settings/feed/{world.f_free}?next=%2Ffeeds" data-panel' in html
+    assert f'href="/panel/delete/feed/{world.f_free}?next=%2Ffeeds" data-panel' in html
 
 
 def test_titles_and_addresses_are_escaped(world):

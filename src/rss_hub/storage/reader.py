@@ -28,7 +28,7 @@ class ListedArticle:
     topics: tuple[str, ...]
     read: bool
     bookmarked: bool
-    keep_unread: bool = False  # 사용자가 안 읽음으로 고정(자동 읽음 처리에서 빠진다)
+    keep_unread: bool = False  # 사용자가 읽지 않음으로 고정(자동 읽음 처리에서 빠진다)
 
 
 @dataclass(frozen=True)
@@ -196,7 +196,7 @@ class ReaderRepository:
         topic_id: int | None = None,
         only: str = "",
     ) -> int:
-        """범위 안의 안 읽은 글을 모두 읽음으로 표시한다. 표시한 글 수를 돌려준다."""
+        """범위 안의 읽지 않은 글을 모두 읽음으로 표시한다. 표시한 글 수를 돌려준다."""
         where, params = _where(
             feed_id=feed_id, category_id=category_id, topic_id=topic_id, query="", only=only
         )
@@ -225,7 +225,7 @@ class ReaderRepository:
     # ---------- 사이드바 ----------
 
     def sidebar(self) -> Sidebar:
-        """사이드바에 그릴 피드, 카테고리, 주제와 개수(전체 글 수와 안 읽은 글 수)."""
+        """사이드바에 그릴 피드, 카테고리, 주제와 개수(전체 글 수와 읽지 않은 글 수)."""
         marks = ",".join("?" for _ in VIEWABLE_STATUSES)
         statuses = list(VIEWABLE_STATUSES)
         with self._db.connect() as conn:

@@ -240,8 +240,8 @@ def test_deleting_a_topic_keeps_its_articles(world):
 def test_sidebar_rows_have_a_grip_settings_and_delete_buttons_and_drag_attributes(world):
     html = world.get("/reader").text
     assert f'data-drag-kind="feed" data-drag-id="{world.f_free}"' in html
-    assert f'href="/panel/settings/feed/{world.f_free}?next=/reader" data-panel' in html
-    assert f'href="/panel/delete/feed/{world.f_free}?next=/reader" data-panel' in html
+    assert f'href="/panel/settings/feed/{world.f_free}?next=%2Freader" data-panel' in html
+    assert f'href="/panel/delete/feed/{world.f_free}?next=%2Freader" data-panel' in html
     assert (
         f'data-drag-kind="category" data-drag-id="{world.news}"' in html
         and f'data-drag-kind="topic" data-drag-id="{world.topic}"' in html
@@ -249,7 +249,7 @@ def test_sidebar_rows_have_a_grip_settings_and_delete_buttons_and_drag_attribute
     for kind in ("feed", "category", "topic"):
         assert (
             f'data-reorder="{kind}"' in html
-            and f'href="/panel/add/{kind}?next=/reader" data-panel' in html
+            and f'href="/panel/add/{kind}?next=%2Freader" data-panel' in html
         )
 
 
@@ -263,7 +263,7 @@ def test_categories_and_the_rss_header_are_drop_targets_for_feeds(world):
 
 def test_the_panel_return_address_follows_the_current_list_and_drops_unknown_parameters(world):
     html = world.get(f"/reader/feed/{world.f_free}?page=2&q=abc&toast=read_all&x=1").text
-    assert f"?next=/reader/feed/{world.f_free}%3Fpage%3D2%26q%3Dabc" in html
+    assert f"?next=%2Freader%2Ffeed%2F{world.f_free}%3Fpage%3D2%26q%3Dabc" in html
     assert "toast%3D" not in html and "x%3D1" not in html
 
 

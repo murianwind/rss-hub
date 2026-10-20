@@ -200,6 +200,7 @@ def build_reader_router(
         here = f"/a/{article.id}" + (
             f"?back={quote(checked_back, safe='')}" if checked_back else ""
         )
+        language = detect_language(f"{article.title} {plain}")
         context = {
             "article": article,
             "feed": feed,
@@ -215,7 +216,8 @@ def build_reader_router(
             "body": body,
             "fulltext_state": full.state,
             "fulltext_reason": full.reason,
-            "lang": detect_language(f"{article.title} {plain}"),
+            "lang": language,
+            "page_lang": language or "ko",  # 글 언어를 따르면 브라우저가 번역을 올바르게 제안한다
             "has_original": is_web_link(article.link),
             "back": checked_back or f"/reader/feed/{feed.id}",
             "here": here,

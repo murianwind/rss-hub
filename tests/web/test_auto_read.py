@@ -1,4 +1,4 @@
-"""읽음 버튼(화면을 다시 불러오지 않음)과 스크롤 자동 읽음, 안 읽음 고정."""
+"""읽음 버튼(화면을 다시 불러오지 않음)과 스크롤 자동 읽음, 읽지 않음 고정."""
 
 import pytest
 
@@ -95,7 +95,7 @@ def test_clicking_a_pinned_article_to_read_it_makes_it_auto_readable_again(world
     article = world.article()
     post(world, "/ui/read-state", id=str(article), state="unread")
     world.get(f"/a/{article}")  # 사용자가 클릭해서 읽는다
-    post(world, "/ui/read-state", id=str(article), state="unread")  # 다시 안 읽음으로 고정
+    post(world, "/ui/read-state", id=str(article), state="unread")  # 다시 읽지 않음으로 고정
     assert post(world, "/ui/auto-read", ids=str(article)).json()["marked"] == 0
     post(world, "/ui/read-state", id=str(article), state="read")
     post(world, "/ui/read-state", id=str(article), state="unread")
@@ -145,7 +145,7 @@ def test_a_read_card_offers_to_make_it_unread_and_explains_the_pin(world):
     seen = card(world.get("/reader").text, "Seen")
     assert (
         'name="state" value="unread"' in seen
-        and "안 읽음으로 표시" in seen
+        and "읽지 않음으로 표시" in seen
         and "자동으로 읽음 처리되지 않습니다" in seen
     )
 

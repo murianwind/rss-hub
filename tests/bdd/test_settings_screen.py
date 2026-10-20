@@ -81,7 +81,7 @@ def _started_without_settings(env):
 @when("서비스를 시작한다")
 def _start(env):
     env.pages["health"] = env.client.get("/healthz")
-    env.pages["status"] = env.client.get("/")
+    env.pages["status"] = env.client.get("/status")
 
 
 @then("서비스는 정상적으로 시작된다")
@@ -108,7 +108,7 @@ def _save_required(env):
 
 @then('상태 화면의 "미설정" 안내가 사라진다')
 def _no_missing(env):
-    assert "미설정" not in env.client.get("/").text
+    assert "미설정" not in env.client.get("/status").text
 
 
 @then("서비스를 다시 시작하지 않았다")

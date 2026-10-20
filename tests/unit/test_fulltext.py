@@ -1,5 +1,7 @@
 """원문 페이지에서 본문만 뽑는 규칙(광고, 메뉴, 댓글, 스크립트는 빼고 정제한다)."""
 
+# ruff: noqa: E501  (HTML 견본은 한 줄로 두는 편이 읽기 쉽다)
+
 import time
 
 import pytest
@@ -427,3 +429,250 @@ def test_a_source_without_an_address_is_skipped_for_the_next_source():
     media = "<video controls><source type='video/mp4'><source src='https://cdn.example.com/c.mp4'></video>"
     text = extract_main_content(media_page(media), "https://x.example.com/")
     assert 'href="https://cdn.example.com/c.mp4"' in text
+
+
+# ---------- 글과 상관없는 덩어리 정리: 링크 목록, 태그, 공유 막대, 로고, 제목, 하단 안내 ----------
+
+LINK_LIST = (
+    "<ul>"
+    + "".join(
+        f"<li><a href='/p{n}'>다른 글 제목 {n}번: 길게 이어지는 링크 글자</a></li>"
+        for n in range(5)
+    )
+    + "</ul>"
+)
+SHARE_BAR = (
+    "<ul><li><a href='https://twitter.com/x'>Post</a></li><li><a href='https://facebook.com/x'>Post</a></li>"
+    "<li><a href='https://linkedin.com/x'>Share</a></li><li>Annotate</li><li><a href='#'>Save</a></li><li>Print</li></ul>"
+)
+
+
+def clean(body: str, title: str = "") -> str:
+    text = extract_main_content(
+        page(f"<article>{body}</article>"), "https://x.example.com/p", title
+    )
+    assert text is not None
+    return text
+
+
+def test_a_list_made_only_of_links_is_dropped_together_with_its_label():
+    text = clean(f"<p>{LONG}</p><h4>Cybersecurity Guides</h4>{LINK_LIST}<p>뒤 문단</p>")
+    assert "본문 문장입니다" in text and "뒤 문단" in text
+    assert "Cybersecurity Guides" not in text and "다른 글 제목" not in text
+
+
+def test_a_share_bar_with_mixed_links_and_labels_is_dropped():
+    text = clean(f"<p>{LONG}</p>{SHARE_BAR}<p>뒤 문단</p>")
+    for word in ("Post", "Share", "Annotate", "Save", "Print"):
+        assert word not in text
+    assert "뒤 문단" in text
+
+
+def test_the_same_share_bar_twice_is_dropped_twice():
+    text = clean(f"{SHARE_BAR}<p>{LONG}</p>{SHARE_BAR}")
+    assert "Annotate" not in text and "본문 문장입니다" in text
+
+
+def test_normal_lists_stay():
+    items = "<ul><li>첫째 항목은 설명이 충분히 깁니다 그리고 계속됩니다</li><li>둘째 항목도 마찬가지로 설명이 깁니다</li><li>셋째 항목은 <a href='/x'>링크</a>가 섞여 있습니다 그래도 본문입니다</li></ul>"
+    words = "<ul><li>사과</li><li>배</li><li>귤</li><li>감</li></ul>"
+    text = clean(f"<p>{LONG}</p>{items}{words}")
+    assert "첫째 항목" in text and "셋째 항목" in text and "사과" in text and "귤" in text
+
+
+def test_two_links_in_a_list_are_not_enough_to_call_it_noise():
+    text = clean(
+        f"<p>{LONG}</p><ul><li><a href='/a'>참고 자료 하나</a></li><li><a href='/b'>참고 자료 둘</a></li></ul>"
+    )
+    assert "참고 자료 하나" in text
+
+
+def test_a_row_of_tag_links_and_its_label_are_dropped():
+    tags = "<p>Explore more on these topics</p><div><a href='/t/a'>Crypto</a> <a href='/t/b'>Privacy</a> <a href='/t/c'>Sam Altman</a></div>"
+    text = clean(f"<p>{LONG}</p>{tags}")
+    assert "Explore more" not in text and "Crypto" not in text and "Sam Altman" not in text
+
+
+@pytest.mark.parametrize(
+    "marker",
+    [
+        "Related Articles",
+        "Share this story",
+        "Follow Us",
+        "Sign up for our newsletters",
+        "You might also like",
+        "Comments",
+        "Read next",
+        "관련 기사",
+        "댓글",
+        "Explore more on these topics",
+    ],
+)
+def test_a_closing_marker_cuts_everything_after_it(marker):
+    text = clean(
+        f"<p>{LONG}</p><h3>{marker}</h3><p>끝에 붙은 군더더기 문단</p><div><p>더 많은 군더더기</p></div>"
+    )
+    assert "본문 문장입니다" in text and "군더더기" not in text and marker not in text
+
+
+def test_a_marker_word_early_in_the_article_does_not_cut_the_real_text():
+    text = clean(f"<h3>Related</h3><p>{LONG}</p><p>뒷부분 문단</p>")
+    assert "뒷부분 문단" in text  # 글의 앞쪽(40% 이전)에 나온 낱말은 끝 안내로 보지 않는다
+
+
+def test_a_heading_that_only_starts_like_a_marker_is_kept():
+    text = clean(f"<p>{LONG}</p><h3>Related Work and Background</h3><p>이어지는 실제 내용</p>")
+    assert "Related Work and Background" in text and "이어지는 실제 내용" in text
+
+
+def test_the_heading_that_repeats_the_article_title_is_dropped_once():
+    text = clean(
+        f"<h1>Build a Board That Challenges Your Thinking</h1><p>{LONG}</p><h2>소제목</h2>",
+        "Build a Board That Challenges Your Thinking",
+    )
+    assert "Build a Board" not in text and "소제목" in text
+
+
+def test_a_title_that_is_contained_in_the_heading_or_the_other_way_around_also_matches():
+    assert "Spec Driven" not in clean(
+        f"<h2>Spec Driven Development: The Challenges</h2><p>{LONG}</p>", "Spec Driven Development"
+    )
+    assert "Challenges Of Boards" not in clean(
+        f"<h2>Challenges Of Boards</h2><p>{LONG}</p>",
+        "Challenges Of Boards | Harvard Business Review",
+    )
+
+
+def test_an_unrelated_heading_is_kept_even_when_a_title_is_given():
+    assert "완전히 다른 소제목" in clean(
+        f"<h2>완전히 다른 소제목</h2><p>{LONG}</p>", "Build a Board That Challenges Your Thinking"
+    )
+
+
+def test_without_a_title_no_heading_is_removed():
+    assert "Build a Board" in clean(
+        f"<h1>Build a Board That Challenges Your Thinking</h1><p>{LONG}</p>"
+    )
+
+
+@pytest.mark.parametrize(
+    "image",
+    [
+        "<img src='https://cdn.example.com/brand.svg' alt='Harvard Business Review'>",
+        "<img src='https://cdn.example.com/a.png' alt='site logo'>",
+        "<img src='https://cdn.example.com/logo-dark.png'>",
+        "<img class='avatar' src='https://cdn.example.com/me.jpg'>",
+        "<img src='https://cdn.example.com/sprite.png'>",
+    ],
+)
+def test_logos_and_decorative_images_are_dropped(image):
+    assert "<img" not in clean(f"{image}<p>{LONG}</p>")
+
+
+def test_content_images_stay():
+    text = clean(
+        f"<p>{LONG}</p><figure><img src='https://cdn.example.com/chart.png' alt='매출 추이'><figcaption>그림 1</figcaption></figure>"
+    )
+    assert "https://cdn.example.com/chart.png" in text and "그림 1" in text
+
+
+def test_a_truncated_teaser_ending_with_an_ellipsis_bracket_is_dropped():
+    text = clean(
+        f"<p>이 글은 요약문입니다. 길게 이어지다가 잘리는 부분 […]</p><p>{LONG}</p><p>일반 문단은 말줄임표로 끝나도 남습니다…</p>"
+    )
+    assert "요약문입니다" not in text and "일반 문단은" in text
+
+
+def test_a_standalone_date_line_near_the_top_is_dropped_but_a_date_deep_in_the_text_stays():
+    top = clean(f"<p>October 20, 2026</p><p>{LONG}</p>")
+    assert "October 20, 2026" not in top
+    deep = clean(f"<p>{LONG * 6}</p><p>October 20, 2026</p><p>그날의 일정</p>")
+    assert "October 20, 2026" in deep
+
+
+@pytest.mark.parametrize("date", ["2026-10-20", "2026.10.20", "2026년 10월 20일", "Oct 20, 2026"])
+def test_other_date_shapes_near_the_top_are_dropped_too(date):
+    assert date not in clean(f"<p>{date}</p><p>{LONG}</p>")
+
+
+def test_the_harvard_business_review_page_is_reduced_to_its_body():
+    share = "<ul><li><a href='http://twitter.com/HarvardBiz'>Post</a></li><li><a href='http://www.facebook.com/HBR'>Post</a></li><li><a href='https://www.linkedin.com/company/hbr'>Share</a></li><li>Annotate</li><li><a href='#'>Save</a></li><li>Print</li></ul>"
+    body = (
+        "<img src='https://hbr.org/resources/images/logo.svg' alt='Harvard Business Review'>"
+        "<h1>Build a Board That Challenges Your Thinking</h1>"
+        "<p>An effective board should challenge the forces shaping decision-making at your company. Define what your […]</p>"
+        f"<p>October 20, 2026</p>{share}{share}"
+        f"<p>{LONG}</p><p>Source: <a href='https://hbr.org/2026/11/building-a-board-that-fits'>This tip is adapted from a book.</a></p>{share}"
+    )
+    text = clean(body, "Build a Board That Challenges Your Thinking")
+    assert "본문 문장입니다" in text and "Source:" in text
+    for noise in (
+        "Annotate",
+        "Print",
+        "Save",
+        "Post",
+        "<img",
+        "Build a Board",
+        "Define what your",
+        "October 20",
+    ):
+        assert noise not in text, noise
+
+
+def test_the_gizmodo_page_loses_its_guides_tags_follow_and_newsletter_tail():
+    tail = (
+        "<h4>Cybersecurity Guides</h4><ul>"
+        + "".join(
+            f"<li><a href='/vpn/{n}'>Best VPNs for Place {n} in 2026</a></li>" for n in range(5)
+        )
+        + "</ul>"
+        "<p>Explore more on these topics</p><div><a href='/t/crypto'>Crypto</a><a href='/t/privacy'>Privacy</a><a href='/t/zoom'>Zoom</a></div>"
+        "<p>Share this story</p><ul><li></li></ul><p><a href='/follow'>Follow Us</a></p><p><a href='/google'>Add Gizmodo on Google</a></p>"
+        "<h3>Sign up for our newsletters</h3><p>Subscribe and interact with our community.</p><h3>Related Articles</h3>"
+    )
+    text = clean(
+        f"<p>{LONG}</p><p>{LONG}</p><h3>A Long List of Controversies</h3><p>마지막 본문 문단</p>{tail}"
+    )
+    assert "마지막 본문 문단" in text and "A Long List of Controversies" in text
+    for noise in (
+        "Cybersecurity",
+        "VPN",
+        "Explore more",
+        "Crypto",
+        "Share this",
+        "Follow Us",
+        "Gizmodo on Google",
+        "newsletters",
+        "Related Articles",
+    ):
+        assert noise not in text, noise
+
+
+def test_a_sentence_or_a_line_with_a_link_before_a_noise_list_is_not_mistaken_for_its_label():
+    text = clean(
+        f"<p>{LONG}</p><p>이 문장은 목록 앞에 있지만 문장입니다.</p>{LINK_LIST}<p>Source: <a href='/s'>원문</a></p>{SHARE_BAR}"
+    )
+    assert "이 문장은 목록 앞에" in text and "Source:" in text and "다른 글 제목" not in text
+
+
+def test_a_list_of_long_link_texts_is_a_reading_list_not_a_navigation_bar():
+    long_item = "함께 읽으면 좋은 긴 글의 제목입니다. " * 6  # 항목 하나가 100자를 넘는다
+    items = "".join(f"<li><a href='/r{n}'>{long_item}{n}</a></li>" for n in range(3))
+    assert "함께 읽으면 좋은" in clean(f"<p>{LONG}</p><ul>{items}</ul>")
+
+
+def test_a_label_like_line_at_the_very_end_or_followed_by_plain_text_is_kept():
+    assert "마지막 줄" in clean(f"<p>{LONG}</p><h4>마지막 줄</h4>")
+    text = clean(f"<p>{LONG}</p><h4>짧은 소제목</h4>바로 이어지는 글자{LINK_LIST}")
+    assert "짧은 소제목" in text and "바로 이어지는 글자" in text
+
+
+@pytest.mark.parametrize("ending", ["[…]", "[...]"])
+def test_both_bracket_shapes_of_a_cut_off_summary_are_dropped(ending):
+    text = clean(f"<p>요약이 중간에서 잘린 문단입니다 {ending}</p><p>{LONG}</p>")
+    assert "잘린 문단" not in text and "본문 문장입니다" in text
+
+
+def test_a_very_short_heading_is_never_taken_for_the_title():
+    text = clean(f"<h2>설계</h2><p>{LONG}</p>", "설계")  # 너무 짧아서 같은 제목인지 알 수 없다
+    assert "설계" in text

@@ -39,9 +39,9 @@ def env(tmp_path):
     feed = feeds.add("https://a.example.com/rss", "A")
     pages = FakePages()
 
-    def add(link="https://a.example.com/post/1"):
+    def add(link="https://a.example.com/post/1", title="제목"):
         new = NewArticle(
-            feed, f"g-{link}", "제목", link, "<p>RSS 요약</p>", "", clock.now(), "2026-10-16"
+            feed, f"g-{link}", title, link, "<p>RSS 요약</p>", "", clock.now(), "2026-10-16"
         )
         return articles.add(new)
 
@@ -163,3 +163,15 @@ def test_a_long_failure_reason_is_shortened(env):
     article_id = add()
     articles.save_full_text_failure(article_id, "x" * 500)
     assert len(articles.get(article_id).full_error) == 100
+
+
+def test_the_heading_that_repeats_the_article_title_is_left_out_of_the_stored_text(env):
+    articles, service, pages, add = env
+    title = "Build a Board That Challenges Your Thinking"
+    pages.pages["https://a.example.com/post/1"] = (
+        f"<article><h1>{title}</h1><h2>전혀 다른 소제목</h2><p>{PARAGRAPH}</p></article>"
+    )
+    article_id = add(title=title)
+    service.ensure(articles.get(article_id))
+    stored = articles.get(article_id).full_html
+    assert title not in stored and "전혀 다른 소제목" in stored

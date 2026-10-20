@@ -1,5 +1,6 @@
 """화면을 다시 불러오지 않고 사이드바를 갱신하는 데 쓰는 경로: 개수와 상태, 피드 강제 새로고침."""
 
+from collections.abc import Callable
 from dataclasses import replace
 
 from fastapi import APIRouter
@@ -11,7 +12,7 @@ from rss_hub.storage.feeds import FeedRepository
 from rss_hub.storage.reader import ReaderRepository, Sidebar
 
 
-def sidebar_state(side: Sidebar) -> dict[str, object]:
+def sidebar_state(side: Sidebar, model_usage: dict[str, int] | None = None) -> dict[str, object]:
     """사이드바의 모든 개수와 피드 상태(스크립트가 화면의 뱃지와 점을 고쳐 쓴다)."""
     return {
         "feeds": {
@@ -22,17 +23,22 @@ def sidebar_state(side: Sidebar) -> dict[str, object]:
         "topics": {str(t.id): {"unread": t.unread, "total": t.total} for t in side.topics},
         "all_unread": side.all_unread,
         "bookmarks": side.bookmarks,
+        "model_usage": model_usage,
     }
 
 
 def build_live_router(
-    *, reader: ReaderRepository, feeds: FeedRepository, collector: CollectService
+    *,
+    reader: ReaderRepository,
+    feeds: FeedRepository,
+    collector: CollectService,
+    model_usage: Callable[[], dict[str, int] | None],
 ) -> APIRouter:
     router = APIRouter()
 
     @router.get("/ui/state")
     def state() -> JSONResponse:
-        return JSONResponse(sidebar_state(reader.sidebar()))
+        return JSONResponse(sidebar_state(reader.sidebar(), model_usage()))
 
     @router.post("/feeds/{feed_id}/refresh")
     def refresh(feed_id: int) -> JSONResponse:
@@ -48,7 +54,7 @@ def build_live_router(
                 "error": error,
                 "added": report.added,
                 "baseline": report.baseline_recorded,
-                "state": sidebar_state(reader.sidebar()),
+                "state": sidebar_state(reader.sidebar(), model_usage()),
             }
         )
 

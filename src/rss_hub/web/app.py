@@ -12,7 +12,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -59,7 +59,7 @@ from rss_hub.web.reader import build_reader_router
 from rss_hub.web.reading import build_reading_router
 from rss_hub.web.security import SAFE_METHODS, SECURITY_HEADERS, request_is_same_origin
 from rss_hub.web.topics import build_topic_router
-from rss_hub.web.ui import ago, build_ui_context, icon, sprite
+from rss_hub.web.ui import ago, build_ui_context, icon, model_usage_view, qs, sprite
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +94,7 @@ def create_app(
     templates = Jinja2Templates(directory=TEMPLATE_DIR)
     templates.env.globals.update(icon=icon, sprite=sprite)
     templates.env.filters["ago"] = ago
+    templates.env.filters["qs"] = qs
     articles = ArticleRepository(database, app_clock)
     feeds = FeedRepository(database, app_clock)
     job_runs = JobRunRepository(database, app_clock)
@@ -137,8 +138,17 @@ def create_app(
     )
     app.include_router(build_feedback_router(topics=topics, articles=articles, templates=templates))
     reader = ReaderRepository(database, app_clock)
+    model_usage = model_usage_view(
+        usage=LlmUsageRepository(database, app_clock), settings=service, clock=app_clock
+    )
     templates.context_processors.append(
-        build_ui_context(reader=reader, settings=service, clock=app_clock, version=get_version())
+        build_ui_context(
+            reader=reader,
+            settings=service,
+            clock=app_clock,
+            version=get_version(),
+            model_usage=model_usage,
+        )
     )
     app.include_router(build_reading_router(articles=articles, reader=reader))
     app.include_router(build_ordering_router(orders=OrderRepository(database), feeds=feeds))
@@ -203,7 +213,9 @@ def create_app(
     collector = CollectService(
         feeds=feeds, articles=articles, fetcher=fetcher, settings=service, clock=app_clock
     )
-    app.include_router(build_live_router(reader=reader, feeds=feeds, collector=collector))
+    app.include_router(
+        build_live_router(reader=reader, feeds=feeds, collector=collector, model_usage=model_usage)
+    )
     app.include_router(
         build_feed_router(
             feeds, service, templates, registration, OverviewRepository(database), app_clock
@@ -226,6 +238,11 @@ def create_app(
         for name, value in SECURITY_HEADERS.items():
             response.headers.setdefault(name, value)
         return response
+
+    @app.get("/", include_in_schema=False)
+    def root() -> RedirectResponse:
+        """처음 접속하면 글 목록을 보여 준다(상태 화면은 /status)."""
+        return RedirectResponse("/reader", status_code=307)
 
     @app.get("/healthz")
     def healthz(response: Response) -> dict[str, str | None]:
