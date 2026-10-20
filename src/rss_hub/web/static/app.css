@@ -416,3 +416,11 @@ body:not(.sidebar-collapsed).sw-480 .sidebar { width: 480px; }
 
 /* ---------- 웹페이지 구독 표시 ---------- */
 .kind-badge { display: inline-block; margin-left: 6px; padding: 1px 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); color: var(--muted); font-size: 11px; font-weight: 600; vertical-align: middle; }
+
+
+/* ---------- 피드 설정: 주소 칸 옆의 "변경" 버튼과 주소 찾기 ---------- */
+.input-row { display: flex; gap: 8px; align-items: stretch; }
+.input-row input { flex: 1; min-width: 0; }
+.finder { margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+.finder[hidden], [data-picked][hidden], [data-finder-results] :empty { display: none; }
+.candidate.pick { margin-top: 8px; padding: 10px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--surface); }

@@ -63,8 +63,18 @@
       <input type="hidden" name="next" value="{{ next }}">
       <div class="field"><label for="p_fname">표시 이름</label><input id="p_fname" name="name" value="{{ f.name }}" maxlength="200" required></div>
       <div class="field"><label for="p_emoji">이모지</label><input id="p_emoji" name="emoji" value="{{ f.emoji }}" maxlength="8" required></div>
-      <div class="field wide"><label for="p_furl">{% if f.kind == 'page' %}목록 페이지 주소 <span class="hint">바꾸면 저장할 때 글 목록이 보이는지 확인하고, 처음부터 다시 점검합니다(예전 글은 알림으로 보내지 않습니다)</span>{% else %}피드 주소 <span class="hint">바꾸면 저장할 때 정상적인 피드인지 확인하고, 처음부터 다시 점검합니다(예전 글은 알림으로 보내지 않습니다)</span>{% endif %}</label>
-        <input id="p_furl" name="url" value="{{ f.url }}" maxlength="2048" required></div>
+      <div class="field wide"><label for="p_furl">{% if f.kind == 'page' %}목록 페이지 주소{% else %}피드 주소{% endif %} <span class="hint">바꾸면 저장할 때 RSS 피드가 있는지 확인하고, 없으면 글 목록 페이지(웹페이지 구독)로 확인합니다. 처음부터 다시 점검합니다(예전 글은 알림으로 보내지 않습니다)</span></label>
+        <div class="input-row"><input id="p_furl" name="url" value="{{ f.url }}" maxlength="2048" required><button type="button" class="button" data-finder-open>변경</button></div>
+        <p class="hint" data-picked hidden></p>
+        <div class="finder" data-finder hidden>
+          <h3 class="slide-sub">피드 주소 변경</h3>
+          <label for="p_find">피드 또는 웹사이트 주소</label>
+          <input id="p_find" data-finder-input placeholder="https://example.com/ 또는 https://example.com/feed.xml" maxlength="2048" autocomplete="off">
+          <p class="hint">웹사이트 주소를 넣으면 그 페이지가 알려 준 피드를 찾아 보여 줍니다. RSS가 없는 사이트는 글 목록 페이지를 웹페이지 구독으로 고를 수 있습니다.</p>
+          <div class="row"><button type="button" class="primary" data-finder-run>확인</button><button type="button" class="button" data-finder-close>취소</button></div>
+          <div data-finder-results></div>
+        </div>
+      </div>
       <div class="field"><label for="p_max">최대 검사 항목 수 <span class="hint">비워 두면 기본값 {{ panel.default_max_entries }}</span></label>
         <input id="p_max" name="max_entries" value="{{ f.max_entries if f.max_entries else '' }}" maxlength="3"></div>
       <div class="field"><label for="p_cat">소속 카테고리</label>

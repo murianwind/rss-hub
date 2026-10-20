@@ -562,6 +562,54 @@
     });
   });
 
+  // ---------- 피드 설정: 주소 칸 옆 "변경"으로 피드를 찾아 고른다(피드 추가의 확인을 재활용) ----------
+  function runFinder(box) {
+    var input = box.querySelector("[data-finder-input]");
+    var results = box.querySelector("[data-finder-results]");
+    var address = input.value.trim();
+    if (!address) return;
+    results.textContent = "찾는 중…";
+    post("/feeds/discover", { url: address, pick: "1", next: "/feeds" }).then(function (result) {
+      // 서버가 이스케이프해서 만든 조각을 해석해 노드로 붙인다
+      var doc = new DOMParser().parseFromString(result.text, "text/html");
+      results.replaceChildren.apply(
+        results,
+        Array.prototype.map.call(doc.body.childNodes, function (node) {
+          return document.importNode(node, true);
+        })
+      );
+    });
+  }
+
+  document.addEventListener("click", function (event) {
+    var target = event.target;
+    if (!target.closest) return;
+    var field = target.closest(".field");
+    var box = field ? field.querySelector("[data-finder]") : null;
+    if (!box) return;
+    if (target.closest("[data-finder-open]")) {
+      box.hidden = !box.hidden;
+      if (!box.hidden) box.querySelector("[data-finder-input]").focus();
+    } else if (target.closest("[data-finder-close]")) {
+      box.hidden = true;
+    } else if (target.closest("[data-finder-run]")) {
+      runFinder(box);
+    } else if (target.closest("[data-pick-url]")) {
+      var picked = target.closest("[data-pick-url]").getAttribute("data-pick-url");
+      var note = field.querySelector("[data-picked]");
+      field.querySelector("input[name=url]").value = picked;
+      note.textContent = "선택한 주소를 넣었습니다. 저장하면 적용됩니다.";
+      note.hidden = false;
+      box.hidden = true;
+    }
+  });
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Enter" || !event.target.matches || !event.target.matches("[data-finder-input]")) return;
+    event.preventDefault(); // 설정 폼이 저장되지 않게 한다
+    runFinder(event.target.closest("[data-finder]"));
+  });
+
   // ---------- 삭제는 확인 창을 한 번 거친다(폼의 data-confirm 문구) ----------
   document.addEventListener(
     "submit",
@@ -592,6 +640,31 @@
   // 사이드바의 펼침 상태와 스크롤, 같은 화면이면 본문 스크롤까지 기억했다가 되돌린다.
   var UI_KEY = "rsshub.ui";
 
+  var LISTS = ["sec-rss", "sec-categories", "sec-topics"];
+
+  function listBody(id) {
+    return document.querySelector("#" + id + " > .sec-body");
+  }
+
+  function listScrolls() {
+    var scrolls = {};
+    LISTS.forEach(function (id) {
+      var body = listBody(id);
+      if (body) scrolls[id] = body.scrollTop;
+    });
+    return scrolls;
+  }
+
+  // 목록(RSS 피드, 카테고리, 주제) 안에서 선택한 줄이 보이게 한다
+  function showCurrent(body) {
+    var current = body.querySelector("[aria-current=page]");
+    if (!current) return;
+    var list = body.getBoundingClientRect();
+    var row = current.getBoundingClientRect();
+    if (row.top < list.top) body.scrollTop -= list.top - row.top + 8;
+    else if (row.bottom > list.bottom) body.scrollTop += row.bottom - list.bottom + 8;
+  }
+
   function saveUi() {
     var open = {};
     document.querySelectorAll("details.sec[id], details.tree[id], details.acc[id]").forEach(function (box) {
@@ -605,6 +678,7 @@
         url: window.location.pathname + window.location.search,
         side: side ? side.scrollTop : 0,
         main: main ? main.scrollTop : 0,
+        lists: listScrolls(),
         open: open,
       })
     );
@@ -625,6 +699,10 @@
     var side = document.querySelector(".sb-body");
     var main = document.querySelector(".main .scroll");
     if (side) side.scrollTop = saved.side;
+    LISTS.forEach(function (id) {
+      var body = listBody(id);
+      if (body && saved.lists && typeof saved.lists[id] === "number") body.scrollTop = saved.lists[id];
+    });
     if (main && saved.url === window.location.pathname + window.location.search) {
       main.scrollTop = saved.main;
     }
@@ -633,6 +711,10 @@
   window.addEventListener("pagehide", saveUi);
   document.addEventListener("submit", saveUi);
   restoreUi();
+  LISTS.forEach(function (id) {
+    var body = listBody(id);
+    if (body) showCurrent(body);
+  });
 
   // 토스트는 3초 뒤에 사라지고, 주소에서 toast 값을 지워서 새로고침해도 다시 나오지 않게 한다
   var toast = document.querySelector("[data-toast]");

@@ -2,7 +2,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from rss_hub.services.ports import FetchError, FetchResult
+from rss_hub.services.ports import FetchError, FetchResult, PageResult
 
 
 @dataclass
@@ -44,6 +44,10 @@ class FakeFeedFetcher:
         if isinstance(outcome, Exception):
             raise outcome
         return outcome
+
+    def fetch_page(self, url: str) -> PageResult:
+        """주소 판정이 웹페이지를 볼 때: 이 가짜는 웹페이지를 모른다(피드가 아니라는 답과 같다)."""
+        raise FetchError("NotAFeed")
 
     def urls_fetched(self) -> list[str]:
         return [call.url for call in self.calls]

@@ -281,7 +281,9 @@ class FeedRepository:
         with self._db.connect() as conn:
             return conn.execute("DELETE FROM feeds WHERE id = ?", (feed_id,)).rowcount > 0
 
-    def change_feed_url(self, feed_id: int, url: str, site_url: str | None = None) -> bool:
+    def change_feed_url(
+        self, feed_id: int, url: str, site_url: str | None = None, kind: str | None = None
+    ) -> bool:
         """피드 주소를 바꾼다(주소는 이미 검증된 것). 다른 피드와 겹치면 DuplicateFeedError.
 
         다른 피드를 가리킬 수 있어서 검증값(etag)과 오류 기록을 지우고 첫 점검 전 상태로 돌린다.
@@ -292,8 +294,8 @@ class FeedRepository:
                 cursor = conn.execute(
                     "UPDATE feeds SET url = ?, url_key = ?, etag = NULL, last_modified = NULL, "
                     "fail_count = 0, last_error = NULL, last_checked_at = NULL, status = ?, "
-                    "html_url = COALESCE(?, html_url) WHERE id = ?",
-                    (url, feed_url_key(url), STATUS_BASELINE, site_url, feed_id),
+                    "html_url = COALESCE(?, html_url), kind = COALESCE(?, kind) WHERE id = ?",
+                    (url, feed_url_key(url), STATUS_BASELINE, site_url, kind, feed_id),
                 )
             except sqlite3.IntegrityError as error:
                 raise DuplicateFeedError(url) from error

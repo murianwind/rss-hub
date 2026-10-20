@@ -14,7 +14,7 @@ from tests.bdd.binding import bind
 from tests.fakes.viewer_world import World
 from tests.fakes.web_parts import start_app
 
-bind(globals(), "19_viewer_polish.feature", [f"VPL-{n:02d}" for n in range(1, 16)])
+bind(globals(), "19_viewer_polish.feature", [f"VPL-{n:02d}" for n in range(1, 17)])
 
 BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 KEY = "sk-or-v1-abcdefghijklmnop"
@@ -456,3 +456,15 @@ def _rss_drop_target(world):
         in world.get("/reader").text
     )
     assert "target.contains(dragged)" in world.client.get("/static/app.js").text
+
+
+@then(
+    "스크립트는 RSS 피드, 카테고리, 주제 목록 각각의 스크롤을 기억했다가 되돌리고 선택한 줄이 안 보이면 보이게 한다"
+)
+def _list_scroll(world):
+    js = world.client.get("/static/app.js").text
+    assert (
+        'var LISTS = ["sec-rss", "sec-categories", "sec-topics"];' in js
+        and "lists: listScrolls()" in js
+    )
+    assert "body.scrollTop = saved.lists[id]" in js and "if (body) showCurrent(body);" in js

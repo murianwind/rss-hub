@@ -1,6 +1,7 @@
 """웹페이지 구독 화면: 추가(후보 확인), 등록, 표시, 주소 고치기, 깨졌을 때의 안내."""
 
 import html as html_module
+import re
 
 import pytest
 
@@ -203,7 +204,7 @@ def test_a_new_address_without_a_post_list_is_refused_and_nothing_changes(world)
     response = settings_post(world, feed, name="바뀌면 안 됨", url=f"{BASE}/empty")
     assert (
         response.status_code == 400
-        and "새 목록 페이지 주소를 확인하지 못했습니다: 글 목록을 찾지 못했습니다" in response.text
+        and "새 주소를 확인하지 못했습니다: 글 목록을 찾지 못했습니다" in response.text
     )
     assert (world.feeds.get(feed).name, world.feeds.get(feed).url) == ("예제 블로그", LIST_URL)
 
@@ -214,14 +215,10 @@ def test_a_new_address_that_cannot_be_opened_gives_the_reason(world):
     assert "시간 초과" in settings_post(world, feed, url=f"{BASE}/down").text
 
 
-def test_a_regular_feed_still_gets_the_feed_wording_when_its_new_address_is_bad(world):
+def test_a_bad_new_address_of_a_regular_feed_gives_the_same_message(world):
     world.fetcher.fail("https://new.example.com/rss", "NotAFeed")
-    response = settings_post(
-        world, world.f_free, name="자유 블로그", url="https://new.example.com/rss"
-    )
-    assert (
-        "새 피드 주소를 확인하지 못했습니다" in response.text and "목록 페이지" not in response.text
-    )
+    response = settings_post(world, world.f_free, url="https://new.example.com/rss")
+    assert "새 주소를 확인하지 못했습니다" in response.text and "피드가 아닙니다" in response.text
 
 
 def test_the_settings_panel_names_the_address_for_the_kind_of_subscription(world):
@@ -230,12 +227,9 @@ def test_the_settings_panel_names_the_address_for_the_kind_of_subscription(world
     rss_html = world.client.get(
         f"/panel/settings/feed/{world.f_free}", headers={"x-panel": "1"}
     ).text
-    assert (
-        "목록 페이지 주소" in page_html
-        and "글 목록이 보이는지 확인" in page_html
-        and "피드 주소" not in page_html
-    )
-    assert "피드 주소" in rss_html and "목록 페이지 주소" not in rss_html
+    assert 'for="p_furl">목록 페이지 주소' in page_html
+    assert "글 목록 페이지(웹페이지 구독)로 확인합니다" in page_html
+    assert 'for="p_furl">피드 주소' in rss_html and 'for="p_furl">목록 페이지 주소' not in rss_html
 
 
 # ---------- 내보내기 ----------
@@ -245,3 +239,140 @@ def test_opml_export_leaves_out_web_page_subscriptions_because_they_are_not_feed
     add_page_feed(world)
     opml = world.client.get("/feeds/export.opml").text
     assert LIST_URL not in opml and "자유 블로그" in opml
+
+
+# ---------- 주소로 종류를 판정해 고친다(RSS가 있으면 피드, 없으면 웹페이지 구독) ----------
+
+
+def test_a_regular_feed_edited_to_a_post_list_without_rss_becomes_a_web_page_subscription(world):
+    serve_list(world)
+    assert settings_post(world, world.f_free, name="자유 블로그", url=LIST_URL).status_code == 303
+    saved = world.feeds.get(world.f_free)
+    assert (saved.kind, saved.url, saved.status, saved.html_url) == (
+        KIND_PAGE,
+        LIST_URL,
+        STATUS_BASELINE,
+        f"{BASE}/",
+    )
+
+
+def test_a_web_page_subscription_edited_to_a_feed_address_becomes_a_regular_feed(world):
+    feed = add_page_feed(world)
+    world.fetcher.feed("https://blog.example.com/feed.xml", "공식 피드", "https://blog.example.com")
+    assert settings_post(world, feed, url="https://blog.example.com/feed.xml").status_code == 303
+    saved = world.feeds.get(feed)
+    assert (saved.kind, saved.url, saved.status) == (
+        KIND_FEED,
+        "https://blog.example.com/feed.xml",
+        STATUS_BASELINE,
+    )
+
+
+def test_a_page_that_advertises_feeds_is_refused_so_the_user_picks_the_feed(world):
+    serve_list(world)
+    advertised = '<head><link rel="alternate" type="application/rss+xml" href="https://blog.example.com/feed.xml">'
+    world.fetcher.page(LIST_URL, world.fetcher.pages[LIST_URL].replace("<head>", advertised))
+    response = settings_post(world, world.f_free, url=LIST_URL)
+    assert response.status_code == 400 and "버튼으로 찾아서 고르세요" in response.text
+    assert (
+        world.feeds.get(world.f_free).kind == KIND_FEED
+        and world.feeds.get(world.f_free).url != LIST_URL
+    )
+
+
+def test_saving_a_web_page_subscription_without_a_new_address_does_not_fetch_anything(world):
+    feed = add_page_feed(world)
+    assert settings_post(world, feed, name="이름만 바꿈", url=LIST_URL).status_code == 303
+    assert world.fetcher.page_calls == [] and world.fetcher.fetch_calls == []
+    assert world.feeds.get(feed).kind == KIND_PAGE
+
+
+# ---------- 주소 칸 옆 "변경" 버튼: 후보를 찾아 고른다 ----------
+
+
+def pick(world, url):
+    return post(world, "/feeds/discover", url=url, pick="1", next="/feeds")
+
+
+def test_the_pick_mode_returns_only_a_fragment_with_a_select_button_per_candidate(world):
+    world.fetcher.feed("https://new.example.com/rss", "새 블로그", "https://new.example.com")
+    response = pick(world, "https://new.example.com/rss")
+    html = response.text
+    assert response.status_code == 200 and "<html" not in html and "<form" not in html
+    assert (
+        'data-pick-url="https://new.example.com/rss"' in html
+        and ">선택</button>" in html
+        and "새 블로그" in html
+    )
+    assert (
+        'name="category_id"' not in html and 'name="webhook_id"' not in html and "등록" not in html
+    )  # 이름, 카테고리, 웹훅, 등록 칸은 없다
+
+
+def test_the_pick_mode_offers_a_web_page_subscription_when_there_is_no_rss(world):
+    serve_list(world)
+    html = pick(world, LIST_URL).text
+    assert (
+        'data-pick-url="' + LIST_URL + '"' in html
+        and "웹페이지 구독" in html
+        and "글 4개를 찾았습니다" in html
+        and "새 소식 1번" in html
+    )
+
+
+def test_the_pick_mode_shows_the_error_in_the_fragment_and_registers_nothing(world):
+    serve_list(world, count=2)
+    before = len(world.feeds.list_all())
+    response = pick(world, LIST_URL)
+    assert (
+        response.status_code == 200
+        and "이 주소에서 피드를 찾지 못했습니다" in response.text
+        and "data-pick-url" not in response.text
+    )
+    assert len(world.feeds.list_all()) == before
+
+
+def test_the_pick_mode_also_refuses_an_address_that_is_already_subscribed(world):
+    response = pick(world, world.feeds.get(world.f_free).url)
+    assert response.status_code == 200 and "이미 구독 중" in response.text
+
+
+def test_the_settings_panel_has_the_change_button_and_the_finder(world):
+    html = world.client.get(f"/panel/settings/feed/{world.f_free}", headers={"x-panel": "1"}).text
+    button = r"<button type=\"button\" class=\"button\" data-finder-open>변경</button>"
+    assert re.search(r'<input id="p_furl" name="url"[^>]*>\s*' + button, html)
+    assert "피드 주소 변경" in html and "data-finder-run" in html and "data-finder-close" in html
+    assert "data-finder-results" in html and re.search(
+        r'<input id="p_find" data-finder-input', html
+    )
+    assert 'name="p_find"' not in html  # 찾기 칸은 저장 값에 섞이지 않는다(name이 없다)
+
+
+def test_the_script_runs_the_finder_with_the_add_flow_and_fills_the_address(world):
+    js = world.client.get("/static/app.js").text
+    assert 'post("/feeds/discover", { url: address, pick: "1"' in js and "[data-pick-url]" in js
+    assert 'field.querySelector("input[name=url]").value = picked' in js
+    assert (
+        'event.key !== "Enter"' in js
+        and "event.preventDefault()" in js.split('event.key !== "Enter"')[1]
+    )
+
+
+def test_the_style_puts_the_change_button_next_to_the_address_input(world):
+    css = world.client.get("/static/app.css").text
+    assert (
+        ".input-row { display: flex;" in css and ".finder {" in css and ".candidate.pick {" in css
+    )
+
+
+# ---------- 목록 안 스크롤 기억 ----------
+
+
+def test_the_script_remembers_the_scroll_inside_each_sidebar_list_and_shows_the_selected_row(world):
+    js = world.client.get("/static/app.js").text
+    assert (
+        'var LISTS = ["sec-rss", "sec-categories", "sec-topics"];' in js
+        and "lists: listScrolls()" in js
+    )
+    assert "body.scrollTop = saved.lists[id]" in js
+    assert "if (body) showCurrent(body);" in js and "[aria-current=page]" in js

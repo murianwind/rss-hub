@@ -318,7 +318,7 @@ def test_an_address_that_is_not_a_working_feed_is_refused_and_nothing_changes(
     response = settings_form(world, world.f_free, name="바뀌면 안 됨", emoji="🧪", url=NEW_URL)
     assert (
         response.status_code == 400
-        and "새 피드 주소를 확인하지 못했습니다" in response.text
+        and "새 주소를 확인하지 못했습니다" in response.text
         and message in response.text
     )
     after = world.feeds.get(world.f_free)
@@ -353,4 +353,4 @@ def test_a_fetch_that_crashes_gives_a_generic_message_not_the_details(world):
 
 def test_the_settings_panel_says_the_new_address_is_checked_when_saved(world):
     html = world.client.get(f"/panel/settings/feed/{world.f_free}", headers={"x-panel": "1"}).text
-    assert "저장할 때 정상적인 피드인지 확인" in html
+    assert "저장할 때 RSS 피드가 있는지 확인" in html

@@ -173,6 +173,8 @@ def build_feed_router(
         form = await request.form()
         url = str(form.get("url", ""))
         result = registration.discover(url)
+        if form.get("pick"):  # 피드 설정의 주소 "변경": 후보만 조각으로 돌려준다(등록하지 않는다)
+            return templates.TemplateResponse(request, "_pick_results.html", {"result": result})
         return add_panel(
             request,
             url=url,
@@ -233,13 +235,13 @@ def build_feed_router(
         if url_changed and feed_url_key(url) in feeds.existing_url_keys():
             return page(request, error="이미 구독 중인 피드입니다", status_code=400)
         new_site: str | None = None
-        if url_changed:  # 새 주소가 정상적인 피드인지 등록할 때와 같게 확인한다(바꾸기 전에)
-            checked = await run_in_threadpool(registration.check, url, feed.kind)
-            if checked.error:
-                what = "목록 페이지" if feed.kind == KIND_PAGE else "피드"
-                message = f"새 {what} 주소를 확인하지 못했습니다: {checked.error}"
+        new_kind: str | None = None
+        if url_changed:  # RSS가 있는지 먼저 보고, 없으면 글 목록 페이지로 본다(바꾸기 전에)
+            resolved = await run_in_threadpool(registration.resolve, url)
+            if resolved.error:
+                message = f"새 주소를 확인하지 못했습니다: {resolved.error}"
                 return page(request, error=message, status_code=400)
-            new_site = checked.site_url
+            new_site, new_kind = resolved.site_url, resolved.kind
         try:
             feeds.update_feed(feed_id, values)
             # 규칙에 걸리지 않도록 비우는 쪽을 먼저 처리한다
@@ -250,7 +252,7 @@ def build_feed_router(
                 feeds.set_feed_webhook(feed_id, None)
                 feeds.set_feed_category(feed_id, category_id)
             if url_changed:
-                feeds.change_feed_url(feed_id, url, site_url=new_site)
+                feeds.change_feed_url(feed_id, url, site_url=new_site, kind=new_kind)
         except (FeedRuleError, DuplicateFeedError) as error:
             message = (
                 error.message if isinstance(error, FeedRuleError) else "이미 구독 중인 피드입니다"

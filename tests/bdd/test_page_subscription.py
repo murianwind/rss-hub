@@ -16,7 +16,7 @@ from tests.fakes.page_html import BASE, COMSCORE_LIKE, article_html, listing, sa
 from tests.fakes.viewer_world import World
 from tests.fakes.web_parts import start_app
 
-bind(globals(), "20_page_subscription.feature", [f"WPS-{n:02d}" for n in range(1, 8)])
+bind(globals(), "20_page_subscription.feature", [f"WPS-{n:02d}" for n in range(1, 10)])
 
 BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 LIST_URL = f"{BASE}/news"
@@ -184,12 +184,17 @@ def _red(world, ctx, note):
 def _new_address(world, ctx, url, state):
     ctx.new = url
     path = "/" + url.rsplit("/", 1)[1]
-    html = (
-        listing(sample_items(3), section=path)
-        if state == "글 목록 있음"
-        else "<html><body><p>글 없음</p></body></html>"
-    )
-    world.fetcher.page(url, html)
+    if state == "RSS 피드":
+        world.fetcher.feed(url, "공식 피드", "https://blog.example.com")
+    elif state == "RSS를 알려 주는 웹페이지":
+        advertised = '<head><link rel="alternate" type="application/rss+xml" href="https://blog.example.com/feed.xml">'
+        world.fetcher.page(
+            url, listing(sample_items(3), section=path).replace("<head>", advertised)
+        )
+    elif state in ("글 목록 있음", "RSS 없는 글 목록"):
+        world.fetcher.page(url, listing(sample_items(3), section=path))
+    else:
+        world.fetcher.page(url, "<html><body><p>글 없음</p></body></html>")
 
 
 @when(parsers.re(r'주소를 "(?P<url>[^"]+)"로 고쳐 저장한다'))
@@ -240,3 +245,57 @@ def _badge(world, ctx, mark):
 def _opml(world):
     opml = world.client.get("/feeds/export.opml").text
     assert LIST_URL not in opml and "자유 블로그" in opml
+
+
+# ---------- 주소를 고칠 때 종류 판정, 주소 찾기 ----------
+
+
+@given('일반 피드 "자유 블로그"의 주소를 고치려고 한다')
+def _regular_feed(world, ctx):
+    ctx.feed = world.f_free
+    assert world.feeds.get(world.f_free).kind == "feed"
+
+
+@then(parsers.re(r'구독 종류는 "(?P<kind>feed|page)"로 저장되고 처음부터 다시 점검한다'))
+def _kind_saved(world, ctx, kind):
+    saved = world.feeds.get(ctx.feed)
+    assert ctx.response.status_code == 303 and saved.kind == kind and saved.url == ctx.new
+    assert saved.status == STATUS_BASELINE
+
+
+@then(parsers.re(r'"(?P<message>[^"]+)"로 거부되고 종류와 주소는 그대로다'))
+def _kind_refused(world, ctx, message):
+    saved = world.feeds.get(ctx.feed)
+    assert ctx.response.status_code == 400 and message in ctx.response.text
+    assert (saved.kind, saved.url) == (ctx.before.kind, ctx.before.url)
+
+
+@when('피드 설정의 "변경"에서 그 주소를 확인한다')
+def _pick(world, ctx):
+    ctx.count = len(world.feeds.list_all())
+    ctx.response = post(world, "/feeds/discover", url=LIST_URL, pick="1", next="/feeds")
+
+
+@then('후보에는 "선택" 버튼만 있고 이름, 카테고리, 웹훅, 등록 칸은 없으며 구독은 늘지 않는다')
+def _pick_only(world, ctx):
+    html = ctx.response.text
+    assert (
+        ctx.response.status_code == 200
+        and f'data-pick-url="{LIST_URL}"' in html
+        and ">선택</button>" in html
+    )
+    assert all(
+        x not in html
+        for x in ('name="name"', 'name="category_id"', 'name="webhook_id"', "<form", "등록")
+    )
+    assert len(world.feeds.list_all()) == ctx.count
+
+
+@then('스크립트는 "선택"을 누르면 주소 칸에 그 주소를 넣고 저장 전에는 아무것도 바꾸지 않는다')
+def _pick_script(world):
+    js = world.client.get("/static/app.js").text
+    assert 'field.querySelector("input[name=url]").value = picked' in js
+    after = js.split('field.querySelector("input[name=url]").value = picked')[1].split("}\n  });")[
+        0
+    ]
+    assert "post(" not in after and "submit" not in after  # 값만 넣고 서버로 보내지 않는다

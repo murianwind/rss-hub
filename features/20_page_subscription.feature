@@ -57,10 +57,31 @@ Feature: 웹페이지 구독: RSS가 없는 사이트의 글 목록 페이지를
     Examples:
       | new                              | state   | result                                                                |
       | https://blog.example.com/news-v2 | 글 목록 있음 | 주소가 바뀌고 처음부터 다시 점검하는 상태가 된다                            |
-      | https://blog.example.com/empty   | 글 목록 없음 | "새 목록 페이지 주소를 확인하지 못했습니다"로 거부되고 주소는 그대로다 |
+      | https://blog.example.com/empty   | 글 목록 없음 | "새 주소를 확인하지 못했습니다"로 거부되고 주소는 그대로다 |
 
   @WPS-07 @new
   Scenario: 웹페이지 구독은 피드 관리에 표시되고 OPML 내보내기에서는 빠진다
     Given 글 목록 페이지에 글이 3개 있는 웹페이지 구독을 등록했다
     Then 피드 관리에서 그 구독에 "웹페이지" 표시가 있고 "자유 블로그"에는 없다
     And OPML 내보내기에는 그 구독이 없고 "자유 블로그"는 있다
+
+  @WPS-08 @new
+  Scenario Outline: 피드 주소를 고칠 때 RSS가 있는지 먼저 보고, 없으면 웹페이지 구독으로 있으면 피드로 바뀐다
+    Given 일반 피드 "자유 블로그"의 주소를 고치려고 한다
+    And 새 주소 "<new>"는 "<state>" 상태다
+    When 주소를 "<new>"로 고쳐 저장한다
+    Then <result>
+
+    Examples:
+      | new                                | state             | result                                                     |
+      | https://blog.example.com/feed.xml  | RSS 피드          | 구독 종류는 "feed"로 저장되고 처음부터 다시 점검한다               |
+      | https://blog.example.com/news-v2   | RSS 없는 글 목록   | 구독 종류는 "page"로 저장되고 처음부터 다시 점검한다               |
+      | https://blog.example.com/with-feed | RSS를 알려 주는 웹페이지 | "버튼으로 찾아서 고르세요"로 거부되고 종류와 주소는 그대로다 |
+
+  @WPS-09 @new
+  Scenario: 설정의 주소 "변경"에서 찾으면 후보만 보이고 아무것도 등록되지 않으며 선택하면 그 주소가 칸에 들어간다
+    Given 피드가 없는 사이트의 글 목록 페이지에 글이 4개 있다
+    When 피드 설정의 "변경"에서 그 주소를 확인한다
+    Then 후보에는 "선택" 버튼만 있고 이름, 카테고리, 웹훅, 등록 칸은 없으며 구독은 늘지 않는다
+    And 스크립트는 "선택"을 누르면 주소 칸에 그 주소를 넣고 저장 전에는 아무것도 바꾸지 않는다
+

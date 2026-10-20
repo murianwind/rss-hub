@@ -89,6 +89,6 @@ Feature: 피드 관리: 상태 점, 강제 새로고침, 자동 가변 수집 �
     Examples:
       | new                              | outcome  | result                                                              |
       | https://new.example.com/feed.xml | 정상 피드 | 저장되고 사이트 "자유 블로그"의 이름과 주소가 바뀌며 새 주소를 한 번 가져왔다        |
-      | https://page.example.com/about   | 피드 아님 | "새 피드 주소를 확인하지 못했습니다: 피드가 아닙니다"로 거부되고 이름과 주소는 그대로다 |
-      | https://down.example.com/rss     | 시간 초과 | "새 피드 주소를 확인하지 못했습니다: 응답이 없습니다(시간 초과)"로 거부되고 이름과 주소는 그대로다 |
+      | https://page.example.com/about   | 피드 아님 | "새 주소를 확인하지 못했습니다: 피드가 아닙니다"로 거부되고 이름과 주소는 그대로다 |
+      | https://down.example.com/rss     | 시간 초과 | "새 주소를 확인하지 못했습니다: 응답이 없습니다(시간 초과)"로 거부되고 이름과 주소는 그대로다 |
 

@@ -5,6 +5,7 @@ from rss_hub.services.feed_registration import (
     ALREADY_SUBSCRIBED,
     MAX_CANDIDATES,
     NOTHING_FOUND,
+    PAGE_HAS_FEEDS,
     FeedRegistrationService,
 )
 from rss_hub.services.settings import SettingsService
@@ -288,36 +289,32 @@ def test_a_feed_added_by_someone_else_between_the_check_and_the_save_is_reported
     "bad",
     ["ftp://x.example.com/rss", "javascript:alert(1)", "http://192.168.0.5/rss", "", "not a url"],
 )
-def test_check_refuses_an_address_that_breaks_the_address_rules_without_fetching(env, bad):
-    result = env.service.check(bad)
-    assert (
-        result.error
-        and result.site_url == ""
-        and env.fetcher.fetch_calls == []
-        and env.fetcher.page_calls == []
-    )
+def test_resolve_refuses_an_address_that_breaks_the_address_rules_without_fetching(env, bad):
+    result = env.service.resolve(bad)
+    assert result.error and env.fetcher.fetch_calls == [] and env.fetcher.page_calls == []
 
 
-def test_check_accepts_a_real_feed_and_reports_its_site_and_title_without_saving(env):
+def test_resolve_takes_a_real_feed_as_a_feed_and_reports_its_site_and_title_without_saving(env):
     env.fetcher.feed("https://new.example.com/rss", "새 블로그", "https://new.example.com")
     before = len(env.feeds.existing_url_keys())
-    result = env.service.check("https://new.example.com/rss")
-    assert (result.error, result.site_url, result.title) == (
+    result = env.service.resolve("https://new.example.com/rss")
+    assert (result.error, result.kind, result.site_url, result.title) == (
         "",
+        "feed",
         "https://new.example.com",
         "새 블로그",
     )
-    assert len(env.feeds.existing_url_keys()) == before  # 저장은 하지 않는다
+    assert len(env.feeds.existing_url_keys()) == before and env.fetcher.page_calls == []
 
 
 @pytest.mark.parametrize(
     ("reason", "message"),
     [("NotAFeed", "피드가 아닙니다"), ("ReadTimeout", "시간 초과"), ("ForbiddenAddress", "사설망")],
 )
-def test_check_turns_a_fetch_failure_into_a_short_reason(env, reason, message):
+def test_resolve_turns_a_fetch_failure_into_a_short_reason(env, reason, message):
     env.fetcher.fail("https://new.example.com/rss", reason)
-    result = env.service.check("https://new.example.com/rss")
-    assert message in result.error and result.site_url == ""
+    result = env.service.resolve("https://new.example.com/rss")
+    assert message in result.error
 
 
 # ---------- 웹페이지 구독(RSS가 없는 사이트) ----------
@@ -417,22 +414,49 @@ def test_registering_a_web_page_subscription_refuses_bad_input_and_saves_nothing
     assert len(env.feeds.existing_url_keys()) == before
 
 
-def test_check_for_a_page_feed_looks_for_posts_not_a_feed(env):
+def test_resolve_takes_a_post_list_without_feeds_as_a_web_page_subscription(env):
     with_posts(env)
-    ok = env.service.check(LIST_PAGE, "page")
-    assert (ok.error, ok.site_url, ok.title) == (
+    ok = env.service.resolve(LIST_PAGE)
+    assert (ok.error, ok.kind, ok.site_url, ok.title) == (
         "",
+        "page",
         "https://blog.example.com/",
         "예제 블로그 - 소식",
     )
     env.fetcher.page("https://blog.example.com/empty", "<html><body><p>글 없음</p></body></html>")
     assert (
-        "글 목록을 찾지 못했습니다"
-        in env.service.check("https://blog.example.com/empty", "page").error
+        "글 목록을 찾지 못했습니다" in env.service.resolve("https://blog.example.com/empty").error
     )
-    env.fetcher.fail("https://blog.example.com/down", "ConnectionError")
-    assert "연결하지 못했습니다" in env.service.check("https://blog.example.com/down", "page").error
-    assert env.service.check("javascript:alert(1)", "page").error
+    env.fetcher.errors["https://blog.example.com/down"] = "ConnectionError"
+    assert "연결하지 못했습니다" in env.service.resolve("https://blog.example.com/down").error
+
+
+def test_a_page_that_advertises_feeds_is_refused_with_a_hint_to_pick_one(env):
+    with_posts(env)
+    env.fetcher.page(
+        LIST_PAGE,
+        env.fetcher.pages[LIST_PAGE].replace(
+            "<head>", f"<head>{link('https://blog.example.com/feed.xml')}"
+        ),
+    )
+    assert env.service.resolve(LIST_PAGE).error == PAGE_HAS_FEEDS
+
+
+def test_feed_links_that_cannot_be_used_do_not_block_a_web_page_subscription(env):
+    with_posts(env)
+    env.fetcher.page(
+        LIST_PAGE,
+        env.fetcher.pages[LIST_PAGE].replace(
+            "<head>", f"<head>{link('http://192.168.0.9/feed.xml')}"
+        ),
+    )
+    assert env.service.resolve(LIST_PAGE).kind == "page"
+
+
+def test_a_feed_address_is_a_feed_even_when_it_also_looks_like_a_list_page(env):
+    with_posts(env, url="https://blog.example.com/feed.xml")
+    env.fetcher.feed("https://blog.example.com/feed.xml", "공식 피드", "https://blog.example.com")
+    assert env.service.resolve("https://blog.example.com/feed.xml").kind == "feed"
 
 
 def test_a_feed_registration_is_unchanged_and_saved_as_a_feed(env):

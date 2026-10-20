@@ -26,6 +26,10 @@ from rss_hub.storage.feeds import (
 MAX_CANDIDATES = 5  # 웹페이지가 알려 준 피드 중 실제로 확인해서 보여 주는 최대 개수
 ALREADY_SUBSCRIBED = "이미 구독 중인 피드입니다"
 NOTHING_FOUND = "이 주소에서 피드를 찾지 못했습니다"
+PAGE_HAS_FEEDS = (
+    "이 주소는 피드가 아니라 웹페이지이고, 이 페이지가 피드를 알려 주고 있습니다. "
+    "'변경' 버튼으로 찾아서 고르세요"
+)
 NO_PAGE_ITEMS = (
     "글 목록을 찾지 못했습니다. 글 목록 페이지 주소가 맞는지, "
     "사이트 구조가 바뀌지 않았는지 확인하세요"
@@ -50,12 +54,13 @@ class DiscoveryResult:
 
 
 @dataclass(frozen=True)
-class FeedCheck:
-    """주소 확인 결과. error가 비어 있으면 정상적인 피드다."""
+class Resolution:
+    """주소 판정 결과. error가 비어 있으면 kind(feed 또는 page)로 구독할 수 있다."""
 
-    error: str = ""
+    kind: str = KIND_FEED
     site_url: str = ""
     title: str = ""
+    error: str = ""
 
 
 @dataclass(frozen=True)
@@ -63,6 +68,14 @@ class RegistrationResult:
     feed_id: int | None = None
     name: str = ""
     error: str = ""
+
+
+def _usable(url: str) -> bool:
+    try:
+        validate_feed_url(url)
+    except FeedUrlError:
+        return False
+    return True
 
 
 def _page_candidate(url: str, final_url: str, listing: PageListing) -> Candidate:
@@ -143,26 +156,40 @@ class FeedRegistrationService:
             return DiscoveryResult(candidates=(_page_candidate(url, page.final_url, listing),))
         return DiscoveryResult(error=NOTHING_FOUND)
 
-    def check(self, raw_url: str, kind: str = KIND_FEED) -> FeedCheck:
-        """주소가 정상적인 피드인지 확인한다(등록과 같은 검사: 주소 규칙, 실제 가져오기, 피드 해석).
+    def resolve(self, raw_url: str) -> Resolution:
+        """주소를 판정한다(저장하지 않는다). 피드 주소면 feed, 글 목록 페이지면 page.
 
-        피드 주소를 바꾸기 전에 쓴다. 저장은 하지 않는다.
+        피드 주소를 바꿀 때 쓴다. 피드를 먼저 보고, 피드가 아니면 글 목록 페이지로 본다.
+        단, 그 페이지가 피드를 알려 주고 있으면 거부한다(그 피드를 고르도록 안내한다).
         """
         try:
             url = validate_feed_url(raw_url)
         except FeedUrlError as error:
-            return FeedCheck(error=error.message)
-        if kind == KIND_PAGE:
-            listing, error_text = self._read_listing(url)
-            if listing is None:
-                return FeedCheck(error=error_text)
-            return FeedCheck(site_url=site_of(url)[:MAX_URL_TEXT_LENGTH], title=listing.title)
+            return Resolution(error=error.message)
         try:
             result = self._fetcher.fetch(url, etag=None, last_modified=None)
         except FetchError as error:
-            return FeedCheck(error=describe_fetch_failure(error.reason))
-        return FeedCheck(
-            site_url=result.site_url[:MAX_URL_TEXT_LENGTH], title=_title(result, "", url)
+            if error.reason != "NotAFeed":
+                return Resolution(error=describe_fetch_failure(error.reason))
+            return self._resolve_page(url)
+        return Resolution(
+            kind=KIND_FEED,
+            site_url=result.site_url[:MAX_URL_TEXT_LENGTH],
+            title=_title(result, "", url),
+        )
+
+    def _resolve_page(self, url: str) -> Resolution:
+        try:
+            page = self._fetcher.fetch_page(url)
+        except FetchError as error:
+            return Resolution(error=describe_fetch_failure(error.reason))
+        if any(_usable(link.url) for link in find_feed_links(page.text, page.final_url)):
+            return Resolution(error=PAGE_HAS_FEEDS)
+        listing = extract_page_items(page.text, page.final_url)
+        if len(listing.items) < MIN_ITEMS:
+            return Resolution(error=NO_PAGE_ITEMS)
+        return Resolution(
+            kind=KIND_PAGE, site_url=site_of(url)[:MAX_URL_TEXT_LENGTH], title=listing.title
         )
 
     def _read_listing(self, url: str) -> tuple[PageListing | None, str]:
