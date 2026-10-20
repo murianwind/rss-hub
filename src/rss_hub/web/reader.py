@@ -8,7 +8,7 @@
 """
 
 from dataclasses import dataclass
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from fastapi import APIRouter, Request, Response
 from fastapi.concurrency import run_in_threadpool
@@ -22,7 +22,7 @@ from rss_hub.services.fulltext import FullTextService
 from rss_hub.services.settings import SettingsService
 from rss_hub.storage.articles import ArticleRepository
 from rss_hub.storage.feeds import FeedRepository
-from rss_hub.storage.reader import ONLY_BOOKMARKS, ONLY_UNREAD, ReaderRepository
+from rss_hub.storage.reader import ONLY_BOOKMARKS, ONLY_UNREAD, PER_PAGE, ReaderRepository
 from rss_hub.storage.topics import TopicRepository
 from rss_hub.web.articles import is_web_link
 from rss_hub.web.ui import list_url, safe_path, with_toast
@@ -48,6 +48,22 @@ class Scope:
 def _page_number(raw: str) -> int:
     text = raw.strip()
     return min(int(text), MAX_PAGE) if text.isascii() and text.isdigit() and int(text) >= 1 else 1
+
+
+def _plain_site(url: str) -> bool:
+    """사이트로 보내도 되는 주소: http(s)이고 호스트가 있고 계정 정보(user:pw@)가 없다."""
+    parts = urlsplit(url)
+    return parts.scheme in ("http", "https") and bool(parts.hostname) and "@" not in parts.netloc
+
+
+def _site_of(html_url: str, feed_url: str) -> str:
+    """제목을 누르면 갈 사이트 주소: 피드가 알려 준 사이트 주소, 없으면 피드 주소의 사이트 맨 앞."""
+    if html_url and is_web_link(html_url) and _plain_site(html_url):
+        return html_url
+    if _plain_site(feed_url):
+        parts = urlsplit(feed_url)
+        return f"{parts.scheme}://{parts.netloc}/"
+    return ""
 
 
 def build_reader_router(
@@ -86,6 +102,7 @@ def build_reader_router(
         page_text: str,
         q: str,
         only: str,
+        site_url: str = "",
     ) -> Response:
         request.state.scope = scope
         query = q.strip()[:100]
@@ -107,6 +124,8 @@ def build_reader_router(
             "heading_icon": HEADING_ICONS[scope.kind],
             "page": page,
             "base_path": base_path,
+            "site_url": site_url if _plain_site(site_url) else "",
+            "pages": max(1, -(-page.total // PER_PAGE)),
             "q": query,
             "only": shown_only,
             "back": list_url(base_path, page=page.page, query=query, only=shown_only),
@@ -144,6 +163,7 @@ def build_reader_router(
             page_text=page,
             q=q,
             only=only,
+            site_url=_site_of(feed.html_url, feed.url),
         )
 
     @router.get("/reader/category/{category_id}", response_class=HTMLResponse)

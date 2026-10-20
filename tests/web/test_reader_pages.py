@@ -169,14 +169,16 @@ def test_pagination_links_follow_thirty_per_page(world):
     first = world.get("/reader").text
     assert (
         first.count('<article class="card') == 30
-        and 'href="/reader?page=2"' in first
-        and "← 이전" not in first
+        and 'data-next href="/reader?page=2"' in first
+        and "data-prev" not in first
+        and '<span class="pager-info">1 / 2</span>' in first
     )
     second = world.get("/reader?page=2").text
     assert (
         second.count('<article class="card') == 5
-        and '<a href="/reader">← 이전</a>' in second  # 1쪽 주소에는 쪽 번호를 붙이지 않는다
-        and "다음 →" not in second
+        and 'data-prev href="/reader"' in second  # 1쪽 주소에는 쪽 번호를 붙이지 않는다
+        and "data-next" not in second
+        and '<span class="pager-info">2 / 2</span>' in second
     )
 
 

@@ -1,5 +1,7 @@
 """사용 피드백 3차: 차단 규칙 회피, 글 화면, 북마크 위치, 모델 사용량, 피드 검색."""
 
+# ruff: noqa: E501  (HTML 견본과 긴 정규식은 한 줄이 읽기 쉽다)
+
 import re
 
 import pytest
@@ -238,3 +240,135 @@ def test_an_empty_search_shows_every_feed_and_the_form_is_live_searchable(world)
     assert (
         '<form class="searchform feed-search" method="get" action="/feeds" role="search">' in html
     )
+
+
+# ---------- 사이트 제목 링크, 이어 보기, 진하게/연하게 ----------
+
+
+def heading_link(html):
+    found = re.search(
+        r'<h1><a class="site-link" href="([^"]+)" target="_blank" rel="([^"]+)"', html
+    )
+    return None if found is None else (found.group(1), found.group(2))
+
+
+def test_the_feed_title_links_to_the_site_in_a_new_window(world):
+    sited = world.feeds.add(
+        "https://blog.example.com/rss", "블로그", html_url="https://blog.example.com/"
+    )
+    href, rel = heading_link(world.get(f"/reader/feed/{sited}").text)
+    assert href == "https://blog.example.com/" and "noopener" in rel and "noreferrer" in rel
+    assert 'title="사이트로 이동"' in world.get(f"/reader/feed/{sited}").text
+
+
+def test_without_a_site_address_the_title_links_to_the_front_of_the_feed_host(world):
+    plain = world.feeds.add("https://news.example.org/feeds/all.xml", "뉴스")
+    assert heading_link(world.get(f"/reader/feed/{plain}").text)[0] == "https://news.example.org/"
+
+
+@pytest.mark.security
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "javascript:alert(1)",
+        "ftp://x.example.com/",
+        "data:text/html,1",
+        "https://user:pw@evil.example.com/",
+    ],
+)
+def test_an_unusable_site_address_is_never_linked(world, bad):
+    feed = world.feeds.add("https://good.example.com/rss", "좋은 피드")
+    with world.parts.db.connect() as conn:
+        conn.execute("UPDATE feeds SET html_url = ? WHERE id = ?", (bad, feed))
+    link = heading_link(world.get(f"/reader/feed/{feed}").text)
+    assert link is not None and link[0] == "https://good.example.com/" and bad not in link[0]
+
+
+def test_only_a_single_site_list_has_the_site_link(world):
+    for path in ("/reader", "/reader/bookmarks", f"/reader/category/{world.news}"):
+        assert heading_link(world.get(path).text) is None, path
+    assert heading_link(world.get(f"/reader/feed/{world.f_news}").text) is not None
+
+
+def test_the_pager_shows_the_page_and_pretty_previous_and_next_buttons(world):
+    for number in range(65):
+        world.article(minutes=number)
+    middle = world.get("/reader?page=2").text
+    assert re.search(
+        r'<a class="pager-btn" data-prev href="/reader">.*?<span>이전</span>', middle, re.S
+    )
+    assert re.search(
+        r'<a class="pager-btn" data-next href="/reader\?page=3"><span>다음</span>', middle
+    )
+    assert '<span class="pager-info">2 / 3</span>' in middle and 'aria-label="쪽 이동"' in middle
+    last = world.get("/reader?page=3").text
+    assert "data-next" not in last and "data-prev" in last
+
+
+def test_a_single_page_list_shows_one_of_one_with_no_buttons(world):
+    world.article()
+    html = world.get("/reader").text
+    assert (
+        '<span class="pager-info">1 / 1</span>' in html
+        and "data-next" not in html
+        and "data-prev" not in html
+    )
+
+
+def test_the_script_appends_the_next_page_when_the_end_comes_near_and_falls_back_to_buttons(world):
+    js = world.client.get("/static/app.js").text
+    assert "IntersectionObserver" in js and "a[data-next]" in js and "DOMParser" in js
+    assert 'pagerBox.classList.add("auto")' in js and 'pagerBox.classList.remove("auto")' in js
+    css = world.client.get("/static/app.css").text
+    assert ".pager.auto a[data-next]" in css and ".pager-btn {" in css
+    assert "불러오는 중…" in css and "마지막 글입니다" in css
+
+
+def test_unread_sites_are_bold_and_sites_without_unread_articles_are_light(world):
+    article = world.article(world.f_news)
+    html = world.get("/reader").text
+    rows = re.findall(
+        r'<li class="nav-row( has-unread)?" draggable="true" data-drag-kind="feed" data-drag-id="(\d+)"',
+        html,
+    )
+    by_feed = {int(feed): bool(flag) for flag, feed in rows}
+    assert by_feed[world.f_news] is True and by_feed[world.f_free] is False
+    assert by_feed.keys() >= {world.f_news, world.f_free}
+    world.articles.mark_read(article)
+    again = re.findall(
+        r'<li class="nav-row( has-unread)?" draggable="true" data-drag-kind="feed" data-drag-id="(\d+)"',
+        world.get("/reader").text,
+    )
+    assert not any(flag for flag, _ in again)
+
+
+def test_the_bold_and_light_styles_and_the_live_update_exist(world):
+    css = world.client.get("/static/app.css").text
+    assert ".nav-row[data-drag-kind=feed] .sb-text { font-weight: 400; opacity: 0.55; }" in css
+    assert (
+        ".nav-row[data-drag-kind=feed].has-unread .sb-text { font-weight: 700; opacity: 1; }" in css
+    )
+    js = world.client.get("/static/app.js").text
+    assert 'row.classList.toggle("has-unread", feed.unread > 0)' in js
+
+
+@pytest.mark.parametrize(
+    ("html_url", "feed_url", "expected"),
+    [
+        ("https://a.example.com/", "https://feed.example.org/rss", "https://a.example.com/"),
+        ("", "https://feed.example.org/x/rss", "https://feed.example.org/"),
+        (
+            "javascript:alert(1)",
+            "http://feed.example.org:8080/rss",
+            "http://feed.example.org:8080/",
+        ),
+        ("https://u:p@a.example.com/", "https://feed.example.org/rss", "https://feed.example.org/"),
+        ("", "ftp://feed.example.org/rss", ""),
+        ("", "https://u:p@feed.example.org/rss", ""),
+        ("", "", ""),
+    ],
+)
+def test_the_site_address_for_the_title_link_is_chosen_safely(html_url, feed_url, expected):
+    from rss_hub.web.reader import _site_of
+
+    assert _site_of(html_url, feed_url) == expected

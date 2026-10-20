@@ -248,12 +248,12 @@ def _only(ctx, title):
 
 @then('글 30개가 나오고 "다음" 링크가 있다')
 def _thirty(ctx):
-    assert len(listed_titles(ctx.response)) == 30 and "다음 →" in ctx.response.text
+    assert len(listed_titles(ctx.response)) == 30 and "data-next" in ctx.response.text
 
 
 @then('글 5개가 나오고 "이전" 링크가 있다')
 def _five(ctx):
-    assert len(listed_titles(ctx.response)) == 5 and "← 이전" in ctx.response.text
+    assert len(listed_titles(ctx.response)) == 5 and "data-prev" in ctx.response.text
 
 
 @then("404로 답하고 사이드바가 그대로 있다")

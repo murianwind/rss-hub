@@ -1,5 +1,7 @@
 """19_viewer_polish.feature: 첫 화면, 글 화면, 사이드바, 모델 사용량, 피드 검색."""
 
+# ruff: noqa: E501  (HTML 견본과 긴 정규식은 한 줄이 읽기 쉽다)
+
 import html as html_module
 import re
 from types import SimpleNamespace
@@ -12,7 +14,7 @@ from tests.bdd.binding import bind
 from tests.fakes.viewer_world import World
 from tests.fakes.web_parts import start_app
 
-bind(globals(), "19_viewer_polish.feature", [f"VPL-{n:02d}" for n in range(1, 8)])
+bind(globals(), "19_viewer_polish.feature", [f"VPL-{n:02d}" for n in range(1, 12)])
 
 BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 KEY = "sk-or-v1-abcdefghijklmnop"
@@ -228,3 +230,105 @@ def _only_one(ctx, name):
 @then("맞는 피드가 없다는 안내가 보인다")
 def _none_found(ctx):
     assert "맞는 피드가 없습니다" in ctx.response.text
+
+
+# ---------- 사이트 링크, 진하게/연하게, 쪽 이동 ----------
+
+
+def heading_link(html):
+    found = re.search(
+        r'<h1><a class="site-link" href="([^"]+)" target="_blank" rel="([^"]+)"', html
+    )
+    return None if found is None else (found.group(1), found.group(2))
+
+
+@given(
+    parsers.re(
+        r'사이트 "블로그"의 피드 주소는 "(?P<feed>[^"]+)"이고 사이트 주소는 "(?P<site>[^"]*)"이다'
+    )
+)
+def _site_feed(world, ctx, feed, site):
+    ctx.feed_id = world.feeds.add(feed, "블로그")
+    with world.parts.db.connect() as conn:
+        conn.execute("UPDATE feeds SET html_url = ? WHERE id = ?", (site, ctx.feed_id))
+
+
+@when('사이트 "블로그"의 목록을 연다')
+def _open_site_list(world, ctx):
+    ctx.response = world.get(f"/reader/feed/{ctx.feed_id}")
+
+
+@then(parsers.re(r'제목은 "(?P<goes>[^"]+)"로 가는 새 창 링크다'))
+def _title_link(ctx, goes):
+    href, rel = heading_link(ctx.response.text)
+    assert href == goes and "noopener" in rel and "noreferrer" in rel
+
+
+@when("전체 글, 북마크, 카테고리 목록을 차례로 연다")
+def _open_lists(world, ctx):
+    ctx.pages = [
+        world.get(p).text
+        for p in ("/reader", "/reader/bookmarks", f"/reader/category/{world.news}")
+    ]
+
+
+@then("어느 제목에도 사이트로 가는 링크가 없다")
+def _no_site_links(ctx):
+    assert all(heading_link(page) is None for page in ctx.pages)
+
+
+def feed_rows(html):
+    found = re.findall(
+        r'<li class="nav-row( has-unread)?" draggable="true" data-drag-kind="feed" data-drag-id="(\d+)"',
+        html,
+    )
+    return {int(feed): bool(flag) for flag, feed in found}
+
+
+@given('사이트 "뉴스 블로그"에 새 글이 하나 있고 사이트 "자유 블로그"에는 글이 없다')
+def _one_news_article(world, ctx):
+    ctx.article = world.article(world.f_news)
+
+
+@then('사이드바에서 "뉴스 블로그"는 진하게, "자유 블로그"는 연하게 표시된다')
+def _bold_and_light(world):
+    rows = feed_rows(world.get("/reader").text)
+    assert rows[world.f_news] is True and rows[world.f_free] is False
+
+
+@when("그 글을 읽는다")
+def _read_it(world, ctx):
+    world.get(f"/a/{ctx.article}")
+
+
+@then("사이드바에서 두 사이트 모두 연하게 표시된다")
+def _both_light(world):
+    assert not any(feed_rows(world.get("/reader").text).values())
+
+
+@given("전체 글이 65개 있다")
+def _sixty_five(world):
+    for number in range(65):
+        world.article(minutes=number)
+
+
+@when("전체 글의 2쪽을 연다")
+def _second_page(world, ctx):
+    ctx.response = world.get("/reader?page=2")
+
+
+@then('"2 / 3" 쪽 표시와 이전, 다음 버튼이 있다')
+def _pager(ctx):
+    html = ctx.response.text
+    assert (
+        '<span class="pager-info">2 / 3</span>' in html
+        and "data-prev" in html
+        and "data-next" in html
+    )
+
+
+@then("스크립트는 끝에 다가가면 다음 쪽을 이어 붙이고 실패하면 버튼으로 돌아간다")
+def _script(world):
+    js = world.client.get("/static/app.js").text
+    assert "IntersectionObserver" in js and "a[data-next]" in js
+    assert 'pagerBox.classList.add("auto")' in js and 'pagerBox.classList.remove("auto")' in js

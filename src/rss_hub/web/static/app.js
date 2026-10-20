@@ -253,6 +253,11 @@
     Object.keys(state.feeds).forEach(function (id) {
       var feed = state.feeds[id];
       setCount("feed:" + id, feed.unread, 0);
+      document
+        .querySelectorAll('li[data-drag-kind="feed"][data-drag-id="' + id + '"]')
+        .forEach(function (row) {
+          row.classList.toggle("has-unread", feed.unread > 0);
+        });
       document.querySelectorAll('[data-state="' + id + '"]').forEach(function (dot) {
         dot.className = "state-dot " + feed.state;
         dot.setAttribute("aria-label", STATE_LABEL[feed.state]);
@@ -398,6 +403,57 @@
     window.addEventListener("resize", inspect);
     window.addEventListener("pagehide", flush);
     window.setTimeout(inspect, 250);
+  }
+
+  // ---------- 목록 이어 보기: 끝에 다가가면 다음 쪽의 글을 이어 붙인다 ----------
+  var pagerBox = cardList ? cardList.querySelector(".pager") : null;
+  var moreLink = pagerBox ? pagerBox.querySelector("a[data-next]") : null;
+  if (pagerBox && moreLink && scrollBox && "IntersectionObserver" in window) {
+    var nextHref = moreLink.getAttribute("href");
+    var loading = false;
+    pagerBox.classList.add("auto"); // 스크립트가 있으면 다음 버튼 대신 자동으로 이어 붙인다
+    var watcher = new IntersectionObserver(
+      function (entries) {
+        if (entries.some(function (entry) { return entry.isIntersecting; })) loadMore();
+      },
+      { root: scrollBox, rootMargin: "800px" }
+    );
+    var loadMore = function () {
+      if (loading || !nextHref) return;
+      loading = true;
+      pagerBox.classList.add("loading");
+      fetch(nextHref, { credentials: "same-origin" })
+        .then(function (response) {
+          if (!response.ok) throw new Error(String(response.status));
+          return response.text();
+        })
+        .then(function (text) {
+          var doc = new DOMParser().parseFromString(text, "text/html");
+          doc.querySelectorAll(".list > article.card").forEach(function (card) {
+            cardList.insertBefore(document.importNode(card, true), pagerBox);
+          });
+          var following = doc.querySelector(".list .pager a[data-next]");
+          nextHref = following ? following.getAttribute("href") : null;
+          if (!nextHref) {
+            watcher.disconnect();
+            pagerBox.classList.add("done");
+          }
+        })
+        .catch(function () {
+          nextHref = null; // 이어 붙이지 못하면 다음 버튼으로 돌아간다
+          watcher.disconnect();
+          pagerBox.classList.remove("auto");
+        })
+        .then(function () {
+          loading = false;
+          pagerBox.classList.remove("loading");
+          if (nextHref) {
+            watcher.unobserve(pagerBox);
+            watcher.observe(pagerBox); // 아직 끝이 보이면 한 쪽 더
+          }
+        });
+    };
+    watcher.observe(pagerBox);
   }
 
   // ---------- 사이드바 폭 조절(PC만): 끌거나 방향키로 바꾸고 쿠키에 기억한다 ----------

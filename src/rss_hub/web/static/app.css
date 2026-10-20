@@ -137,7 +137,7 @@ code { font-size: 0.9em; }
 .link-btn { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 2px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; }
 .link-btn:hover { background: var(--accent-soft); color: var(--accent); }
 .link-btn.on { color: var(--accent); }
-.pager { display: flex; justify-content: space-between; margin: 8px 0 0; }
+
 .empty { padding: 32px 16px; text-align: center; color: var(--muted); border: 2px dashed var(--line); border-radius: 10px; background: var(--surface); }
 
 /* ---------- 상세 ---------- */
@@ -359,3 +359,23 @@ body:not(.sidebar-collapsed).sw-480 .sidebar { width: 480px; }
 .model-usage { font-size: 12px; color: var(--muted); }
 .model-usage b { color: var(--fg); }
 .sidebar-collapsed .model-usage { display: none; }
+
+
+/* ---------- 목록 이어 보기와 이전/다음 ---------- */
+.pager { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 16px 0 8px; }
+.pager-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 20px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--fg); font-weight: 600; text-decoration: none; box-shadow: var(--shadow); }
+.pager-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.pager-info { min-width: 64px; text-align: center; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.pager.auto a[data-next], .pager.auto .pager-info { display: none; }  /* 스크립트가 이어 붙일 때는 버튼 대신 안내만 */
+.pager.auto.loading::after { content: "불러오는 중…"; color: var(--muted); font-size: 13px; }
+.pager.auto.done::after { content: "마지막 글입니다"; color: var(--muted); font-size: 13px; }
+
+/* ---------- 제목을 누르면 사이트로 ---------- */
+.site-link { display: inline-flex; align-items: center; gap: 8px; min-width: 0; color: inherit; text-decoration: none; }
+.site-link:hover span { color: var(--accent); text-decoration: underline; }
+.site-link .icon:last-child { width: 14px; height: 14px; color: var(--muted); }
+
+/* ---------- 사이트 목록: 읽지 않은 글이 있으면 진하게, 없으면 연하게 ---------- */
+.nav-row[data-drag-kind=feed] .sb-text { font-weight: 400; opacity: 0.55; }
+.nav-row[data-drag-kind=feed].has-unread .sb-text { font-weight: 700; opacity: 1; }
+.nav-row[data-drag-kind=feed] .nav-item[aria-current=page] .sb-text { opacity: 1; }

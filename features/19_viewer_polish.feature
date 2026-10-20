@@ -79,3 +79,35 @@ Feature: 사용 피드백 3차: 첫 화면, 글 화면, 사이드바, 모델 사
       | 뉴스          | "뉴스 블로그"만 보인다             |
       | F.EXAMPLE    | "자유 블로그"만 보인다             |
       | 존재하지않는   | 맞는 피드가 없다는 안내가 보인다    |
+
+  @VPL-08 @new
+  Scenario Outline: 사이트 목록의 제목을 누르면 그 사이트가 새 창으로 열린다
+    Given 사이트 "블로그"의 피드 주소는 "<feed>"이고 사이트 주소는 "<site>"이다
+    When 사이트 "블로그"의 목록을 연다
+    Then 제목은 "<goes>"로 가는 새 창 링크다
+
+    Examples:
+      | feed                              | site                     | goes                        |
+      | https://blog.example.com/rss      | https://blog.example.com/ | https://blog.example.com/   |
+      | https://news.example.org/feed.xml |                          | https://news.example.org/   |
+      | https://good.example.com/rss      | javascript:alert(1)      | https://good.example.com/   |
+
+  @VPL-09 @new
+  Scenario: 전체 글과 북마크와 카테고리 목록의 제목은 링크가 아니다
+    When 전체 글, 북마크, 카테고리 목록을 차례로 연다
+    Then 어느 제목에도 사이트로 가는 링크가 없다
+
+  @VPL-10 @new
+  Scenario: 읽지 않은 글이 있는 사이트는 진하게, 없는 사이트는 연하게 보인다
+    Given 사이트 "뉴스 블로그"에 새 글이 하나 있고 사이트 "자유 블로그"에는 글이 없다
+    Then 사이드바에서 "뉴스 블로그"는 진하게, "자유 블로그"는 연하게 표시된다
+    When 그 글을 읽는다
+    Then 사이드바에서 두 사이트 모두 연하게 표시된다
+
+  @VPL-11 @new
+  Scenario: 목록은 쪽 번호와 보기 좋은 이전/다음 버튼을 갖고 스크립트가 있으면 이어 붙는다
+    Given 전체 글이 65개 있다
+    When 전체 글의 2쪽을 연다
+    Then "2 / 3" 쪽 표시와 이전, 다음 버튼이 있다
+    And 스크립트는 끝에 다가가면 다음 쪽을 이어 붙이고 실패하면 버튼으로 돌아간다
+

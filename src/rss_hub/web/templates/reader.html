@@ -2,7 +2,7 @@
 {% block title %}{{ heading }} · RSS Hub{% endblock %}
 {% block main %}
 <header class="viewbar">
-  <h1>{{ icon(heading_icon) }}<span>{{ heading }}</span></h1>
+  <h1>{% if site_url %}<a class="site-link" href="{{ site_url }}" target="_blank" rel="noopener noreferrer" title="사이트로 이동">{{ icon(heading_icon) }}<span>{{ heading }}</span>{{ icon('external') }}</a>{% else %}{{ icon(heading_icon) }}<span>{{ heading }}</span>{% endif %}</h1>
   {% if page is not none %}<span class="pill">{{ page.total }}개의 게시물</span>{% endif %}
   <span class="spacer"></span>
   {% if page is not none %}
@@ -66,10 +66,11 @@
     </div>
   </article>
   {% endfor %}
-  <div class="pager">
-    {% if page.page > 1 %}<a href="{{ prev_url }}">← 이전</a>{% else %}<span></span>{% endif %}
-    {% if page.has_next %}<a href="{{ next_url }}">다음 →</a>{% endif %}
-  </div>
+  <nav class="pager" aria-label="쪽 이동">
+    {% if page.page > 1 %}<a class="pager-btn" data-prev href="{{ prev_url }}">{{ icon('arrow-left') }}<span>이전</span></a>{% endif %}
+    <span class="pager-info">{{ page.page }} / {{ pages }}</span>
+    {% if page.has_next %}<a class="pager-btn" data-next href="{{ next_url }}"><span>다음</span>{{ icon('chevron-right') }}</a>{% endif %}
+  </nav>
   {% endif %}
 </div></div>
 {% endblock %}
