@@ -44,6 +44,8 @@
 
 <h2>주제 목록</h2>
 {% for t in topics %}
+{% set counts = feedback_counts[t.id] %}
+<p class="hint"><a href="/topics/{{ t.id }}/suggestions">{{ t.name }} 키워드 개선 제안</a> · 직접 넣은 글 {{ counts[0] }}개 · 싫어요 {{ counts[1] }}개</p>
 <form method="post" action="/topics/{{ t.id }}/update" class="panel">
   <div class="field">
     <label for="name_{{ t.id }}">이름</label>

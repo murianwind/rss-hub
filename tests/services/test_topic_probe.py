@@ -218,3 +218,24 @@ def test_input_limits_are_checked_before_any_call(env, probe, title, body, messa
 def test_the_limits_are_inclusive(env, probe):
     add_topics(env)
     assert probe.run("netflix" + "가" * (MAX_TITLE_LENGTH - 7), "나" * MAX_BODY_LENGTH).error == ""
+
+
+# ---------- 사용자가 확인한 예시 ----------
+
+
+def test_the_probe_uses_the_same_confirmed_examples_as_the_summary_job(env):
+    ott, _ = add_topics(env)
+    sample = env.add_article(title="Squid Game clip")
+    env.topics.add_manual(sample, ott)
+    probe = TopicProbe(
+        gateway=env.gateway, topics=env.topics, clock=env.clock, examples_count=lambda: 2
+    )
+    probe.run(MATCHING_TITLE)
+    assert 'belongs: "Squid Game clip"' in env.client.calls[0].prompt
+
+
+def test_the_probe_sends_no_examples_unless_the_setting_says_so(env):
+    ott, _ = add_topics(env)
+    env.topics.add_manual(env.add_article(title="Squid Game clip"), ott)
+    TopicProbe(gateway=env.gateway, topics=env.topics, clock=env.clock).run(MATCHING_TITLE)
+    assert "Confirmed by the user" not in env.client.calls[0].prompt

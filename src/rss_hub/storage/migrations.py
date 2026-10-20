@@ -175,6 +175,46 @@ MIGRATIONS: tuple[str, ...] = (
         last_skipped_at  TEXT
     );
     """,
+    # 8: 사용자가 정한 주제 소속(M5). source는 auto(요약이 판정) 또는 manual("주제로"),
+    # rejected는 "싫어요"로 그 주제 목록에서 뺐다는 표시(되돌릴 수 있다)
+    """
+    ALTER TABLE article_topics ADD COLUMN source TEXT NOT NULL DEFAULT 'auto';
+    ALTER TABLE article_topics ADD COLUMN rejected INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE article_topics ADD COLUMN decided_at TEXT;
+    """,
+    # 9: 무료 모델 목록(스캔), 벤치마크 실행과 점수(M3)
+    """
+    CREATE TABLE model_catalog (
+        id             TEXT PRIMARY KEY,
+        name           TEXT NOT NULL,
+        context_length INTEGER NOT NULL,
+        supports_json  INTEGER NOT NULL,
+        first_seen_at  TEXT NOT NULL,
+        last_seen_at   TEXT NOT NULL,
+        gone           INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE benchmark_runs (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        status      TEXT NOT NULL,
+        started_at  TEXT NOT NULL,
+        finished_at TEXT,
+        total       INTEGER NOT NULL,
+        done        INTEGER NOT NULL DEFAULT 0,
+        note        TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE benchmark_scores (
+        run_id INTEGER NOT NULL REFERENCES benchmark_runs(id) ON DELETE CASCADE,
+        model  TEXT NOT NULL,
+        calls  INTEGER NOT NULL,
+        ok     INTEGER NOT NULL,
+        korean INTEGER NOT NULL,
+        topic  INTEGER NOT NULL,
+        p50_ms INTEGER,
+        score  REAL NOT NULL,
+        errors TEXT NOT NULL DEFAULT '[]',
+        PRIMARY KEY (run_id, model)
+    );
+    """,
 )
 
 

@@ -11,6 +11,19 @@
       <p class="meta"><a href="/reader/feed/{{ feed.id }}">{{ feed.name }}</a> · {{ published }}
         {% for match in topic_matches %}<span class="badge" title="{{ match.keywords | join(', ') }}">{{ match.name }}</span>{% endfor %}</p>
       {% if topic_matches %}<p class="hint">{% for match in topic_matches %}{{ match.name }}{% if match.keywords %}: 키워드 {{ match.keywords | join(', ') }}{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+      <div class="panel topics-panel">
+        <strong>주제</strong>
+        {% for t in enabled_topics %}
+        {% set m = memberships.get(t.id) %}
+        <form method="post" action="/a/{{ article.id }}/topics/{{ t.id }}/{{ 'restore' if m and m.rejected else ('reject' if m else 'add') }}" class="row">
+          <input type="hidden" name="next" value="/a/{{ article.id }}">
+          {% if m and not m.rejected %}<span class="badge">{{ t.name }}</span><button type="submit" class="danger">싫어요</button>
+          {% elif m %}<span class="hint">{{ t.name }}에서 제외됨</span><button type="submit">되돌리기</button>
+          {% else %}<span class="hint">{{ t.name }}</span><button type="submit">주제로</button>{% endif %}
+        </form>
+        {% else %}<p class="hint">켜진 주제가 없습니다.</p>{% endfor %}
+        <p class="hint">싫어요는 그 주제 목록에서만 뺍니다. 주제로는 이미 보낸 알림을 다시 보내지 않습니다. <a href="/topics">주제 설정</a></p>
+      </div>
       {% if article.summary_ko %}<div class="panel"><strong>요약</strong><p>{{ article.summary_ko }}</p></div>{% endif %}
       {% if has_original %}<p><a class="button" href="/a/{{ article.id }}/original" target="_blank" rel="noopener noreferrer">원문 보기</a></p>{% endif %}
       <div class="article-body" {% if lang %}lang="{{ lang }}"{% endif %}>

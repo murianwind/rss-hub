@@ -325,3 +325,37 @@ def test_the_warning_stays_quiet_for_the_rest_of_the_utc_day_even_after_the_cool
     env.clock.advance(hours=7)  # 쿨다운(6시간)은 지났지만 같은 UTC 날짜
     ask(env)
     assert len([t for t in env.notifier.texts() if "호출 80% 도달" in t]) == 1
+
+
+# ---------- 모델 하나만 호출(벤치마크용) ----------
+
+
+def test_complete_with_calls_only_the_named_model_and_records_it(env):
+    env.client.default = good()
+    answer = env.gateway.complete_with("model-b", "프롬프트")
+    assert answer.model == "model-b" and env.client.models_called() == ["model-b"]
+    assert env.usage.count_day(env.clock.now().date()) == 1
+
+
+def test_complete_with_does_not_fall_back_to_the_rest_of_the_chain(env):
+    env.client.will("model-b", failure(LlmErrorKind.UNAVAILABLE, status=503))
+    with pytest.raises(LlmOutage) as outage:
+        env.gateway.complete_with("model-b", "프롬프트")
+    assert env.client.models_called() == ["model-b"] and outage.value.failures == (
+        ("model-b", LlmErrorKind.UNAVAILABLE),
+    )
+
+
+def test_complete_with_needs_a_key_and_calls_nothing_without_it(tmp_path):
+    env = LlmEnv(tmp_path, configured=False)
+    with pytest.raises(LlmNotConfigured):
+        env.gateway.complete_with("model-a", "프롬프트")
+    assert env.client.calls == []
+
+
+def test_complete_with_respects_the_daily_budget(env):
+    env.settings.update({"llm_daily_cap": "1"})
+    env.gateway.complete_with("model-a", "첫 호출")
+    with pytest.raises(BudgetBlocked):
+        env.gateway.complete_with("model-a", "둘째 호출")
+    assert len(env.client.calls) == 1

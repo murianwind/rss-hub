@@ -3,6 +3,7 @@
 import json
 import sqlite3
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC
 
 from rss_hub.domain.keywords import DEFAULT_OTT_KEYWORDS
@@ -28,6 +29,23 @@ def _topic(row: sqlite3.Row) -> Topic:
 
 def _dump(values: Sequence[str]) -> str:
     return json.dumps(list(values), ensure_ascii=False)
+
+
+@dataclass(frozen=True)
+class Membership:
+    topic_id: int
+    name: str
+    keywords: tuple[str, ...]  # 일치한 키워드(직접 넣은 글은 비어 있다)
+    source: str  # auto 또는 manual
+    rejected: bool
+
+
+@dataclass(frozen=True)
+class FeedbackSample:
+    title: str
+    keywords: tuple[str, ...]
+    source: str
+    rejected: bool
 
 
 class TopicRepository:
@@ -112,11 +130,112 @@ class TopicRepository:
         """글이 해당한 주제와 일치한 키워드를 기록한다(M5의 피드백과 키워드 개선 제안에 쓴다)."""
         with self._db.connect() as conn:
             for topic_id, keywords in matches.items():
+                # 이미 있는 줄이면 키워드만 갱신하고, 사용자가 정한 source와 rejected는 그대로 둔다
                 conn.execute(
-                    "INSERT OR REPLACE INTO article_topics(article_id, topic_id, matched_keywords) "
-                    "VALUES(?, ?, ?)",
+                    "INSERT INTO article_topics(article_id, topic_id, matched_keywords) "
+                    "VALUES(?, ?, ?) ON CONFLICT(article_id, topic_id) "
+                    "DO UPDATE SET matched_keywords = excluded.matched_keywords",
                     (article_id, topic_id, _dump(keywords)),
                 )
+
+    # ---------- 사용자가 정한 소속(M5) ----------
+
+    def memberships(self, article_id: int) -> list["Membership"]:
+        """글이 속한(또는 싫어요로 뺀) 주제들."""
+        with self._db.connect() as conn:
+            rows = conn.execute(
+                "SELECT tp.id, tp.name, at.matched_keywords, at.source, at.rejected "
+                "FROM article_topics at JOIN topics tp ON tp.id = at.topic_id "
+                "WHERE at.article_id = ? ORDER BY tp.id",
+                (article_id,),
+            ).fetchall()
+        return [
+            Membership(
+                r["id"],
+                r["name"],
+                tuple(json.loads(r["matched_keywords"])),
+                r["source"],
+                bool(r["rejected"]),
+            )
+            for r in rows
+        ]
+
+    def reject(self, article_id: int, topic_id: int) -> bool:
+        """ "싫어요": 그 주제 목록에서만 뺀다. 글이 그 주제에 속해 있지 않으면 False."""
+        return self._decide(article_id, topic_id, rejected=1)
+
+    def restore(self, article_id: int, topic_id: int) -> bool:
+        """ "싫어요"를 되돌린다. 뺀 적이 없으면 False."""
+        return self._decide(article_id, topic_id, rejected=0)
+
+    def _decide(self, article_id: int, topic_id: int, *, rejected: int) -> bool:
+        now = self._clock.now().astimezone(UTC).isoformat()
+        with self._db.connect() as conn:
+            cursor = conn.execute(
+                "UPDATE article_topics SET rejected = ?, decided_at = ? "
+                "WHERE article_id = ? AND topic_id = ? AND rejected != ?",
+                (rejected, now, article_id, topic_id, rejected),
+            )
+            return cursor.rowcount > 0
+
+    def add_manual(self, article_id: int, topic_id: int) -> bool:
+        """ "주제로": 글을 주제에 넣는다. 싫어요로 뺀 글이면 되돌린다. 없는 글이나 주제면 False."""
+        now = self._clock.now().astimezone(UTC).isoformat()
+        with self._db.connect() as conn:
+            exists = conn.execute(
+                "SELECT (SELECT COUNT(*) FROM articles WHERE id = ?) + "
+                "(SELECT COUNT(*) FROM topics WHERE id = ?) AS n",
+                (article_id, topic_id),
+            ).fetchone()["n"]
+            if exists != 2:
+                return False
+            conn.execute(
+                "INSERT INTO article_topics(article_id, topic_id, source, decided_at) "
+                "VALUES(?, ?, 'manual', ?) ON CONFLICT(article_id, topic_id) "
+                "DO UPDATE SET rejected = 0, decided_at = excluded.decided_at "
+                "WHERE article_topics.rejected = 1",
+                (article_id, topic_id, now),
+            )
+            return True
+
+    def flags_for(self, article_id: int) -> dict[int, tuple[str, bool]]:
+        """주제 번호 -> (source, 싫어요로 뺐는가). 발송이 사용자의 선택을 따르는 데 쓴다."""
+        with self._db.connect() as conn:
+            rows = conn.execute(
+                "SELECT topic_id, source, rejected FROM article_topics WHERE article_id = ?",
+                (article_id,),
+            ).fetchall()
+        return {r["topic_id"]: (r["source"], bool(r["rejected"])) for r in rows}
+
+    def feedback_samples(self, topic_id: int, limit: int | None = None) -> list["FeedbackSample"]:
+        """주제에 대한 사용자의 선택들(최신순): "주제로"로 넣은 글과 싫어요로 뺀 글."""
+        query = (
+            "SELECT a.title, at.matched_keywords, at.source, at.rejected FROM article_topics at "
+            "JOIN articles a ON a.id = at.article_id WHERE at.topic_id = ? "
+            "AND (at.source = 'manual' OR at.rejected = 1) ORDER BY at.decided_at DESC, a.id DESC"
+        )
+        with self._db.connect() as conn:
+            rows = conn.execute(query, (topic_id,)).fetchall()
+        samples = [
+            FeedbackSample(
+                r["title"],
+                tuple(json.loads(r["matched_keywords"])),
+                r["source"],
+                bool(r["rejected"]),
+            )
+            for r in rows
+        ]
+        return samples if limit is None else samples[:limit]
+
+    def keyword_outcomes(self, topic_id: int) -> list[tuple[tuple[str, ...], bool]]:
+        """자동 판정으로 이 주제에 들어온 글들의 (일치한 키워드, 싫어요로 뺐는가)."""
+        with self._db.connect() as conn:
+            rows = conn.execute(
+                "SELECT matched_keywords, rejected FROM article_topics "
+                "WHERE topic_id = ? AND source = 'auto'",
+                (topic_id,),
+            ).fetchall()
+        return [(tuple(json.loads(r["matched_keywords"])), bool(r["rejected"])) for r in rows]
 
     def matches_for(self, article_id: int) -> dict[int, tuple[str, ...]]:
         with self._db.connect() as conn:

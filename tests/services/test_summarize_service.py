@@ -474,3 +474,67 @@ def test_a_failed_summary_records_no_topics(env):
     env.client.default = good("이건 JSON이 아닙니다")
     env.summarizer.run()
     assert env.topics.matches_for(article_id) == {}
+
+
+# ---------- 사용자가 확인한 예시를 요청에 넣는 설정 ----------
+
+
+def feedback(env):
+    ott = env.topics.add(TopicFields("OTT", "스트리밍", ("netflix",)))
+    game = env.topics.add(TopicFields("게임", "", ("netflix",)))
+    for topic, title in ((ott, "Squid Game clip"), (game, "Board game news")):
+        sample = env.add_article(title=f"{title} sample")
+        env.topics.add_manual(sample, topic)
+    disliked = env.add_article(title="Netflix stock falls")
+    env.topics.record_matches(disliked, {ott: ("netflix",)})
+    env.topics.reject(disliked, ott)
+    env.summarizer.run()  # 위에서 만든 글들을 먼저 처리해서 비운다
+    env.client.calls.clear()
+    return ott, game
+
+
+def test_examples_are_off_by_default(env):
+    feedback(env)
+    env.add_article(title="Netflix announces a drama")
+    env.client.default = reply("t", "s")
+    env.summarizer.run()
+    assert "Confirmed by the user" not in env.client.calls[0].prompt
+
+
+def test_the_setting_puts_confirmed_examples_under_each_candidate_topic(env):
+    feedback(env)
+    env.settings.update({"topic_feedback_examples": "1"})
+    env.add_article(title="Netflix announces a drama")
+    env.client.default = reply("t", "s")
+    env.summarizer.run()
+    prompt = env.client.calls[0].prompt
+    assert (
+        'belongs: "Squid Game clip sample"' in prompt
+        and 'does NOT belong: "Netflix stock falls"' in prompt
+    )
+    assert '"Board game news sample"' in prompt  # 게임도 키워드가 맞아서 후보다
+
+
+def test_examples_are_only_for_candidate_topics(env):
+    ott, _ = feedback(env)
+    env.topics.update(
+        ott, TopicFields("OTT", "스트리밍", ("netflix",)), webhook_id=None, enabled=True
+    )
+    env.settings.update({"topic_feedback_examples": "2"})
+    env.add_article(title="Spring gardening")  # 어느 키워드도 안 맞는다
+    env.client.default = reply("t", "s")
+    env.summarizer.run()
+    assert "Confirmed by the user" not in env.client.calls[0].prompt
+
+
+def test_the_example_count_is_per_topic_and_per_kind(env):
+    ott, _ = feedback(env)
+    for number in range(4):
+        env.topics.add_manual(env.add_article(title=f"Extra {number}"), ott)
+    env.settings.update({"topic_feedback_examples": "2"})
+    env.add_article(title="Netflix announces a drama")
+    env.client.default = reply("t", "s")
+    env.summarizer.run()
+    lines = env.client.calls[-1].prompt.splitlines()
+    line = next(x for x in lines if "belongs:" in x and "OTT" not in x and "NOT" not in x)
+    assert line.count('"') == 4  # 두 개

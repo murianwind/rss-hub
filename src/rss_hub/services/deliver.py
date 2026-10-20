@@ -128,11 +128,17 @@ class DeliveryService:
         feed = self._feeds.get(article.feed_id)
         if feed is None:
             return
+        flags = self._topics.flags_for(article.id)  # 사용자가 싫어요로 뺀 것과 "주제로" 넣은 것
         matches = {}
         for topic in topics:
+            source, rejected = flags.get(topic.id, ("auto", False))
+            if rejected:
+                continue  # 싫어요로 뺀 주제로는 보내지 않는다
             hits = match_topic(topic, article.llm_topics, article.title, article.content_html)
             if hits is not None:
                 matches[topic.id] = hits
+            elif source == "manual":
+                matches[topic.id] = ()  # 사용자가 직접 넣은 글은 키워드나 LLM과 상관없이 해당한다
         targets = resolve_targets(
             feed_webhook_id=feed.webhook_id,
             category_webhook_id=self._feeds.category_webhook_id(feed.category_id),

@@ -358,3 +358,75 @@ def test_a_missing_key_is_invalid_and_nothing_is_sent(make_client):
     check = client.check_key()
     assert check.valid is False and "설정되지 않았습니다" in check.reason
     assert server.requests == []
+
+
+# ---------- 무료 모델 목록 ----------
+
+CATALOG = {
+    "data": [
+        {
+            "id": "a/free-one:free",
+            "name": "Free One",
+            "context_length": 65536,
+            "pricing": {"prompt": "0", "completion": "0"},
+            "architecture": {"output_modalities": ["text"]},
+            "supported_parameters": ["response_format", "reasoning"],
+        },
+        {
+            "id": "b/paid",
+            "name": "Paid",
+            "context_length": 65536,
+            "pricing": {"prompt": "0.000002", "completion": "0.000004"},
+            "architecture": {"output_modalities": ["text"]},
+        },
+        {
+            "id": "c/image:free",
+            "context_length": 65536,
+            "pricing": {"prompt": "0", "completion": "0"},
+            "architecture": {"output_modalities": ["image"]},
+        },
+    ]
+}
+
+
+def test_only_free_text_models_are_listed_and_only_the_models_endpoint_is_called(make_client):
+    client, server = make_client(lambda *_: json_reply(200, CATALOG))
+    found = client.list_free_models()
+    assert [(m.id, m.supports_json, m.supports_reasoning) for m in found] == [
+        ("a/free-one:free", True, True)
+    ]
+    assert [(r[0], r[1]) for r in server.requests] == [("GET", "/models")]
+
+
+def test_the_model_list_works_without_a_key_because_the_endpoint_is_public(make_client):
+    client, server = make_client(lambda *_: json_reply(200, CATALOG), key=None)
+    assert len(client.list_free_models()) == 1
+    assert "authorization" not in server.requests[0][2]
+
+
+def test_the_key_is_sent_when_there_is_one_but_never_leaks_into_results(make_client):
+    client, server = make_client(lambda *_: json_reply(200, CATALOG))
+    client.list_free_models()
+    assert server.requests[0][2]["authorization"] == f"Bearer {KEY}"
+
+
+@pytest.mark.parametrize("status", [401, 429, 500])
+def test_a_failed_lookup_is_none(make_client, status):
+    client, _ = make_client(lambda *_: json_reply(status, {}))
+    assert client.list_free_models() is None
+
+
+@pytest.mark.parametrize("body", [{}, {"error": "x"}, []])
+def test_an_unexpected_body_is_none(make_client, body):
+    client, _ = make_client(lambda *_: json_reply(200, body))
+    assert client.list_free_models() is None
+
+
+def test_a_connection_failure_is_none():
+    client = OpenRouterClient(lambda: KEY, base_url="http://127.0.0.1:1", timeout=(0.5, 0.5))
+    assert client.list_free_models() is None
+
+
+def test_an_empty_catalog_is_an_empty_list_not_a_failure(make_client):
+    client, _ = make_client(lambda *_: json_reply(200, {"data": []}))
+    assert client.list_free_models() == []

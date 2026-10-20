@@ -5,6 +5,7 @@ DB는 처음 필요할 때 만들어진다.
 """
 
 import logging
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import timedelta
@@ -17,11 +18,14 @@ from fastapi.templating import Jinja2Templates
 from rss_hub.adapters.discord_webhook import RequestsWebhookSender
 from rss_hub.adapters.http_feed_fetcher import RequestsFeedFetcher
 from rss_hub.adapters.openrouter_client import OpenRouterClient
-from rss_hub.jobs.runner import JobRunner
+from rss_hub.jobs.runner import JobRunner, start_thread
 from rss_hub.runtime import build_llm_services
 from rss_hub.services.clock import Clock, SystemClock
 from rss_hub.services.feed_registration import FeedRegistrationService
 from rss_hub.services.importer import ImportService
+from rss_hub.services.model_benchmark import BenchmarkRunner, BenchmarkService
+from rss_hub.services.model_chain import ModelChainService
+from rss_hub.services.model_scan import ModelScanService
 from rss_hub.services.ports import DiscoveryFetcher, LlmClient, WebhookSender
 from rss_hub.services.settings import SettingsService
 from rss_hub.services.topic_probe import TopicProbe
@@ -31,15 +35,18 @@ from rss_hub.storage.feeds import FeedRepository
 from rss_hub.storage.import_staging import ImportStagingRepository
 from rss_hub.storage.job_runs import JobRunRepository
 from rss_hub.storage.llm_usage import LlmUsageRepository
+from rss_hub.storage.models import ModelRepository
 from rss_hub.storage.reader import ReaderRepository
 from rss_hub.storage.topics import TopicRepository
 from rss_hub.version import get_version
 from rss_hub.web.admin import build_admin_router
 from rss_hub.web.articles import build_article_router
 from rss_hub.web.categories import build_category_router
+from rss_hub.web.feedback import build_feedback_router
 from rss_hub.web.feeds import build_feed_router
 from rss_hub.web.health import data_dir_is_writable
 from rss_hub.web.importer import build_import_router
+from rss_hub.web.models import build_model_router
 from rss_hub.web.reader import build_reader_router
 from rss_hub.web.security import SAFE_METHODS, SECURITY_HEADERS, request_is_same_origin
 from rss_hub.web.topics import build_topic_router
@@ -62,6 +69,8 @@ def create_app(
     webhook_sender: WebhookSender | None = None,
     llm_client: LlmClient | None = None,
     feed_fetcher: DiscoveryFetcher | None = None,
+    benchmark_spawn: Callable[[Callable[[], None]], object] | None = None,
+    benchmark_sleep: Callable[[float], None] | None = None,
 ) -> FastAPI:
     # 인증 없이 외부에 열리는 서비스라서 API 문서 화면과 스키마는 내놓지 않는다
     app = FastAPI(title="RSS Hub", docs_url=None, redoc_url=None, openapi_url=None)
@@ -92,6 +101,27 @@ def create_app(
         )
     )
     app.include_router(build_article_router(articles))
+    models = ModelRepository(database, app_clock)
+    benchmark_runner = BenchmarkRunner(
+        service=BenchmarkService(
+            gateway=llm.gateway, models=models, sleep=benchmark_sleep or time.sleep
+        ),
+        models=models,
+        spawn=benchmark_spawn or start_thread,
+    )
+    app.include_router(
+        build_model_router(
+            models=models,
+            scanner=ModelScanService(
+                client=client, models=models, settings=service, alerts=llm.alerts
+            ),
+            runner=benchmark_runner,
+            chain=ModelChainService(settings=service, models=models, alerts=llm.alerts),
+            settings=service,
+            templates=templates,
+        )
+    )
+    app.include_router(build_feedback_router(topics=topics, articles=articles, templates=templates))
     app.include_router(
         build_reader_router(
             reader=ReaderRepository(database),
@@ -121,6 +151,10 @@ def create_app(
             logger.exception(
                 "기본 주제를 만들지 못했습니다"
             )  # 데이터 폴더 문제는 /healthz가 알린다
+        try:
+            models.interrupt_stale_runs()  # 서비스가 꺼지면서 끝나지 못한 벤치마크를 정리한다
+        except Exception:
+            logger.exception("중단된 벤치마크를 정리하지 못했습니다")
         if runner is not None:
             runner.start()
         try:
@@ -131,7 +165,12 @@ def create_app(
 
     app.router.lifespan_context = lifespan
     app.include_router(build_import_router(importer, templates))
-    probe = TopicProbe(gateway=llm.gateway, topics=topics, clock=app_clock)
+    probe = TopicProbe(
+        gateway=llm.gateway,
+        topics=topics,
+        clock=app_clock,
+        examples_count=lambda: service.snapshot().topic_feedback_examples,
+    )
     app.include_router(build_topic_router(topics, service, templates, probe))
     app.include_router(build_category_router(feeds, service, templates))
     registration = FeedRegistrationService(

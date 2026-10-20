@@ -10,6 +10,14 @@ from rss_hub.services.topic_probe import ProbeResult, TopicProbe
 from rss_hub.storage.topics import TopicRepository
 
 
+def _counts(topics: TopicRepository, topic_id: int) -> tuple[int, int]:
+    samples = topics.feedback_samples(topic_id)
+    return (
+        sum(1 for s in samples if s.source == "manual" and not s.rejected),
+        sum(1 for s in samples if s.rejected),
+    )
+
+
 def _webhook_id(value: object) -> int | None:
     text = str(value or "").strip()
     return int(text) if text.isdigit() else None
@@ -38,6 +46,7 @@ def build_topic_router(
             "probe_body": probe_input[1],
             "webhook_names": {w.id: w.name for w in settings.list_webhooks()},
             "topics": topics.list_all(),
+            "feedback_counts": {t.id: _counts(topics, t.id) for t in topics.list_all()},
             "webhooks": settings.list_webhooks(),
             "error": error,
             "notice": notice,

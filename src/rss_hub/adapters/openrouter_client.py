@@ -10,6 +10,7 @@ from typing import Any
 
 import requests
 
+from rss_hub.domain.models import FreeModel, parse_free_models
 from rss_hub.services.ports import (
     CallOptions,
     KeyCheck,
@@ -189,6 +190,21 @@ class OpenRouterClient:
         if not isinstance(used, int) or not isinstance(limit, int):
             return None
         return ServerUsage(used=used, limit=limit)
+
+    def list_free_models(self) -> list[FreeModel] | None:
+        """GET /models만 호출한다(채팅 호출이 아니라서 호출 한도를 쓰지 않는다). 실패하면 None."""
+        key = self._key_provider()
+        headers = self._headers(key) if key else {"X-Title": "RSS Hub"}
+        try:
+            response = requests.get(
+                f"{self._base_url}/models", headers=headers, timeout=self._timeout
+            )
+        except requests.exceptions.RequestException:
+            return None
+        body = self._json(response)
+        if response.status_code != 200 or not isinstance(body, dict) or "data" not in body:
+            return None
+        return parse_free_models(body)
 
     def check_key(self) -> KeyCheck:
         """GET /key만 호출한다(채팅 호출이 아니고 호출 한도를 쓰지 않는다)."""

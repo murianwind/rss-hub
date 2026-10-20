@@ -21,6 +21,7 @@ from rss_hub.domain.validation import validate_summary
 from rss_hub.services.clock import Clock
 from rss_hub.services.llm_gateway import BudgetBlocked, LlmGateway, LlmNotConfigured, LlmOutage
 from rss_hub.services.settings import SettingsService
+from rss_hub.services.topic_examples import load_examples
 from rss_hub.storage.articles import STATUS_COLLECTED, Article, ArticleRepository
 from rss_hub.storage.topics import TopicRepository
 
@@ -123,7 +124,12 @@ class SummarizeService:
             for t in self._topics.list_enabled()
             if is_candidate(t, article.title, article.content_html)
         ]
-        prompt = build_summary_prompt(article.title, summary_excerpt(article.content_html), topics)
+        examples = load_examples(
+            self._topics, topics, self._settings.snapshot().topic_feedback_examples
+        )
+        prompt = build_summary_prompt(
+            article.title, summary_excerpt(article.content_html), topics, examples
+        )
         answer = self._gateway.complete(prompt)
 
         result = validate_summary(

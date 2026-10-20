@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Protocol
 
+from rss_hub.domain.models import FreeModel
+
 
 @dataclass(frozen=True)
 class FetchResult:
@@ -134,6 +136,10 @@ class LlmClient(Protocol):
 
     def check_key(self) -> KeyCheck:
         """키가 유효한지와 사용량. 호출 한도를 쓰지 않는다."""
+        ...
+
+    def list_free_models(self) -> list[FreeModel] | None:
+        """지금 쓸 수 있는 무료 텍스트 모델 목록. 호출 한도를 쓰지 않는다. 조회에 실패하면 None."""
         ...
 
 

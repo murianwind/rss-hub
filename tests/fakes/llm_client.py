@@ -4,6 +4,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from rss_hub.domain.models import FreeModel
 from rss_hub.services.ports import (
     CallOptions,
     KeyCheck,
@@ -56,6 +57,8 @@ class FakeLlmClient:
     usage_queries: int = 0
     key_check: KeyCheck = field(default_factory=lambda: KeyCheck(valid=True, used=33, limit=1000))
     key_checks: int = 0
+    free_models: list[FreeModel] | None = field(default_factory=list)
+    model_lists: int = 0
 
     def will(self, model: str, *outcomes: Outcome) -> None:
         self.queues.setdefault(model, []).extend(outcomes)
@@ -76,6 +79,10 @@ class FakeLlmClient:
     def server_usage(self) -> ServerUsage | None:
         self.usage_queries += 1
         return self.usage
+
+    def list_free_models(self) -> list[FreeModel] | None:
+        self.model_lists += 1
+        return self.free_models
 
     def check_key(self) -> KeyCheck:
         self.key_checks += 1

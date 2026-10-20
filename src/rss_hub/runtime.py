@@ -18,6 +18,7 @@ from rss_hub.services.clock import Clock
 from rss_hub.services.collect import CollectService
 from rss_hub.services.deliver import DeliveryService
 from rss_hub.services.llm_gateway import LlmGateway
+from rss_hub.services.model_scan import ModelScanService
 from rss_hub.services.ports import FeedFetcher, LlmClient, WebhookSender
 from rss_hub.services.retention import RetentionService
 from rss_hub.services.settings import SettingsService
@@ -29,12 +30,15 @@ from rss_hub.storage.deliveries import DeliveryRepository
 from rss_hub.storage.feeds import FeedRepository
 from rss_hub.storage.job_runs import JobRunRepository
 from rss_hub.storage.llm_usage import LlmUsageRepository
+from rss_hub.storage.models import ModelRepository
 from rss_hub.storage.topics import TopicRepository
 
 JOB_COLLECT = "collect"
 JOB_SUMMARIZE = "summarize"
 JOB_DELIVER = "deliver"
 JOB_RETENTION = "retention"
+JOB_MODEL_SCAN = "model_scan"
+MODEL_SCAN_INTERVAL_SECONDS = 24 * 3600  # 무료 모델 목록은 하루에 한 번 확인
 RETENTION_INTERVAL_SECONDS = 6 * 3600  # 보관 기간 정리는 6시간마다
 
 
@@ -86,13 +90,8 @@ def build_runner(
     stop = threading.Event()  # 서비스 종료 요청. 실행기와 발송 서비스가 함께 본다
 
     webhook_sender = sender or RequestsWebhookSender()
-    llm = build_llm_services(
-        database,
-        clock,
-        settings,
-        client=client or OpenRouterClient(settings.get_openrouter_key),
-        sender=webhook_sender,
-    )
+    llm_client = client or OpenRouterClient(settings.get_openrouter_key)
+    llm = build_llm_services(database, clock, settings, client=llm_client, sender=webhook_sender)
     alerts, gateway = llm.alerts, llm.gateway
     collector = CollectService(
         feeds=feeds,
@@ -105,6 +104,12 @@ def build_runner(
         articles=articles, gateway=gateway, settings=settings, topics=topics, clock=clock
     )
     retention = RetentionService(articles=articles, settings=settings, clock=clock)
+    model_scan = ModelScanService(
+        client=llm_client,
+        models=ModelRepository(database, clock),
+        settings=settings,
+        alerts=alerts,
+    )
     deliverer = DeliveryService(
         articles=articles,
         feeds=feeds,
@@ -127,6 +132,7 @@ def build_runner(
             JOB_DELIVER, deliverer.run, lambda: settings.snapshot().deliver_interval_seconds
         ),
         IntervalJob(JOB_RETENTION, retention.run, lambda: RETENTION_INTERVAL_SECONDS),
+        IntervalJob(JOB_MODEL_SCAN, model_scan.scan, lambda: MODEL_SCAN_INTERVAL_SECONDS),
     ]
     return JobRunner(
         jobs=jobs,

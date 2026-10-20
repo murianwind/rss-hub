@@ -19,6 +19,12 @@
       <a class="title" href="/a/{{ item.id }}">{{ item.title }}</a>
       <div class="meta">{{ item.feed_name }} · {{ times[item.id] }}{% for name in item.topics %} <span class="badge">{{ name }}</span>{% endfor %}</div>
       {% if snippets[item.id] %}<p class="snippet">{{ snippets[item.id] }}</p>{% endif %}
+      {% if scope.kind == 'topic' %}
+      <form method="post" action="/a/{{ item.id }}/topics/{{ scope.ident }}/reject" class="row">
+        <input type="hidden" name="next" value="{{ base_path }}{% if page.page > 1 %}?page={{ page.page }}{% endif %}">
+        <button type="submit">싫어요(이 주제에서 빼기)</button>
+      </form>
+      {% endif %}
     </article>
     {% endfor %}
     <div class="pager">

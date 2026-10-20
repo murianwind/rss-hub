@@ -565,3 +565,69 @@ def test_when_the_service_is_stopping_the_current_article_is_finished_and_the_re
     env.stop_flag = False
     env.service.run()  # 다음에 시작하면 이어서 보낸다
     assert env.article(second).status == "delivered"
+
+
+# ---------- 사용자가 정한 주제 소속(싫어요, 주제로) ----------
+
+
+def ott_article(env, **kwargs):
+    return env.add_ready_article(title="Netflix movie", topics=("OTT",), **kwargs)
+
+
+def test_a_topic_the_user_rejected_does_not_receive_the_article(env):
+    article_id = ott_article(env)
+    env.topics.record_matches(article_id, {env.topic_id("OTT"): ("netflix",)})
+    env.topics.reject(article_id, env.topic_id("OTT"))
+    env.service.run()
+    assert env.statuses(article_id) == {"rss:primary": "sent"}
+    assert env.sender.to("ott") == []
+
+
+def test_other_topics_still_receive_it_when_only_one_was_rejected(env):
+    env.add_topic("게임", ("netflix",), webhook="gizmodo")
+    article_id = env.add_ready_article(title="Netflix movie", topics=("OTT", "게임"))
+    env.topics.record_matches(article_id, {env.topic_id("OTT"): (), env.topic_id("게임"): ()})
+    env.topics.reject(article_id, env.topic_id("OTT"))
+    env.service.run()
+    assert env.statuses(article_id) == {"rss:primary": "sent", "gizmodo:topic:게임": "sent"}
+
+
+def test_an_article_the_user_added_by_hand_goes_to_the_topics_webhook_without_keywords(env):
+    article_id = env.add_ready_article(title="Totally unrelated words")
+    env.topics.add_manual(article_id, env.topic_id("OTT"))
+    env.service.run()
+    assert env.statuses(article_id) == {"rss:primary": "sent", "ott:topic:OTT": "sent"}
+
+
+def test_the_manual_choice_is_recorded_again_without_losing_its_source(env):
+    article_id = env.add_ready_article(title="Totally unrelated words")
+    env.topics.add_manual(article_id, env.topic_id("OTT"))
+    env.service.run()
+    (membership,) = env.topics.memberships(article_id)
+    assert (membership.source, membership.rejected) == ("manual", False)
+
+
+def test_a_hand_added_topic_that_was_later_rejected_gets_nothing(env):
+    article_id = env.add_ready_article(title="Totally unrelated words")
+    topic = env.topic_id("OTT")
+    env.topics.add_manual(article_id, topic)
+    env.topics.reject(article_id, topic)
+    env.service.run()
+    assert env.statuses(article_id) == {"rss:primary": "sent"}
+
+
+def test_a_hand_added_topic_that_is_turned_off_is_ignored(env):
+    article_id = env.add_ready_article(title="Totally unrelated words")
+    topic = env.topic_id("OTT")
+    env.topics.add_manual(article_id, topic)
+    env.topics.update(topic, TopicFields("OTT", "", ()), webhook_id=None, enabled=False)
+    env.service.run()
+    assert env.statuses(article_id) == {"rss:primary": "sent"}
+
+
+def test_an_article_that_was_already_delivered_is_not_sent_again_after_a_manual_add(env):
+    article_id = env.add_ready_article(title="Totally unrelated words")
+    env.service.run()
+    env.topics.add_manual(article_id, env.topic_id("OTT"))
+    env.service.run()
+    assert env.statuses(article_id) == {"rss:primary": "sent"} and len(env.sender.to("ott")) == 0

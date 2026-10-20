@@ -82,6 +82,12 @@ SETTING_DEFS: tuple[SettingDef, ...] = (
         _bounded_from_zero(20),
     ),
     SettingDef(
+        "topic_feedback_examples",
+        "요약 요청에 넣을 사용자 확인 예시 수(주제마다, 종류별, 0이면 넣지 않음)",
+        "0",
+        _bounded_from_zero(5),
+    ),
+    SettingDef(
         "article_retention_days",
         "글 보관 기간(일, 0이면 계속 보관)",
         "90",
@@ -121,6 +127,7 @@ class AppSettings:
     slot_batch_size: int
     default_max_entries: int
     baseline_archive_count: int
+    topic_feedback_examples: int
     article_retention_days: int
     model_chain: tuple[str, ...]
     llm_daily_cap: int
@@ -187,6 +194,7 @@ class SettingsService:
             slot_batch_size=int(v["slot_batch_size"]),
             default_max_entries=int(v["default_max_entries"]),
             baseline_archive_count=int(v["baseline_archive_count"]),
+            topic_feedback_examples=int(v["topic_feedback_examples"]),
             article_retention_days=int(v["article_retention_days"]),
             model_chain=tuple(v["model_chain"].split(",")),
             llm_daily_cap=int(v["llm_daily_cap"]),

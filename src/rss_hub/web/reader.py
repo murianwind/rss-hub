@@ -143,6 +143,8 @@ def build_reader_router(
             "show_original_title": bool(article.title_ko and article.title_ko != article.title),
             "published": article.published_dt.astimezone(zone).strftime("%Y-%m-%d %H:%M"),
             "topic_matches": reader.topics_of(article.id),
+            "memberships": {m.topic_id: m for m in topics.memberships(article.id)},
+            "enabled_topics": topics.list_enabled(),
             "body": sanitize_html(article.content_html, article.link),
             "lang": detect_language(f"{article.title} {plain}"),
             "has_original": is_web_link(article.link),

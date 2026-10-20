@@ -47,6 +47,7 @@ SETTING_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "llm_reserve_calls",
             "llm_wait_limit_minutes",
             "summarize_batch",
+            "topic_feedback_examples",
         ),
     ),
     ("알림", ("alert_cooldown_hours",)),
@@ -82,7 +83,13 @@ def _local(moment: datetime | None, zone: tzinfo) -> str:
     return "" if moment is None else moment.astimezone(zone).strftime("%m-%d %H:%M:%S")
 
 
-JOB_LABELS = {"collect": "수집", "summarize": "요약", "deliver": "발송", "retention": "정리"}
+JOB_LABELS = {
+    "collect": "수집",
+    "summarize": "요약",
+    "deliver": "발송",
+    "retention": "정리",
+    "model_scan": "모델 스캔",
+}
 
 
 def build_admin_router(

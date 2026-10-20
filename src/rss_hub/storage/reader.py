@@ -65,7 +65,7 @@ class ReaderRepository:
         if topic_id is not None:
             where.append(
                 "EXISTS (SELECT 1 FROM article_topics t "
-                "WHERE t.article_id = a.id AND t.topic_id = ?)"
+                "WHERE t.article_id = a.id AND t.topic_id = ? AND t.rejected = 0)"
             )
             params.append(topic_id)
         query = (
@@ -92,7 +92,8 @@ class ReaderRepository:
         marks = ",".join("?" for _ in article_ids)
         rows = conn.execute(
             "SELECT at.article_id, tp.name FROM article_topics at "
-            f"JOIN topics tp ON tp.id = at.topic_id WHERE at.article_id IN ({marks}) "
+            "JOIN topics tp ON tp.id = at.topic_id WHERE at.rejected = 0 "
+            f"AND at.article_id IN ({marks}) "
             "ORDER BY tp.id",
             list(article_ids),
         ).fetchall()
@@ -106,7 +107,8 @@ class ReaderRepository:
         with self._db.connect() as conn:
             rows = conn.execute(
                 "SELECT tp.id, tp.name, at.matched_keywords FROM article_topics at "
-                "JOIN topics tp ON tp.id = at.topic_id WHERE at.article_id = ? ORDER BY tp.id",
+                "JOIN topics tp ON tp.id = at.topic_id WHERE at.article_id = ? AND at.rejected = 0 "
+                "ORDER BY tp.id",
                 (article_id,),
             ).fetchall()
         return [

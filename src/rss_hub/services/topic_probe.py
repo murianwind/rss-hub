@@ -6,6 +6,7 @@
 - 인증이 없는 화면에서 호출 한도를 소진하지 못하게 짧은 간격 제한을 둔다.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -16,6 +17,7 @@ from rss_hub.domain.validation import validate_summary
 from rss_hub.services.clock import Clock
 from rss_hub.services.llm_gateway import BudgetBlocked, LlmGateway, LlmNotConfigured, LlmOutage
 from rss_hub.services.ports import LlmErrorKind
+from rss_hub.services.topic_examples import load_examples
 from rss_hub.storage.topics import TopicRepository
 
 MIN_INTERVAL = timedelta(seconds=5)
@@ -55,7 +57,15 @@ def _outage_reason(kinds: set[LlmErrorKind]) -> str:
 
 
 class TopicProbe:
-    def __init__(self, *, gateway: LlmGateway, topics: TopicRepository, clock: Clock) -> None:
+    def __init__(
+        self,
+        *,
+        gateway: LlmGateway,
+        topics: TopicRepository,
+        clock: Clock,
+        examples_count: Callable[[], int] = lambda: 0,
+    ) -> None:
+        self._examples_count = examples_count
         self._gateway = gateway
         self._topics = topics
         self._clock = clock
@@ -84,7 +94,8 @@ class TopicProbe:
             return ProbeResult(error="방금 시험했습니다. 잠시 뒤에 다시 시도하세요")
 
         self._last_call = now
-        prompt = build_summary_prompt(title, summary_excerpt(body), candidates)
+        examples = load_examples(self._topics, candidates, self._examples_count())
+        prompt = build_summary_prompt(title, summary_excerpt(body), candidates, examples)
         try:
             answer = self._gateway.complete(prompt)
         except LlmNotConfigured:

@@ -113,6 +113,16 @@ class LlmGateway:
                 break
         raise LlmOutage(tuple(failures))
 
+    def complete_with(self, model: str, prompt: str) -> LlmAnswer:
+        """체인 대신 지정한 모델 하나로만 호출한다(벤치마크용). 예산, 기록, 재시도 규칙은 같다."""
+        if not self._settings.has_openrouter_key():
+            raise LlmNotConfigured
+        failures: list[tuple[str, LlmErrorKind]] = []
+        answer, _ = self._try_model(model, prompt, failures)
+        if answer is not None:
+            return answer
+        raise LlmOutage(tuple(failures))
+
     # ---------- 모델 하나 ----------
 
     def _try_model(
