@@ -1,125 +1,136 @@
-# RSS 통합 서비스 — M1
+# RSS Hub
 
-상태: **M1~M5 구현 완료, 실제 사용하며 다듬는 단계** — 수집, 요약(주제 판별), Discord 발송, 피드 가져오기와 개별 등록, 구독 편집과 OPML 내보내기, 뷰어, **주제 피드백(싫어요, 주제로, 키워드 개선 제안)**, **무료 모델 스캔, 벤치마크, 추천과 교체**, 잡 연결, Docker/Actions까지 구현했다. 남은 것은 운영하면서 확인할 것들(`docs/17-m3-m5-review.md` §7).
-  18-ui-redesign-review.md 읽기 화면 재구현 1단계 점검 기록과 2단계 계획
-  19-ui-redesign-2-review.md 읽기 화면 재구현 2단계 점검 기록
-  20-ui-feedback-1-review.md 사용 피드백 22개 항목의 처리 현황과 점검 기록
-  21-ui-feedback-2-review.md 사용 피드백 2차 반영 점검 기록
-  22-full-text-review.md 글 전문 보기 점검 기록
-  23-ui-feedback-3-review.md 사용 피드백 3차 반영 점검 기록
-  24-ui-feedback-4-review.md 사용 피드백 4차 반영 점검 기록
-  25-fulltext-review-and-ui-5.md 전문 검토(실제 페이지 3개)와 사용 피드백 5차 점검 기록
-  26-ui-feedback-6-review.md 사용 피드백 6차 반영 점검 기록
-  27-page-subscription-review.md 웹페이지 구독과 사용 피드백 7차 점검 기록
-  28-ui-feedback-8-review.md 사용 피드백 8차 반영 점검 기록
-  29-feed-page-review.md 피드 관리 화면(버튼, 카드, 필터) 점검 기록
-  30-feed-page-review-2.md 피드 관리 화면 2차(위쪽 고정, 마지막 게시 구간) 점검 기록
-  31-feed-filters-kept-review.md 필터 유지, 최근 글 목록, 읽기 전용 주소 칸 점검 기록
-  32-rss-or-page-review.md RSS와 웹페이지 구독 선택, 후보 표시 점검 기록
-설계 확인 사항은 `docs/00-final-plan.md` §6, **배포는 `docs/04-deploy-guide.md`**.
+RSS 피드와 RSS가 없는 웹페이지를 구독해서, 새 글을 **한국어 제목과 요약**으로 바꾸고, 원하는 주제의 글만 골라 **Discord로 알려 주는** 셀프 호스팅 서비스입니다. 알림에 들어 있는 링크를 누르면 서비스에 내장된 읽기 화면(안 읽은 글 수, 북마크, 검색, 글 전문 보기)이 열립니다.
 
-> 서비스를 시작하면 수집(5분 슬롯), 요약, 발송이 자동으로 돌고, 설정 화면에서 바꾼 값이 재시작 없이 반영된다. **웹훅과 OpenRouter 키, 서비스 주소를 설정하기 전에는 요약과 발송이 기다리기만 하고 아무것도 보내지 않는다.** 서버를 슬롯(0, 5, 10분…)이 아닌 시각에 시작하면 첫 수집은 다음 슬롯까지 최대 5분 기다린다.
-> 인증이 없으므로 외부에 열 때는 NPM Access List를 권장한다(`docs/04-deploy-guide.md` §6).
+> 화면과 알림 문구는 **한국어만** 지원합니다. 요약에는 OpenRouter의 무료 모델을 씁니다.
+
+## 할 수 있는 일
+
+| 기능 | 설명 |
+|---|---|
+| 구독 | RSS/Atom 피드, 사이트 주소만으로 피드 자동 찾기, **RSS가 없는 사이트의 글 목록 페이지 구독**, OPML 가져오기와 내보내기 |
+| 수집 | 5분 단위 슬롯으로 피드를 나눠 점검하고, 글이 자주 올라오는 피드는 더 자주 점검 |
+| 요약 | 영문 글의 제목 번역과 한국어 요약. 호출 한도(하루, 분당)를 지키고 모델 장애 때는 다음 모델로 넘어감 |
+| 주제 | 키워드로 후보를 먼저 거르고 LLM이 확인. 주제마다 다른 Discord 채널로 전송, 싫어요/"주제로" 피드백과 키워드 개선 제안 |
+| 알림 | Discord 웹훅. 기본, 카테고리, 피드, 주제 순서로 보낼 채널을 정함 |
+| 읽기 화면 | 사이드바(RSS, 카테고리, 주제), 읽음/안 읽음, 북마크, 검색, 글 전문(원문 페이지에서 본문 추출), 라이트/다크 테마 |
+| 모델 관리 | OpenRouter 무료 모델 스캔, 벤치마크, 추천, 승인 후 교체 |
+| 운영 | 모든 설정을 웹 화면에서 변경(환경 변수 없음, 재시작 불필요), 변경 이력, `/healthz` 상태 확인 |
+
+## 준비물
+
+- Docker와 Docker Compose
+- [OpenRouter](https://openrouter.ai) API 키(무료 모델만 사용)
+- 알림을 받을 Discord 서버의 [웹훅 주소](https://discord.com/developers/docs/resources/webhook)
+- 서비스에 접속할 수 있는 주소: Discord 알림 안의 링크가 이 주소로 만들어집니다(예: `http://192.168.0.10:8000` 또는 리버스 프록시의 HTTPS 주소)
 
 ## 빠른 시작
 
 ```
+git clone https://github.com/murianwind/rss-hub.git
+cd rss-hub
+docker compose -f compose.yaml -f compose.build.yaml up -d --build
+curl http://localhost:8000/healthz
+```
+
+`{"status":"ok", ...}`가 나오면 브라우저에서 <http://localhost:8000> 을 엽니다.
+
+미리 빌드된 이미지를 쓰려면 `compose.yaml`만으로 실행합니다(이미지는 GitHub Actions가 `ghcr.io/murianwind/rss-hub`에 게시합니다. 패키지가 비공개이면 로그인이 필요하므로 위의 직접 빌드를 쓰세요).
+
+```
+docker compose up -d
+```
+
+데이터(SQLite 데이터베이스와 설정)는 이름 있는 볼륨 `rss-hub-data`(컨테이너의 `/data`)에 저장되므로 컨테이너를 다시 만들어도 남습니다.
+
+## 처음 설정
+
+**웹훅, OpenRouter 키, 서비스 주소를 설정하기 전에는 요약과 발송이 기다리기만 하고 아무것도 보내지 않습니다.**
+
+1. **환경 설정 > 설정**에서 *서비스 주소*를 입력합니다(접속하는 주소를 그대로 입력하면 후보로 제안됩니다).
+2. *OpenRouter 키*를 저장하고 **키 확인**을 눌러 확인합니다. 키는 저장한 뒤에는 다시 보이지 않습니다.
+3. *웹훅*을 추가하고 **시험 전송**으로 채널에 메시지가 오는지 확인한 뒤, 기본 웹훅으로 지정합니다.
+4. 읽기 화면 사이드바의 **RSS 피드 옆 `+`**에 사이트 주소를 넣어 피드를 추가하거나(RSS가 없으면 웹페이지 구독 후보가 나옵니다), **환경 설정 > 피드 관리**에서 기존 구독 목록을 OPML 파일로 가져옵니다.
+5. (선택) **주제**를 만들어 키워드와 설명을 넣으면, 그 주제에 해당하는 글만 지정한 웹훅으로 따로 보냅니다.
+
+새로 구독한 피드의 첫 점검은 현재 글을 알림 없이 "이미 본 글"로만 기록합니다. 이후에 올라오는 글부터 알림이 갑니다. 서비스를 5분 슬롯(0, 5, 10분…)이 아닌 시각에 시작하면 첫 수집은 다음 슬롯까지 최대 5분 걸립니다.
+
+## 보안: 인증이 없습니다
+
+이 서비스에는 로그인이 **없습니다**. 주소를 아는 사람은 누구나 설정(웹훅, 키 교체, 구독 삭제)을 바꿀 수 있습니다. 저장된 키와 웹훅 값은 화면에 다시 표시되지 않지만, 자기 것으로 바꾸는 것은 가능합니다.
+
+- **인터넷에 그대로 공개하지 마세요.** 집이나 사내 네트워크 안에서만 쓰거나, 리버스 프록시의 Basic 인증/Access List, VPN(예: Tailscale) 뒤에 두세요.
+- 다른 사이트를 통한 요청 위조(CSRF)는 막고, 보안 헤더(CSP 등)를 붙입니다. 사설망 주소로의 요청(SSRF)은 피드 수집, 가져오기, 원문 가져오기에서 모두 차단합니다. 그래서 같은 네트워크 안의 `192.168.x.x` 같은 주소로 제공되는 피드(예: 내 PC의 RSS 변환 서버)는 구독할 수 없습니다.
+- 서비스는 외부 HTTPS(OpenRouter, Discord, 구독한 사이트)로 나갈 수 있어야 합니다.
+
+리버스 프록시와 백업 방법은 [docs/deployment.md](docs/deployment.md)를 보세요.
+
+## 사용량과 한도
+
+OpenRouter 무료 모델에는 호출 한도가 있습니다([공식 한도 문서](https://openrouter.ai/docs/api-reference/limits)). 서비스는 설정한 값(기본: 하루 700회, 분당 15회, 80%에서 경고)을 넘지 않게 호출하고, 한도나 장애가 생기면 시스템 알림 웹훅으로 알립니다. 글 한 건의 제목 번역, 요약, 주제 판별은 호출 한 번으로 처리합니다.
+
+## 업데이트와 백업
+
+```
+docker compose pull && docker compose up -d      # 미리 빌드된 이미지
+docker compose -f compose.yaml -f compose.build.yaml up -d --build    # 직접 빌드(git pull 뒤)
+```
+
+백업은 `/data` 볼륨을 압축하면 됩니다. 자세한 명령은 [docs/deployment.md](docs/deployment.md#업데이트와-백업)에 있습니다.
+
+## 문서
+
+| 문서 | 내용 |
+|---|---|
+| [docs/deployment.md](docs/deployment.md) | 배포: 이미지 게시, 리버스 프록시(NPM), 업데이트와 백업, 문제 해결, 확인 목록 |
+| [docs/architecture.md](docs/architecture.md) | 구조: 계층, 잡, 데이터 흐름, 저장소, 보안 장치 |
+| [docs/testing.md](docs/testing.md) | 테스트: BDD 시나리오와 키워드 계층, 품질 게이트 |
+
+## 개발
+
+Python 3.12 이상이 필요합니다.
+
+```
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
-make check          # 린트 + 타입 + 데드코드 + 테스트 (모두 통과해야 한다)
-pytest -m golden    # 기존 스크립트와 동작 비교만
-pytest --cov        # 커버리지
+make check          # 린트 + 타입 + 데드코드 + 테스트
+make coverage       # 커버리지 보고
 ```
 
-`make`가 없는 환경(Windows)에서는 Makefile의 명령을 그대로 실행한다.
+`make`가 없는 환경(Windows)에서는 Makefile의 명령을 그대로 실행하세요.
 
-Docker로 바로 확인하려면(저장소를 받은 상태에서):
-```
-docker compose -f compose.yaml -f compose.build.yaml up -d --build
-curl.exe http://localhost:8000/healthz
-```
-
-## 구성
+내 PC에서 직접 실행해 보려면(데이터는 `./data`에 저장됩니다. 서비스는 환경 변수를 쓰지 않으므로 Docker 밖에서는 경로를 코드로 지정합니다):
 
 ```
-.github/workflows/
-  ci.yml                  PR/브랜치: 린트, 타입, 데드코드, 테스트 + Docker 이미지 빌드와 기동 확인
-  image.yml               main/태그: CI 통과 후 ghcr.io에 이미지 게시
-  dependabot.yml          pip, docker, github-actions 주간 업데이트(.github/ 바로 아래)
-Dockerfile  compose.yaml  compose.build.yaml  .dockerignore
-docs/
-  00-final-plan.md        합의한 결정, 범위, 마일스톤, 위험, 확인 대기 항목
-  01-m1-design.md         M1 설계: 아키텍처, 데이터 모델, 관리 화면, 설정, 의도적 변경점
-  02-m1-test-design.md    테스트 전략, 추적성 매트릭스, 품질 게이트, 완료 기준
-  03-step1-review.md      1단계 점검 기록(체크리스트 결과, 변이 확인, 발견한 문제)
-  04-deploy-guide.md      GitHub → Actions → 이미지 → Docker 스택 → NPM 가이드
-  05-step2-review.md      2단계 점검 기록(설정 저장소와 화면, 보안 장치, 변이 확인)
-  06-step3-review.md      3단계 점검 기록(수집 서비스, 저장소, HTTP 수집기, 변이 확인)
-  07-spike-s1-result.md   스파이크 S1(OpenRouter) 결과와 설계 반영
-  08-step4-review.md      4단계 점검 기록(LLM 게이트웨이, 호출 예산, 요약 서비스, 변이 확인)
-  09-spike-s2-result.md   스파이크 S2(Discord 웹훅) 결과와 설계 반영
-  10-step5-review.md      5단계 점검 기록(발송 서비스, Discord 웹훅 어댑터, 변이 확인)
-  11-step6-review.md      6단계 점검 기록(피드 가져오기, 사설망 주소 차단)
-  12-topic-routing-design.md  웹훅 구조(기본, 카테고리, 주제)와 주제 알림 설계
-  13-step7a-review.md     주제 알림 반영 점검 기록
-  14-step7-review.md      7단계 점검 기록(잡 연결, 피드 웹훅 복구)
-  15-m1-wrapup-m2-review.md  M1 마무리와 M2 점검 기록
-  16-m4-review.md         주제 판정 방식 검토와 M4(뷰어) 점검 기록
-  17-m3-m5-review.md      M3(모델 관리)와 M5(주제 피드백) 점검 기록
-features/                 BDD 시나리오 9개 파일, 142개 시나리오 (Gherkin, 한국어 본문)
+python - <<'EOF'
+from pathlib import Path
+import uvicorn
+from rss_hub.runtime import build_runner
+from rss_hub.web.app import create_app
+
+uvicorn.run(create_app(data_dir=Path("data"), runner_factory=build_runner), port=8000)
+EOF
+```
+
+### 기여
+
+이슈와 풀 리퀘스트를 환영합니다. 변경은 [BDD 시나리오](features/)를 먼저 추가하거나 고치고, 시험이 통과하는 최소 구현을 더하는 순서로 해 주세요. `make check`가 통과해야 합니다(CI도 같은 검사를 하며 커버리지 95% 미만이면 실패합니다). 자세한 방법은 [docs/testing.md](docs/testing.md)에 있습니다.
+
+## 저장소 구성
+
+```
 src/rss_hub/
-  domain/                 도메인 계층(순수 규칙 12개 모듈)
-  storage/                SQLite 연결, 마이그레이션, 피드와 글 저장소
-  services/               설정, 수집, LLM 게이트웨이, 요약, 발송, 시스템 알림 서비스와 포트, 시계
-  adapters/               HTTP 피드 수집기, OpenRouter 클라이언트, Discord 웹훅 전송기와 알림 전송기
-  web/                    FastAPI 앱: 상태, 설정 화면(templates/), /healthz, 보안 장치
-  version.py
-tests/
-  unit/  golden/  bdd/  web/  services/  storage/  fakes/
-tools/generate_legacy_golden.py   골든 데이터 생성기 (Linux/Docker에서 실행)
-tools/spike.py, tools/SPIKE.md    스파이크 S1(OpenRouter), S2(Discord) 시험 스크립트와 안내
+  domain/      순수 규칙(스케줄, 키워드, 요약 검증, 본문 정제, URL 규칙 등)
+  storage/     SQLite 저장소와 마이그레이션
+  services/    수집, 요약, 발송, 설정, 모델 관리 같은 동작과 외부 연결 인터페이스(ports)
+  adapters/    HTTP 피드 수집기, OpenRouter 클라이언트, Discord 웹훅 전송기
+  jobs/        수집/요약/발송 잡을 주기에 맞춰 실행하는 스케줄러
+  web/         FastAPI 앱, 템플릿, 정적 파일
+features/      Gherkin 시나리오(행동 명세, 한국어)
+tests/         시험(키워드 계층 tests/keywords 포함)
+Dockerfile  compose.yaml  compose.build.yaml
 ```
 
-## 진행 상황
+## 라이선스
 
-| 단계 | 내용 | 상태 |
-|---|---|---|
-| 0 | 프로젝트 골격, 품질 게이트 | 완료 |
-| 1 | 도메인 계층 + 골든 parity + BDD 24개 시나리오 연결 | 완료 |
-| 1.5 | 배포 경로 검증용 최소 서비스, Dockerfile, 스택, GitHub Actions | **완료**(Docker 빌드와 Actions 실행은 첫 푸시에서 검증) |
-| 스파이크 | **S1 OpenRouter 완료**(`docs/07-spike-s1-result.md`: 추론 토큰이 답을 잘라 먹는 것이 원인, `reasoning.effort=none`으로 해결). **S2 Discord 완료**(`docs/09-spike-s2-result.md`: 한도 5회/약 2초, 2000자 한도, 메시지 id와 삭제 확인, 429 응답 형식은 미확인). S3 Docker 볼륨, S5 NPM은 `docs/04-deploy-guide.md` §7로 확인 가능 | 진행 중 |
-| 2 | 설정 저장소와 설정 화면, 요청 출처 확인과 보안 헤더 | **완료** (594개 테스트, 커버리지 100%, BDD 33개 시나리오 연결) |
-| 3 | 피드와 글 저장소, 수집 서비스, HTTP 수집기 | **완료** (717개 테스트, 커버리지 100%, BDD 59개 시나리오 연결) |
-| 4 | LLM 게이트웨이, 호출 예산, 요약 서비스, 시스템 알림 | **완료** (996개 테스트, BDD 90개 시나리오 연결) |
-| 5 | 발송 서비스, Discord 웹훅 어댑터, 시스템 알림 전송기 | **완료** (1138개 테스트, BDD 109개 시나리오 연결) |
-| 6 | 피드 가져오기(OPML 업로드, 사설망 주소 차단) | **완료** |
-| 6.5 | 웹훅 구조 변경(기본, 카테고리, 주제)과 주제 알림(OTT 일반화) | **완료** (1593개 테스트, BDD 145개 시나리오 연결) |
-| 6.6 | 피드 웹훅 복구(카테고리와 상호 배제), 기본 웹훅에서 빠지는 규칙 | **완료** |
-| 7 | 잡 연결(수집, 요약, 발송), `/healthz` 정체 판정, `/status`, `/a/{id}`, 종료 처리, Docker 시작 명령 | **완료** (1736개 테스트, BDD 165개 시나리오 연결) |
-| 7.5 | M1 마무리: 웹훅 시험 전송, OpenRouter 키 확인, 주제 판별 시험 | **완료** |
-| 8 | M2: 개별 등록과 피드 자동 탐색, 구독 편집과 삭제, OPML 내보내기 | **완료** (2015개 테스트, BDD 184개 시나리오 전부 연결) |
-| 9 | 주제 판정 방식 변경: 키워드 먼저, LLM은 후보만 확인 | **완료** |
-| 10 | M4: 뷰어(사이드바 RSS·카테고리·주제, 글 목록, 글 페이지, 본문 정제, 보관 글과 보관 기간 정리) | **완료** (2268개 테스트, BDD 202개 시나리오 전부 연결) |
-| 11 | M5: 주제 피드백(싫어요, 되돌리기, 주제로, 키워드 개선 제안, 요청의 예시) | **완료** |
-| 12 | M3: 무료 모델 스캔, 벤치마크, 추천, 승인 교체, 하루 한 번 자동 스캔 | **완료** (2560개 테스트, BDD 226개 시나리오 전부 연결) |
-| 13 | 읽기 화면 재구현 1단계: 접히는 사이드바, 읽음과 안 읽은 글 수, 북마크, 검색과 필터, 돌아가기, 정적 스크립트(`script-src 'self'`) | **완료** (238개 시나리오 연결). 2단계는 14번 |
-| 14 | 읽기 화면 재구현 2단계: 인라인 슬라이드 패널(추가, 설정, 삭제 확인), 드래그 정렬과 카테고리 이동, 설정 탭, 테마와 글자 크기 | **완료** (250개 시나리오 연결, 2842개 이상 테스트). `app.js`는 자동 시험 없음 |
-| 15 | 사용 피드백 1차 반영(22개 중 14개): 항상 보이는 아이콘, 피드 상태 점과 강제 새로고침, 피드 주소 변경, 합친 설정 패널, 즉시 검색과 필터, 글 상세의 주제 메뉴, 위치 유지 등 | **완료**. 상세는 `docs/20-ui-feedback-1-review.md` |
-| 16 | 사용 피드백 2차 반영(나머지 7개): 피드 관리 화면(상태, 자동 가변 수집 주기, 활동량), 설정 아코디언, 자동 읽음과 안 읽음 고정, 읽음 버튼, 사이드바 폭 조절 | **완료**(262개 시나리오 연결). `docs/21-ui-feedback-2-review.md` |
-| 17 | 글 전문 보기: 글을 처음 열 때 원문 페이지에서 본문을 뽑아 저장(실패하면 RSS 본문과 이유, 다시 가져오기 버튼). 이미지는 https만 표시하고 영상은 "영상 보기" 링크(새 창)로 바꾼다 | **완료**(268개 시나리오 연결). `docs/22-full-text-review.md` |
-| 18 | 사용 피드백 3차: 첫 접속은 글 목록(사이드바 접힘), 글 화면 정리(여백, 출처와 중복 버튼 제거), 북마크 위치, 숫자 버블은 읽지 않은 글 수만, 피드 관리 검색, 모델 잔여 사용량, 전문 군더더기 정리, 프록시 차단 규칙 회피, 글 언어를 따르는 페이지 언어 | **완료**(279개 시나리오 연결). `docs/23-ui-feedback-3-review.md` |
-| 19 | 사용 피드백 4차: 목록 끊김 없는 이어 보기(스크립트가 없으면 쪽 표시와 이전/다음 버튼), 사이트 제목을 누르면 그 사이트가 새 창으로, 읽지 않은 글이 있는 사이트는 진하게 | **완료**(283개 시나리오 연결). `docs/24-ui-feedback-4-review.md` |
-| 20 | 사용 피드백 5차와 전문 검토: 설정 버튼 다시 누르면 닫힘, 글 화면의 위쪽(제목 링크, 요약, 전문 다시 가져오기 버튼) 고정과 본문만 스크롤, 실제 페이지 3개(Gizmodo, InfoQ, HBR) 검토로 전문 정리 규칙 보강 | **완료**(287개 시나리오 연결). `docs/25-fulltext-review-and-ui-5.md` |
-| 21 | 사용 피드백 6차: 모델 잔여 사용량을 서버가 알려 준 값("남은 호출/1000")으로, 삭제는 체크박스 대신 확인 창 한 번, 피드 주소를 바꿀 때 정상적인 피드인지 검사, 사이드바 세 구역을 한 화면에서(목록은 안에서 스크롤), 카테고리에 넣은 피드는 카테고리에만 | **완료**(291개 시나리오 연결). `docs/26-ui-feedback-6-review.md` |
-| 22 | 사용 피드백 7차: 서버에서 사용량을 못 받으면 표시하지 않음, 카테고리와 사이트 이름 정렬, **웹페이지 구독**(RSS가 없는 사이트의 글 목록 페이지를 구독) | **완료**(298개 시나리오 연결). `docs/27-page-subscription-review.md` |
-| 23 | 사용 피드백 8차: 사이드바 목록 안 스크롤 유지, 피드 설정의 주소 "변경"(피드 추가의 확인을 재활용해 후보를 고른다), 주소를 고칠 때 RSS가 있는지 먼저 보고 없으면 웹페이지 구독으로 자동 판정 | **완료**(301개 시나리오 연결). `docs/28-ui-feedback-8-review.md` |
-| 24 | 사용 피드백 9차: 피드 관리의 OPML 가져오기/내보내기/카테고리 관리 버튼을 돌아가기 버튼 디자인으로, 카드를 화면 너비에 따라 열 수가 바뀌는 격자로(긴 제목은 ...), 수집 주기와 마지막 게시 필터 | **완료**(304개 시나리오 연결). `docs/29-feed-page-review.md` |
-| 25 | 사용 피드백 10차: 피드 관리의 위쪽(제목, 검색과 필터, 상태 칩, 버튼)은 고정하고 카드만 스크롤, 마지막 게시 필터를 겹치지 않는 구간으로 | **완료**(305개 시나리오 연결). `docs/30-feed-page-review-2.md` |
-| 26 | 사용 피드백 11차: 피드 관리의 필터가 설정 저장, 삭제 같은 작업 뒤에도 유지, 웹페이지 구독 후보의 최근 글을 한 줄에 하나씩 목록으로, 피드 주소 칸은 읽기 전용("변경" 버튼으로만) | **완료**(307개 시나리오 연결). `docs/31-feed-filters-kept-review.md` |
-| 27 | 사용 피드백 12차: 후보의 제목과 주소 줄 분리, RSS가 있어도 홈페이지 글 목록이 보이면 "RSS 피드"와 "웹페이지 구독" 두 후보 제공(추가와 주소 변경 모두), 웹페이지 구독 주소에서 RSS로 되돌리기 | **완료**(310개 시나리오 연결). `docs/32-rss-or-page-review.md` |
-
-## 골든 데이터 다시 만들기
-```
-python tools/generate_legacy_golden.py --legacy-dir <기존 스크립트 7개가 있는 폴더> --out tests/golden/legacy_golden.json
-```
-기존 스크립트가 바뀌지 않으면 다시 만들 필요가 없다.
+[MIT](LICENSE)
