@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}복원 결과 · RSS Hub{% endblock %}
+{% block content %}
+<h1>복원 결과</h1>
+
+{% if error %}
+<div class="banner error" role="alert">복원하지 않았습니다: {{ error }}. 현재 데이터는 바뀌지 않았습니다.</div>
+{% else %}
+<div class="banner" role="status">복원했습니다.</div>
+<p>피드 {{ result.counts.feeds }}개 · 카테고리 {{ result.counts.categories }}개 · 주제 {{ result.counts.topics }}개 · 글 {{ result.counts.articles }}개</p>
+{% if result.unlinked_webhooks %}
+<div class="banner error" role="alert">같은 이름의 웹훅이 없어서 지정을 해제했습니다. 설정 화면에서 웹훅을 만들고 다시 지정해 주세요: {{ result.unlinked_webhooks | join(', ') }}</div>
+{% endif %}
+<p class="note">웹훅 주소와 OpenRouter 키는 백업에 들어 있지 않아서 현재 설정을 그대로 씁니다.</p>
+{% endif %}
+<p><a href="/settings">설정 화면으로</a> · <a href="/reader">읽기 화면으로</a></p>
+{% endblock %}

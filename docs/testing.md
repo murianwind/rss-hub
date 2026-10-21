@@ -39,6 +39,7 @@ CI는 같은 검사를 하고 커버리지 95% 미만이면 실패시킵니다(�
 |---|---|
 | `browser` | `post(world, path, **data)`: 같은 출처의 브라우저가 양식을 보냄. `BROWSER`, `CROSS_SITE`, `FRAGMENT` 요청 머리글 |
 | `page` | `card`, `row`, `text_of`, `body`, `rss_section`, `category_section`, `feed_ids`, `heading_link`: 화면 HTML에서 부분 찾기 |
+| `backup` | `download_backup`, `restore_backup`, `edited`: 백업 내려받기, 올려서 복원하기, 내용 고치기 |
 | `store` | `create_category`, `set_poll_priority`: 준비. `stored_stats`, `topic_matches`, `usage_breakdown`: 관찰(데이터베이스 표를 직접 읽음) |
 
 규칙:

@@ -16,6 +16,8 @@ bookmarked
 keep_unread
 has_next
 last_error
+unlinked_webhooks  # backup_result.html
+plain  # 요약 보고서의 필드(시험이 단언한다)
 
 # uvicorn이 "rss_hub.main:create_service_app --factory"로 불러온다
 create_service_app
