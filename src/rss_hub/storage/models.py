@@ -1,4 +1,4 @@
-"""무료 모델 목록(스캔 결과)과 벤치마크 실행, 점수 저장소(M3)."""
+"""무료 모델 목록(스캔 결과)과 벤치마크 실행, 점수 저장소."""
 
 import json
 from collections.abc import Sequence

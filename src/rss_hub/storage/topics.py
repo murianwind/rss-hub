@@ -127,7 +127,7 @@ class TopicRepository:
     # ---------- 글이 해당한 주제 ----------
 
     def record_matches(self, article_id: int, matches: Mapping[int, Sequence[str]]) -> None:
-        """글이 해당한 주제와 일치한 키워드를 기록한다(M5의 피드백과 키워드 개선 제안에 쓴다)."""
+        """글이 해당한 주제와 일치한 키워드를 기록한다(피드백과 키워드 개선 제안에 쓴다)."""
         with self._db.connect() as conn:
             for topic_id, keywords in matches.items():
                 # 이미 있는 줄이면 키워드만 갱신하고, 사용자가 정한 source와 rejected는 그대로 둔다
@@ -138,7 +138,7 @@ class TopicRepository:
                     (article_id, topic_id, _dump(keywords)),
                 )
 
-    # ---------- 사용자가 정한 소속(M5) ----------
+    # ---------- 사용자가 정한 소속 ----------
 
     def memberships(self, article_id: int) -> list["Membership"]:
         """글이 속한(또는 싫어요로 뺀) 주제들."""
