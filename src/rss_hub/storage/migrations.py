@@ -244,6 +244,22 @@ MIGRATIONS: tuple[str, ...] = (
     """
     ALTER TABLE feeds ADD COLUMN kind TEXT NOT NULL DEFAULT 'feed';
     """,
+    # 15: 벤치마크 호출 기록(호출 한 건씩, 진행 화면과 실패 원인 표시에 쓴다)과 시험한 모델 목록
+    """
+    ALTER TABLE benchmark_runs ADD COLUMN models TEXT NOT NULL DEFAULT '[]';
+    CREATE TABLE benchmark_calls (
+        run_id     INTEGER NOT NULL REFERENCES benchmark_runs(id) ON DELETE CASCADE,
+        model      TEXT NOT NULL,
+        idx        INTEGER NOT NULL,
+        title      TEXT NOT NULL,
+        state      TEXT NOT NULL,
+        korean_ok  INTEGER NOT NULL DEFAULT 0,
+        topic_ok   INTEGER NOT NULL DEFAULT 0,
+        latency_ms INTEGER,
+        error      TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY (run_id, model, idx)
+    );
+    """,
 )
 
 

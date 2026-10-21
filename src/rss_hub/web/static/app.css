@@ -478,3 +478,36 @@ input[readonly] { background: var(--panel); color: var(--muted); cursor: default
 .back-link { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--accent); text-decoration: none; }
 .back-link:hover { text-decoration: underline; }
 @media (max-width: 560px) { .inline-fields .btn-cell { width: 100%; } .inline-fields .btn-cell button { flex: 1; } .form-actions { justify-content: stretch; } .form-actions button { flex: 1; } }
+
+/* ---------- 모델 화면: 체인 편집, 벤치마크 진행, 점수 풀이 ---------- */
+.chain-list { list-style: none; margin: 0 0 8px; padding: 6px; min-height: 48px; border: 2px dashed var(--line); border-radius: 8px; counter-reset: none; }
+.chain-list.drop-over, .model-list.drop-over { border-color: var(--accent); background: var(--accent-soft); }
+.chain-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; margin: 4px 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; cursor: grab; }
+.chain-item.dragging, .model-row.dragging { opacity: 0.4; }
+.chain-item code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chain-rank { min-width: 20px; text-align: center; font-weight: 700; color: var(--accent); }
+.chain-tools { display: flex; gap: 4px; }
+.chain-tools button { min-height: 28px; padding: 0 8px; }
+.model-list { border: 2px dashed transparent; border-radius: 8px; }
+.model-row { display: flex; align-items: flex-start; gap: 8px; cursor: grab; }
+.model-row .check-row { min-height: 0; padding-top: 2px; }
+.model-body { flex: 1; min-width: 0; }
+.model-title code { word-break: break-all; }
+.score-line { margin-top: 2px; }
+.fail-lines { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
+.badge.warn { border-color: var(--error); color: var(--error); }
+.legend summary { cursor: pointer; font-weight: 600; }
+.legend ul { margin: 8px 0 0; padding-left: 18px; font-size: 13px; }
+.bench-bar { width: 100%; height: 10px; margin: 4px 0 8px; }
+.bench-model { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0; }
+.bench-model code { min-width: 0; word-break: break-all; }
+.bench-cells { display: inline-flex; gap: 4px; }
+.cell { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 26px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--line); font-size: 12px; background: var(--panel); color: var(--muted); }
+.cell-ok { background: #d9f2e1; border-color: #2e9d57; color: #14532d; }
+.cell-failed { background: #fde2e2; border-color: var(--error); color: var(--error); }
+.cell-running { border-color: var(--accent); color: var(--accent); animation: cell-pulse 1s ease-in-out infinite; }
+.cell-skipped { border-style: dashed; text-decoration: line-through; opacity: 0.7; }
+@keyframes cell-pulse { 50% { opacity: 0.4; } }
+@media (prefers-reduced-motion: reduce) { .cell-running { animation: none; } }
+:root[data-theme="dark"] .cell-ok { background: #123a24; color: #9be0b5; }
+:root[data-theme="dark"] .cell-failed { background: #4a1d1d; }

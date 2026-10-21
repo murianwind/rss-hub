@@ -164,3 +164,43 @@ def test_saving_the_same_model_twice_in_a_run_keeps_the_last(env):
 
 def test_no_scores_yet(env):
     assert env[0].latest_scores() == {}
+
+
+# ---------- 호출 기록 ----------
+
+
+def test_calls_are_recorded_one_by_one_in_order_with_their_state(env):
+    from rss_hub.domain.benchmark import CallResult
+
+    models, _ = env
+    run_id = models.start_run(6, ["a", "b"])
+    models.save_call(run_id, "a", 0, "첫 글", CallResult(True, True, False, 1500))
+    models.save_call(run_id, "a", 1, "둘째 글", CallResult(False, False, False, None, "truncated"))
+    models.save_skipped(run_id, "a", 2, "셋째 글", "rate_limited")
+    calls = models.calls(run_id)
+    assert [(c.index, c.state, c.latency_ms, c.error) for c in calls] == [
+        (0, "ok", 1500, ""),
+        (1, "failed", None, "truncated"),
+        (2, "skipped", None, "rate_limited"),
+    ]
+    assert (calls[0].korean_ok, calls[0].topic_ok) == (True, False)
+    assert models.latest_run().models == ("a", "b")
+
+
+def test_saving_a_call_again_replaces_it_and_clearing_removes_only_that_model(env):
+    from rss_hub.domain.benchmark import CallResult
+
+    models, _ = env
+    run_id = models.start_run(6, ["a", "b"])
+    models.save_call(run_id, "a", 0, "t", CallResult(False, False, False, None, "rate_limited"))
+    models.save_call(run_id, "b", 0, "t", CallResult(True, True, True, 900))
+    models.save_call(run_id, "a", 0, "t", CallResult(True, True, True, 800))
+    assert [(c.model, c.state) for c in models.calls(run_id)] == [("a", "ok"), ("b", "ok")]
+    models.clear_calls(run_id, "a")
+    assert [c.model for c in models.calls(run_id)] == ["b"]
+
+
+def test_a_run_started_without_a_model_list_has_no_models(env):
+    models, _ = env
+    models.start_run(6)
+    assert models.latest_run().models == ()

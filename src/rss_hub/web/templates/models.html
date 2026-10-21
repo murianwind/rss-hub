@@ -3,11 +3,27 @@
 {% block title %}모델 · RSS Hub{% endblock %}
 {% block content %}
 <div class="settings-page">
-{% if running %}<meta http-equiv="refresh" content="5">{% endif %}
 <h1>모델</h1>
 {% if notice %}<div class="banner" role="status">{{ notice }}</div>{% endif %}
 {% if test_result %}<div class="banner {{ 'error' if test_result[0] == 'error' else '' }}" role="status">{{ test_result[1] }}</div>{% endif %}
 {% if error %}<div class="banner error" role="alert">{{ error }}</div>{% endif %}
+
+<section class="bench-panel panel" data-bench-progress data-url="/models/benchmark/progress" data-running="{{ 1 if progress.running else 0 }}" {% if not progress.models %}hidden{% endif %}>
+  <p class="bench-head"><strong>벤치마크</strong>
+    <span data-bench-status>{% if progress.running %}실행 중{% elif progress.status == 'done' %}완료{% elif progress.status == 'failed' %}멈춤{% elif progress.status %}중단됨{% endif %}</span>
+    <span class="hint" data-bench-count>{{ progress.done }}/{{ progress.total }}</span>
+    <span class="hint" data-bench-note>{{ progress.note }}</span></p>
+  <progress class="bench-bar" max="{{ progress.total or 1 }}" value="{{ progress.done }}" data-bench-bar></progress>
+  <div data-bench-models>
+    {% for m in progress.models %}
+    <div class="bench-model"><code>{{ m.model }}</code>
+      <span class="bench-cells">{% for c in m.cells %}<span class="cell cell-{{ c.state }}" title="{{ c.n }}. {{ c.title }}{% if c.latency_ms %} · {{ (c.latency_ms / 1000) | round(1) }}초{% endif %}{% if c.reason %} · {{ c.reason }}: {{ c.detail }}{% endif %}">{{ c.n }}</span>{% endfor %}</span>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="hint">칸 하나가 시험 글 하나입니다. <span class="cell cell-ok">성공</span> <span class="cell cell-failed">실패</span> <span class="cell cell-running">진행 중</span> <span class="cell cell-pending">대기</span> <span class="cell cell-skipped">건너뜀</span> · 칸에 마우스를 올리면 글 제목과 실패 이유가 보입니다. 이 패널은 화면을 새로 고치지 않고 자동으로 갱신됩니다.</p>
+</section>
+<noscript><p class="hint">자바스크립트가 꺼져 있으면 진행 상황은 화면을 직접 새로 고쳐야 보입니다.</p></noscript>
 
 <h2>OpenRouter 키</h2>
 <div class="panel">
@@ -35,46 +51,81 @@
   </div>
 </div>
 
-<h2>모델 체인과 호출 한도</h2>
+<h2>호출 한도</h2>
 <div class="panel">
-{{ settings_form('/models/settings', '/models', sections, values, errors) }}
+{{ settings_form('/models/settings', '/models', limit_sections, values, errors) }}
 </div>
 
-<h2>지금 쓰는 모델 체인</h2>
-<p class="note">앞에서부터 차례로 시도하고, 실패하면 다음 모델로 넘어갑니다.</p>
-<ol>{% for m in chain %}
-  <li><code>{{ m }}</code>{% if m in scores %} <span class="hint">{{ scores[m][0].score }}점 · {{ scores[m][1] }}</span>{% endif %}</li>
-{% endfor %}</ol>
+<h2>모델 체인</h2>
+<p class="note">요약은 체인의 앞 모델부터 시도하고, 실패하면 다음 모델로 넘어갑니다. 아래 무료 모델 목록에서 모델을 끌어다 놓거나 <b>+</b>를 눌러 넣고, 체인 안에서 끌어 순서를 바꾸고, 밖으로 끌거나 <b>×</b>를 눌러 뺍니다. <b>체인 저장</b>을 눌러야 적용됩니다(최대 {{ max_chain }}개).</p>
+<form method="post" action="/models/apply" class="panel chain-editor" data-chain-editor data-max="{{ max_chain }}" data-confirm="모델 체인을 아래 순서로 바꿉니다. 바꿀까요?">
+  <input type="hidden" name="confirm" value="yes">
+  <ol class="chain-list" data-chain-list data-original="{{ chain | join(',') }}">
+    {% for m in chain %}
+    <li class="chain-item" draggable="true" data-model="{{ m }}"><span class="grip" aria-hidden="true">⋮⋮</span><span class="chain-rank">{{ loop.index }}</span><code>{{ m }}</code>{% if m in chain_hints %}<span class="hint">{{ chain_hints[m].explanation.headline }}</span>{% endif %}<span class="chain-tools"><button type="button" data-chain-up title="앞으로">▲</button><button type="button" data-chain-down title="뒤로">▼</button><button type="button" class="danger" data-chain-remove title="체인에서 빼기">×</button></span><input type="hidden" name="chain" value="{{ m }}"></li>
+    {% endfor %}
+  </ol>
+  <p class="hint" data-chain-empty {% if chain %}hidden{% endif %}>체인이 비어 있습니다. 아래 목록에서 모델을 끌어다 놓으세요.</p>
+  <div class="form-actions">
+    <span class="hint" data-chain-state></span>
+    <button type="button" data-chain-reset disabled>되돌리기</button>
+    <button type="submit" class="primary" data-chain-save disabled>체인 저장</button>
+  </div>
+</form>
+<details class="panel">
+  <summary>모델 이름을 직접 입력(고급)</summary>
+  {{ settings_form('/models/settings', '/models', chain_sections, values, errors) }}
+</details>
+
 
 <h2>무료 모델 스캔</h2>
 <form method="post" action="/models/scan" class="panel">
   <p class="note">OpenRouter의 무료 텍스트 모델 목록을 가져옵니다. 호출 한도를 쓰지 않습니다. 하루에 한 번 자동으로도 확인해서, 체인의 모델이 사라지면 시스템 웹훅으로 알립니다.</p>
-  <button type="submit" class="primary">스캔</button>
+  <div class="form-actions"><button type="submit" class="primary">스캔</button></div>
 </form>
-
-{% if run %}
-<div class="panel">
-  <p><strong>마지막 벤치마크</strong>:
-    {% if run.status == 'running' %}실행 중 {{ run.done }}/{{ run.total }}
-    {% elif run.status == 'done' %}완료{% elif run.status == 'failed' %}멈춤{% else %}중단됨{% endif %}
-    {% if run.note %}<span class="hint">· {{ run.note }}</span>{% endif %}</p>
-</div>
-{% endif %}
 
 <h2>무료 모델 목록 <span class="hint">{{ catalog | length }}개</span></h2>
 {% if catalog %}
 <form method="post" action="/models/benchmark">
-  <p class="note">고른 모델마다 시험 글 {{ calls_per_model }}개로 실제 요약 요청을 보내 점수를 매깁니다(한 번에 {{ max_models }}개까지). <strong>모델 하나당 LLM 호출 {{ calls_per_model }}회</strong>가 오늘 호출 수에 포함되고, 하루 상한과 예약분을 지킵니다.</p>
-  <ul class="checks">
+  <p class="note">고른 모델마다 시험 글 {{ calls_per_model }}개로 실제 요약 요청을 보내 점수를 매깁니다(한 번에 {{ max_models }}개까지). <strong>모델 하나당 LLM 호출 {{ calls_per_model }}회</strong>가 오늘 호출 수에 포함되고, 하루 상한과 예약분을 지킵니다. 한도 초과가 연달아 나오는 모델은 잠시 미뤘다가 한 번만 다시 시험합니다.</p>
+  <ul class="checks model-list">
   {% for e in catalog %}
-    <li class="check"><label class="check-row"><input type="checkbox" name="models" value="{{ e.id }}">
-      <span><code>{{ e.id }}</code>{% if e.id in chain %} <span class="badge">체인 {{ chain.index(e.id) + 1 }}</span>{% endif %}
-      <span class="hint"> 문맥 {{ e.context_length }}{% if e.supports_json %} · JSON{% endif %}
-      {% if e.id in scores %} · {{ scores[e.id][0].score }}점(성공 {{ scores[e.id][0].ok }}/{{ scores[e.id][0].calls }}{% if scores[e.id][0].p50_ms %}, {{ (scores[e.id][0].p50_ms / 1000) | round(1) }}초{% endif %}){% if scores[e.id][0].errors %} · 실패 원인 {{ scores[e.id][0].errors | unique | join(', ') }}{% endif %}{% endif %}</span></span></label></li>
+    <li class="check model-row" draggable="true" data-model="{{ e.id }}">
+      <label class="check-row"><input type="checkbox" name="models" value="{{ e.id }}"></label>
+      <div class="model-body">
+        <div class="model-title"><code>{{ e.id }}</code>{% if e.id in chain %} <span class="badge chain-badge">체인 {{ chain.index(e.id) + 1 }}</span>{% endif %}
+          <span class="hint">입력 한도 {{ e.context }} 토큰{% if e.json %} · JSON 응답 지원{% endif %}</span></div>
+        {% if e.result %}
+        {% set r = e.result.explanation %}
+        <div class="score-line">
+          {% if r.measured %}<b>{{ r.headline }}</b>{% else %}<span class="badge warn">{{ r.headline }}</span>{% endif %}
+          <span class="hint">{{ r.parts | join(' · ') }} · {{ e.result.when }} 시험</span>
+        </div>
+        {% if r.failures %}
+        <ul class="fail-lines">
+          {% for f in r.failures %}<li><b>{{ f.label }} {{ f.count }}회</b> <span class="hint">{{ f.explanation }}</span></li>{% endfor %}
+        </ul>
+        {% endif %}
+        {% else %}<div class="hint">아직 시험하지 않았습니다.</div>{% endif %}
+      </div>
+      <button type="button" class="compact" data-chain-add title="체인에 넣기">+</button>
+    </li>
   {% endfor %}
   </ul>
-  <button type="submit" {% if running %}disabled{% endif %}>선택한 모델 벤치마크</button>
+  <div class="form-actions"><button type="submit" {% if progress.running %}disabled{% endif %}>선택한 모델 벤치마크</button></div>
 </form>
+<details class="panel legend">
+  <summary>점수 보는 법</summary>
+  <ul>
+    <li><b>종합 점수(100점)</b> = 성공률 50 + 한국어 제목 20 + 주제 판정 20 + 속도 10</li>
+    <li><b>성공</b>: 시험 글 {{ calls_per_model }}개 중 응답이 요약 형식 검사를 통과한 수와 비율(성공률)</li>
+    <li><b>한국어 제목</b>: 성공한 응답 중 번역 제목이 한국어인 수 · <b>주제 판정</b>: 성공한 응답 중 주제 확인이 기대와 같은 수</li>
+    <li><b>응답</b>: 성공한 호출의 중앙값 시간. 5초 이하면 속도 만점, 30초 이상이면 0점</li>
+    <li><b>측정 못 함</b>: 실패가 모두 한도 초과나 일시 장애여서 모델 품질을 잴 수 없었다는 뜻입니다. 점수가 0이 아니라 시험이 안 된 것이니 잠시 뒤 다시 시험하세요.</li>
+    <li><b>입력 한도</b>: 모델이 한 번에 읽을 수 있는 글의 최대 길이(토큰 수, 한글은 대체로 글자 하나가 1~2토큰). 요약에는 글 앞부분만 보내므로 작아도 괜찮습니다.</li>
+    <li><b>JSON 응답 지원</b>: 요약 결과를 JSON 형식으로 받아 내는 옵션을 모델이 지원합니다.</li>
+  </ul>
+</details>
 {% else %}
 <p class="hint">아직 스캔하지 않았습니다. 위에서 스캔하세요.</p>
 {% endif %}
@@ -86,10 +137,10 @@
   <p>{{ recommendation.reason }}</p>
   <ol>{% for m in recommendation.chain %}<li><code>{{ m }}</code></li>{% endfor %}</ol>
   {% if recommendation.changed %}
-  <form method="post" action="/models/apply">
+  <form method="post" action="/models/apply" data-confirm="추천 체인으로 바꿉니다. 바꿀까요?">
     {% for m in recommendation.chain %}<input type="hidden" name="chain" value="{{ m }}">{% endfor %}
-    <label class="check-row"><input type="checkbox" name="confirm" value="yes">이 체인으로 교체합니다</label>
-    <button type="submit" class="primary">추천 체인으로 교체</button>
+    <input type="hidden" name="confirm" value="yes">
+    <div class="form-actions"><button type="submit" class="primary">추천 체인으로 교체</button></div>
   </form>
   {% endif %}
   {% else %}<p class="hint">{{ recommendation.reason }}</p>{% endif %}

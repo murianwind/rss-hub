@@ -1,7 +1,6 @@
 """모델 화면(M3): 스캔, 벤치마크, 추천, 교체."""
 
 import re
-from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,47 +11,16 @@ from rss_hub.web.app import create_app
 from tests.fakes.clock import FakeClock
 from tests.fakes.delivery_env import FakeWebhookSender
 from tests.fakes.llm_client import FakeLlmClient, reply
-from tests.fakes.llm_env import KEY
 from tests.fakes.models_env import free
-from tests.keywords.browser import BROWSER
+from tests.keywords.models import open_model_world, post, scan
 
 BASE = "https://rss.example.com"
 
 
 @pytest.fixture
 def world(tmp_path):
-    clock, sender = FakeClock(), FakeWebhookSender()
-    llm = FakeLlmClient(default=reply("한국어 제목", "요약입니다.", topics=[]))
-    llm.free_models = [free("model-a"), free("model-b"), free("model-c"), free("model-d")]
-    pending = []
-    app = create_app(
-        data_dir=tmp_path,
-        clock=clock,
-        webhook_sender=sender,
-        llm_client=llm,
-        benchmark_spawn=pending.append,
-        benchmark_sleep=lambda seconds: None,
-    )
-    with TestClient(app, base_url=BASE, follow_redirects=False) as client:
-        settings = app.state.settings_service
-        settings.set_openrouter_key(KEY)
-        settings.update({"model_chain": "model-a,model-b"})
-        yield SimpleNamespace(
-            client=client,
-            llm=llm,
-            clock=clock,
-            settings=settings,
-            pending=pending,
-            models=ModelRepository(settings._db, clock),
-        )
-
-
-def post(world, path, data=None):
-    return world.client.post(path, data=data or {}, headers=BROWSER)
-
-
-def scan(world):
-    return post(world, "/models/scan")
+    with open_model_world(tmp_path) as opened:
+        yield opened
 
 
 def run_benchmark(world, *models):
@@ -96,7 +64,10 @@ def test_a_scan_lists_the_free_models_without_any_llm_call(world):
 def test_the_chain_models_are_marked_with_their_position(world):
     scan(world)
     html = world.client.get("/models").text
-    assert re.search(r"model-a</code> <span class=\"badge\">체인 1", html) and "체인 2" in html
+    assert (
+        re.search(r"model-a</code> <span class=\"badge chain-badge\">체인 1", html)
+        and "체인 2" in html
+    )
 
 
 def test_a_second_scan_reports_what_changed(world):
@@ -131,18 +102,16 @@ def test_the_benchmark_scores_the_chosen_models_and_shows_them(world):
     response = run_benchmark(world, "model-c")
     assert response.status_code == 303 and response.headers["location"] == "/models?started=1"
     html = world.client.get("/models").text
-    assert "100.0점(성공 6/6" in html and "완료" in html and "1개 모델 완료" in html
+    assert "종합 100점" in html and "성공 6/6(100%)" in html
+    assert "완료" in html and "1개 모델 완료" in html
 
 
-def test_while_a_run_is_going_the_page_refreshes_and_blocks_a_second_start(world):
+def test_while_a_run_is_going_the_page_shows_progress_and_blocks_a_second_start(world):
     scan(world)
     post(world, "/models/benchmark", {"models": ["model-c"]})
     html = world.client.get("/models").text
-    assert (
-        '<meta http-equiv="refresh" content="5">' in html
-        and "실행 중 0/6" in html
-        and "disabled" in html
-    )
+    assert 'data-running="1"' in html and "실행 중" in html and "0/6" in html
+    assert 'http-equiv="refresh"' not in html and "disabled" in html
     second = post(world, "/models/benchmark", {"models": ["model-d"]})
     assert second.status_code == 409 and "이미 벤치마크가 실행 중입니다" in second.text
 
@@ -219,7 +188,7 @@ def test_when_the_current_chain_is_already_best_there_is_no_apply_form(world):
     world.settings.update({"model_chain": "model-c"})
     run_benchmark(world, "model-c")
     html = world.client.get("/models").text
-    assert "이미 가장 좋습니다" in html and 'action="/models/apply"' not in html
+    assert "이미 가장 좋습니다" in html and "추천 체인으로 교체" not in html
 
 
 def test_without_a_good_enough_model_the_page_says_no_one_qualifies(world):
@@ -295,7 +264,7 @@ def test_the_failure_reasons_of_a_scored_model_are_shown_next_to_its_score(world
     post(world, "/models/benchmark", {"models": ["model-c"]})
     while world.pending:
         world.pending.pop()()
-    assert "실패 원인 unavailable" in world.client.get("/models").text
+    assert "일시 장애 2회" in world.client.get("/models").text
 
 
 def test_a_rejected_key_stops_the_benchmark_and_tells_the_user_why(world):

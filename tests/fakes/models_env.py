@@ -36,12 +36,16 @@ class Env(LlmEnv):
             self.ticks += self.latency
         return self.ticks
 
-    def benchmark(self):
+    def benchmark(self, *, real_time: bool = False):
+        """real_time이면 기다린 만큼 가짜 시계도 흐른다(분당 호출 한도가 풀리는 것을 시험할 때)."""
+
+        def sleep(seconds: float) -> None:
+            self.sleeps_log.append(seconds)
+            if real_time:
+                self.clock.advance(seconds=seconds)
+
         return BenchmarkService(
-            gateway=self.gateway,
-            models=self.models,
-            sleep=self.sleeps_log.append,
-            monotonic=self.monotonic,
+            gateway=self.gateway, models=self.models, sleep=sleep, monotonic=self.monotonic
         )
 
     def perfect_answers(self, model, *, korean=True):

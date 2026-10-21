@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from rss_hub.domain.benchmark import ModelScore
+from rss_hub.domain.benchmark import CallResult, ModelScore
 from rss_hub.domain.models import FreeModel
 from rss_hub.services.clock import Clock
 from rss_hub.storage.database import Database
@@ -43,6 +43,24 @@ class RunInfo:
     total: int
     done: int
     note: str
+    models: tuple[str, ...] = ()  # 이 실행이 시험하는 모델(고른 순서)
+
+
+CALL_OK = "ok"
+CALL_FAILED = "failed"
+CALL_SKIPPED = "skipped"  # 한도에 계속 걸려서 호출하지 않고 건너뛴 칸
+
+
+@dataclass(frozen=True)
+class CallRecord:
+    model: str
+    index: int
+    title: str
+    state: str
+    korean_ok: bool
+    topic_ok: bool
+    latency_ms: int | None
+    error: str
 
 
 class ModelRepository:
@@ -111,13 +129,78 @@ class ModelRepository:
 
     # ---------- 벤치마크 실행 ----------
 
-    def start_run(self, total: int) -> int:
+    def start_run(self, total: int, models: Sequence[str] = ()) -> int:
         with self._db.connect() as conn:
             cursor = conn.execute(
-                "INSERT INTO benchmark_runs(status, started_at, total) VALUES(?, ?, ?)",
-                (RUN_RUNNING, to_iso(self._clock.now()), total),
+                "INSERT INTO benchmark_runs(status, started_at, total, models) VALUES(?, ?, ?, ?)",
+                (RUN_RUNNING, to_iso(self._clock.now()), total, json.dumps(list(models))),
             )
             return int(cursor.lastrowid or 0)
+
+    # ---------- 호출 기록 ----------
+
+    def save_call(
+        self, run_id: int, model: str, index: int, title: str, result: CallResult
+    ) -> None:
+        self._write_call(
+            run_id,
+            model,
+            index,
+            title,
+            CALL_OK if result.ok else CALL_FAILED,
+            result.korean_ok,
+            result.topic_ok,
+            result.latency_ms,
+            result.error,
+        )
+
+    def save_skipped(self, run_id: int, model: str, index: int, title: str, reason: str) -> None:
+        self._write_call(run_id, model, index, title, CALL_SKIPPED, False, False, None, reason)
+
+    def _write_call(
+        self,
+        run_id: int,
+        model: str,
+        index: int,
+        title: str,
+        state: str,
+        korean_ok: bool,
+        topic_ok: bool,
+        latency_ms: int | None,
+        error: str,
+    ) -> None:
+        with self._db.connect() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO benchmark_calls(run_id, model, idx, title, state, "
+                "korean_ok, topic_ok, latency_ms, error) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (run_id, model, index, title, state, korean_ok, topic_ok, latency_ms, error),
+            )
+
+    def clear_calls(self, run_id: int, model: str) -> None:
+        """다시 시험하기 전에 그 모델의 이전 기록을 지운다."""
+        with self._db.connect() as conn:
+            conn.execute(
+                "DELETE FROM benchmark_calls WHERE run_id = ? AND model = ?", (run_id, model)
+            )
+
+    def calls(self, run_id: int) -> list[CallRecord]:
+        with self._db.connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM benchmark_calls WHERE run_id = ? ORDER BY model, idx", (run_id,)
+            ).fetchall()
+        return [
+            CallRecord(
+                r["model"],
+                r["idx"],
+                r["title"],
+                r["state"],
+                bool(r["korean_ok"]),
+                bool(r["topic_ok"]),
+                r["latency_ms"],
+                r["error"],
+            )
+            for r in rows
+        ]
 
     def advance(self, run_id: int, done: int) -> None:
         with self._db.connect() as conn:
@@ -213,4 +296,5 @@ def _run(row: object) -> RunInfo:
         total=row["total"],  # type: ignore[index]
         done=row["done"],  # type: ignore[index]
         note=row["note"],  # type: ignore[index]
+        models=tuple(json.loads(row["models"])),  # type: ignore[index]
     )
