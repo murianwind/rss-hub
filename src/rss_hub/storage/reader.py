@@ -4,11 +4,12 @@ import json
 import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
 from rss_hub.services.clock import Clock
 from rss_hub.storage.articles import VIEWABLE_STATUSES
 from rss_hub.storage.database import Database
+from rss_hub.storage.timestamps import to_iso
 
 PER_PAGE = 30
 ONLY_UNREAD = "unread"
@@ -200,7 +201,7 @@ class ReaderRepository:
         where, params = _where(
             feed_id=feed_id, category_id=category_id, topic_id=topic_id, query="", only=only
         )
-        now = self._clock.now().astimezone(UTC).isoformat()
+        now = to_iso(self._clock.now())
         with self._db.connect() as conn:
             return conn.execute(
                 "UPDATE articles SET read_at = ?, keep_unread = 0 WHERE read_at IS NULL AND id IN "

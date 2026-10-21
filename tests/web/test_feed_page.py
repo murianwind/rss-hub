@@ -8,26 +8,16 @@ import pytest
 from rss_hub.domain.activity import FeedMeasurement
 from rss_hub.domain.schedule import Activity
 from tests.fakes.discovery_fetcher import FakeDiscoveryFetcher
-from tests.fakes.viewer_world import World
+from tests.fakes.viewer_world import open_world
 from tests.fakes.web_parts import start_app
-
-BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
-FRAGMENT = {"x-panel": "1"}
+from tests.keywords.browser import BROWSER, FRAGMENT
+from tests.keywords.page import row
 
 
 @pytest.fixture
 def world(tmp_path):
-    fetcher = FakeDiscoveryFetcher()
-    parts, client = start_app(tmp_path, feed_fetcher=fetcher)
-    with client:
-        w = World(parts)
-        w.fetcher = fetcher
-        yield w
-
-
-def row(html, name):
-    rows = html.split('<li class="feed-row">')[1:]
-    return html_module.unescape(next(r for r in rows if name in r.split("</li>")[0]))
+    with open_world(tmp_path, fetcher=FakeDiscoveryFetcher()) as opened:
+        yield opened
 
 
 def listing(html):

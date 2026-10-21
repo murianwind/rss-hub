@@ -11,6 +11,7 @@ from rss_hub.storage.feeds import FeedRepository
 from rss_hub.storage.reader import ReaderRepository
 from rss_hub.storage.topics import TopicRepository
 from tests.fakes.clock import FakeClock
+from tests.keywords.store import create_category, raw_connection
 
 
 class Env:
@@ -21,7 +22,7 @@ class Env:
         self.articles = ArticleRepository(self.db, self.clock)
         self.topics = TopicRepository(self.db, self.clock)
         self.reader = ReaderRepository(self.db, self.clock)
-        self.news = self.feeds.add_category("뉴스")
+        self.news = create_category(self.feeds, "뉴스")
         self.a = self.feeds.add("https://a.example.com/rss", "A 블로그", category_id=self.news)
         self.b = self.feeds.add("https://b.example.com/rss", "B 블로그")
         self.ott = self.topics.add(TopicFields("OTT", "", ("netflix",)))
@@ -312,27 +313,26 @@ def test_an_empty_service_has_an_empty_sidebar(tmp_path):
 
 
 def test_the_migration_marks_existing_articles_as_read(tmp_path):
-    import sqlite3
 
     from rss_hub.storage.migrations import MIGRATIONS
 
-    conn = sqlite3.connect(tmp_path / "old.db")
-    conn.row_factory = sqlite3.Row
-    for script in MIGRATIONS[:9]:
-        conn.executescript(script)
-    conn.execute(
-        "INSERT INTO feeds(url, url_key, name, emoji, poll_priority, status, created_at) "
-        "VALUES('u', 'k', 'n', 'x', 'normal', 'active', '2026-01-01')"
-    )
-    conn.execute(
-        "INSERT INTO articles(feed_id, guid, title, link, content_html, published_raw, "
-        "published_dt, published_date, discovered_at, status) VALUES(1, 'g', 't', 'l', 'c', '', "
-        "'2026-01-01T00:00:00+00:00', '2026-01-01', '2026-01-02T00:00:00+00:00', 'collected')"
-    )
-    conn.executescript(MIGRATIONS[9])
-    row = conn.execute("SELECT read_at, bookmarked_at FROM articles").fetchone()
-    assert row["read_at"] == "2026-01-02T00:00:00+00:00" and row["bookmarked_at"] is None
-    assert conn.execute("SELECT sort_order FROM feeds").fetchone()["sort_order"] == 0
+    with raw_connection(tmp_path / "old.db") as conn:
+        for script in MIGRATIONS[:9]:
+            conn.executescript(script)
+        conn.execute(
+            "INSERT INTO feeds(url, url_key, name, emoji, poll_priority, status, created_at) "
+            "VALUES('u', 'k', 'n', 'x', 'normal', 'active', '2026-01-01')"
+        )
+        conn.execute(
+            "INSERT INTO articles(feed_id, guid, title, link, content_html, published_raw, "
+            "published_dt, published_date, discovered_at, status) "
+            "VALUES(1, 'g', 't', 'l', 'c', '', "
+            "'2026-01-01T00:00:00+00:00', '2026-01-01', '2026-01-02T00:00:00+00:00', 'collected')"
+        )
+        conn.executescript(MIGRATIONS[9])
+        row = conn.execute("SELECT read_at, bookmarked_at FROM articles").fetchone()
+        assert row["read_at"] == "2026-01-02T00:00:00+00:00" and row["bookmarked_at"] is None
+        assert conn.execute("SELECT sort_order FROM feeds").fetchone()["sort_order"] == 0
 
 
 def test_a_search_text_is_cut_at_one_hundred_characters(env):

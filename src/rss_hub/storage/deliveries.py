@@ -3,11 +3,12 @@
 import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
 from rss_hub.domain.routing import Target
 from rss_hub.services.clock import Clock
 from rss_hub.storage.database import Database
+from rss_hub.storage.timestamps import to_iso
 
 STATUS_PENDING = "pending"
 STATUS_SENT = "sent"
@@ -26,10 +27,6 @@ class Delivery:
     message_id: str | None
     sent_at: datetime | None
     created_at: datetime
-
-
-def _iso(moment: datetime) -> str:
-    return moment.astimezone(UTC).isoformat()
 
 
 def _delivery(row: sqlite3.Row) -> Delivery:
@@ -54,7 +51,7 @@ class DeliveryRepository:
 
     def ensure(self, article_id: int, targets: Sequence[Target]) -> list[Delivery]:
         """대상마다 기록이 없으면 pending으로 만든다. 이미 있으면 진행 상태를 그대로 둔다."""
-        now = _iso(self._clock.now())
+        now = to_iso(self._clock.now())
         rows: list[Delivery] = []
         with self._db.connect() as conn:
             for target in targets:
@@ -84,7 +81,7 @@ class DeliveryRepository:
             conn.execute(
                 "UPDATE deliveries SET status = ?, attempts = attempts + 1, last_error = NULL, "
                 "message_id = ?, sent_at = ? WHERE id = ?",
-                (STATUS_SENT, message_id, _iso(self._clock.now()), delivery_id),
+                (STATUS_SENT, message_id, to_iso(self._clock.now()), delivery_id),
             )
 
     def mark_permanent(self, delivery_id: int, error: str) -> None:

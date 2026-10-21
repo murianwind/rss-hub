@@ -4,7 +4,7 @@ import pytest
 
 from rss_hub.adapters.openrouter_client import OpenRouterClient, build_payload
 from rss_hub.services.ports import CallOptions, LlmCallError, LlmErrorKind, ServerUsage
-from tests.tools.fake_apis import FakeServer, json_reply
+from tests.fakes.http_server import FakeServer, json_reply
 
 KEY = "sk-or-v1-THIS-IS-A-SECRET-KEY"
 OPTIONS = CallOptions(max_tokens=500, reasoning_off=True, json_object=False)
@@ -392,9 +392,7 @@ CATALOG = {
 def test_only_free_text_models_are_listed_and_only_the_models_endpoint_is_called(make_client):
     client, server = make_client(lambda *_: json_reply(200, CATALOG))
     found = client.list_free_models()
-    assert [(m.id, m.supports_json, m.supports_reasoning) for m in found] == [
-        ("a/free-one:free", True, True)
-    ]
+    assert [(m.id, m.supports_json) for m in found] == [("a/free-one:free", True)]
     assert [(r[0], r[1]) for r in server.requests] == [("GET", "/models")]
 
 

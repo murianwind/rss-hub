@@ -14,11 +14,10 @@ from tests.bdd.binding import bind
 from tests.fakes.feed_fetcher import FakeFeedFetcher
 from tests.fakes.viewer_world import World
 from tests.fakes.web_parts import start_app
+from tests.keywords.browser import FRAGMENT, post
 
 bind(globals(), "16_ui_management.feature", [f"PNL-{n:02d}" for n in range(1, 13)])
 
-BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
-FRAGMENT = {"x-panel": "1"}
 WEBHOOK = "https://discord.com/api/webhooks/9/abc"
 NEW_FEED_URL = "https://new.example.com/feed.xml"
 KINDS = {"피드": "feed", "카테고리": "category", "주제": "topic"}
@@ -43,10 +42,6 @@ def world(tmp_path):
 @pytest.fixture
 def ctx():
     return SimpleNamespace(response=None, fragment=None, ids={}, before=None)
-
-
-def post(world, path, **data):
-    return world.client.post(path, data=data, headers=BROWSER)
 
 
 def feed_id(world, name):

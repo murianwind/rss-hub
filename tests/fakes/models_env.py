@@ -11,7 +11,7 @@ from tests.fakes.llm_env import LlmEnv
 
 
 def free(model_id, **kwargs):
-    return FreeModel(model_id, model_id, 32768, kwargs.get("json", True), False)
+    return FreeModel(model_id, model_id, 32768, kwargs.get("json", True))
 
 
 class Env(LlmEnv):

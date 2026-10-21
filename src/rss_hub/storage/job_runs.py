@@ -2,10 +2,11 @@
 
 import sqlite3
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
 from rss_hub.services.clock import Clock
 from rss_hub.storage.database import Database
+from rss_hub.storage.timestamps import from_iso, to_iso
 
 STATUS_RUNNING = "running"
 STATUS_OK = "ok"
@@ -25,21 +26,17 @@ class JobRun:
     last_skipped_at: datetime | None
 
 
-def _parse(value: str | None) -> datetime | None:
-    return datetime.fromisoformat(value) if value else None
-
-
 def _run(row: sqlite3.Row) -> JobRun:
     return JobRun(
         job=row["job"],
-        last_started_at=_parse(row["last_started_at"]),
-        last_finished_at=_parse(row["last_finished_at"]),
-        last_ok_at=_parse(row["last_ok_at"]),
+        last_started_at=from_iso(row["last_started_at"]),
+        last_finished_at=from_iso(row["last_finished_at"]),
+        last_ok_at=from_iso(row["last_ok_at"]),
         last_status=row["last_status"],
         last_error=row["last_error"],
-        last_slot=_parse(row["last_slot"]),
+        last_slot=from_iso(row["last_slot"]),
         skipped_count=row["skipped_count"],
-        last_skipped_at=_parse(row["last_skipped_at"]),
+        last_skipped_at=from_iso(row["last_skipped_at"]),
     )
 
 
@@ -49,7 +46,7 @@ class JobRunRepository:
         self._clock = clock
 
     def _now(self) -> str:
-        return self._clock.now().astimezone(UTC).isoformat()
+        return to_iso(self._clock.now())
 
     def get(self, job: str) -> JobRun | None:
         with self._db.connect() as conn:

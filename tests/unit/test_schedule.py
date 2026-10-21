@@ -10,7 +10,6 @@ from rss_hub.domain.schedule import (
     activity_score,
     build_schedule,
     desired_checks,
-    run_minutes,
     schedule_fingerprint,
     slot_for,
     slots_per_hour,
@@ -56,12 +55,6 @@ def test_slots_per_hour_rejects_intervals_that_do_not_divide_an_hour(interval):
 )
 def test_slot_for(interval, minute, slot):
     assert slot_for(minute, interval) == slot
-
-
-def test_run_minutes_are_multiples_of_the_interval():
-    assert run_minutes(5) == list(range(0, 60, 5))
-    assert run_minutes(30) == [0, 30]
-    assert run_minutes(60) == [0]
 
 
 # ---------- 활동 점수와 목표 횟수 ----------

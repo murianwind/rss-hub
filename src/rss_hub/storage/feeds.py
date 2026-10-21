@@ -2,7 +2,7 @@
 
 import sqlite3
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
 from rss_hub.domain.activity import FeedMeasurement
 from rss_hub.domain.feed_edit import FeedEdit
@@ -10,6 +10,7 @@ from rss_hub.domain.feed_url import feed_url_key
 from rss_hub.domain.schedule import PRIORITY_NORMAL, Activity
 from rss_hub.services.clock import Clock
 from rss_hub.storage.database import Database
+from rss_hub.storage.timestamps import from_iso, to_iso
 
 STATUS_BASELINE = "baseline_pending"
 STATUS_ACTIVE = "active"
@@ -66,21 +67,6 @@ class Category:
     feed_count: int
 
 
-@dataclass(frozen=True)
-class StoredStats:
-    recent_count_7d: int
-    target_date_count: int
-    last_published: datetime | None
-
-
-def _iso(moment: datetime) -> str:
-    return moment.astimezone(UTC).isoformat()
-
-
-def _parse(value: str | None) -> datetime | None:
-    return datetime.fromisoformat(value) if value else None
-
-
 def _feed(row: sqlite3.Row) -> Feed:
     return Feed(
         id=row["id"],
@@ -97,7 +83,7 @@ def _feed(row: sqlite3.Row) -> Feed:
         last_error=row["last_error"],
         etag=row["etag"],
         last_modified=row["last_modified"],
-        last_checked_at=_parse(row["last_checked_at"]),
+        last_checked_at=from_iso(row["last_checked_at"]),
         kind=row["kind"],
     )
 
@@ -147,20 +133,13 @@ class FeedRepository:
                         poll_priority,
                         max_entries,
                         status,
-                        _iso(self._clock.now()),
+                        to_iso(self._clock.now()),
                         kind,
                     ),
                 )
                 return int(cursor.lastrowid or 0)
         except sqlite3.IntegrityError as error:
             raise DuplicateFeedError(url) from error
-
-    def add_category(self, name: str, *, webhook_id: int | None = None) -> int:
-        with self._db.connect() as conn:
-            cursor = conn.execute(
-                "INSERT INTO categories(name, webhook_id) VALUES(?, ?)", (name, webhook_id)
-            )
-            return int(cursor.lastrowid or 0)
 
     def set_feed_webhook(self, feed_id: int, webhook_id: int | None) -> bool:
         """피드의 웹훅을 지정하거나(None이면 해제) 한다. 그런 피드가 없으면 False.
@@ -317,10 +296,6 @@ class FeedRepository:
             )
             return cursor.rowcount > 0
 
-    def set_poll_priority(self, feed_id: int, priority: str) -> None:
-        with self._db.connect() as conn:
-            conn.execute("UPDATE feeds SET poll_priority = ? WHERE id = ?", (priority, feed_id))
-
     def record_success(
         self, feed_id: int, *, etag: str | None, last_modified: str | None, activate: bool
     ) -> None:
@@ -332,7 +307,7 @@ class FeedRepository:
                 (
                     etag,
                     last_modified,
-                    _iso(self._clock.now()),
+                    to_iso(self._clock.now()),
                     int(activate),
                     STATUS_ACTIVE,
                     feed_id,
@@ -344,7 +319,7 @@ class FeedRepository:
             conn.execute(
                 "UPDATE feeds SET fail_count = fail_count + 1, last_error = ?, last_checked_at = ? "
                 "WHERE id = ?",
-                (reason, _iso(self._clock.now()), feed_id),
+                (reason, to_iso(self._clock.now()), feed_id),
             )
 
     def save_stats(self, feed_id: int, measurement: FeedMeasurement) -> None:
@@ -360,21 +335,10 @@ class FeedRepository:
                     feed_id,
                     measurement.activity.recent_count_7d,
                     measurement.activity.target_date_count,
-                    None if published is None else _iso(published),
-                    _iso(self._clock.now()),
+                    None if published is None else to_iso(published),
+                    to_iso(self._clock.now()),
                 ),
             )
-
-    def stats(self, feed_id: int) -> StoredStats | None:
-        with self._db.connect() as conn:
-            row = conn.execute("SELECT * FROM feed_stats WHERE feed_id = ?", (feed_id,)).fetchone()
-        if row is None:
-            return None
-        return StoredStats(
-            recent_count_7d=row["recent_count_7d"],
-            target_date_count=row["target_date_count"],
-            last_published=_parse(row["last_published_dt"]),
-        )
 
     def activity_by_key(self) -> dict[str, Activity]:
         """스케줄 계산에 쓰는 활동량(키는 피드 id 문자열)."""

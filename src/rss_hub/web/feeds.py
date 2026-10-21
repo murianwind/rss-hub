@@ -35,15 +35,11 @@ from rss_hub.storage.feeds import (
     FeedRuleError,
 )
 from rss_hub.storage.overview import OverviewRepository
+from rss_hub.web.forms import id_or_none
 from rss_hub.web.panels import render_panel
 from rss_hub.web.ui import done, done_after_delete, safe_return
 
 CONFIRM_MESSAGE = "삭제 확인이 필요합니다"
-
-
-def _id_or_none(value: object) -> int | None:
-    text = str(value or "").strip()
-    return int(text) if text.isdigit() else None
 
 
 STATE_FILTERS = ("ok", "error", "never")
@@ -281,8 +277,8 @@ def build_feed_router(
         result = registration.register(
             url,
             name=str(form.get("name", "")),
-            category_id=_id_or_none(form.get("category_id")),
-            webhook_id=_id_or_none(form.get("webhook_id")),
+            category_id=id_or_none(form.get("category_id")),
+            webhook_id=id_or_none(form.get("webhook_id")),
             kind=KIND_PAGE if form.get("kind") == KIND_PAGE else KIND_FEED,
         )
         if result.error:
@@ -308,8 +304,8 @@ def build_feed_router(
         feed = feeds.get(feed_id)
         if feed is None:
             return page(request, error="피드를 찾을 수 없음", status_code=404)
-        category_id = _id_or_none(form.get("category_id"))
-        webhook_id = _id_or_none(form.get("webhook_id"))
+        category_id = id_or_none(form.get("category_id"))
+        webhook_id = id_or_none(form.get("webhook_id"))
         try:
             values = validate_feed_edit(
                 str(form.get("name", "")),
@@ -387,7 +383,7 @@ def build_feed_router(
         form = await request.form()
         request.state.feeds_next = str(form.get("next", ""))  # 오류 화면도 같은 필터로
         try:
-            found = feeds.set_feed_category(feed_id, _id_or_none(form.get("category_id")))
+            found = feeds.set_feed_category(feed_id, id_or_none(form.get("category_id")))
         except FeedRuleError as error:
             return page(request, error=error.message, status_code=400)
         if not found:
@@ -399,7 +395,7 @@ def build_feed_router(
         form = await request.form()
         request.state.feeds_next = str(form.get("next", ""))  # 오류 화면도 같은 필터로
         try:
-            found = feeds.set_feed_webhook(feed_id, _id_or_none(form.get("webhook_id")))
+            found = feeds.set_feed_webhook(feed_id, id_or_none(form.get("webhook_id")))
         except FeedRuleError as error:
             return page(request, error=error.message, status_code=400)
         if not found:

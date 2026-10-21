@@ -8,6 +8,7 @@ from rss_hub.storage.database import Database
 from rss_hub.storage.feeds import FeedRepository
 from rss_hub.web.app import create_app
 from tests.fakes.clock import FakeClock
+from tests.keywords.store import create_category
 
 BASE = "https://rss.example.com"
 WEBHOOK = "https://discord.com/api/webhooks/9/abc"
@@ -262,7 +263,7 @@ def feeds(app, tmp_path):
 
 
 def test_the_category_page_lists_categories_with_feed_counts(client, feeds):
-    news = feeds.add_category("뉴스")
+    news = create_category(feeds, "뉴스")
     feeds.add("https://a.example.com/rss", "A", category_id=news)
     html = client.get("/categories").text
     assert "뉴스" in html and "피드 1개" in html
@@ -289,7 +290,7 @@ def test_a_bad_category_name_is_refused(client, feeds, name, message):
 
 
 def test_a_category_name_that_already_exists_is_refused(client, feeds):
-    feeds.add_category("뉴스")
+    create_category(feeds, "뉴스")
     response = client.post("/categories/add", data={"name": "뉴스"})
     assert response.status_code == 400 and "같은 이름의 카테고리가 이미 있음" in response.text
     assert len(feeds.list_categories()) == 1
@@ -297,7 +298,7 @@ def test_a_category_name_that_already_exists_is_refused(client, feeds):
 
 def test_a_category_webhook_can_be_set_and_cleared(client, app, feeds):
     webhook_id = app.state.settings_service.add_webhook("dev", WEBHOOK)
-    category_id = feeds.add_category("뉴스")
+    category_id = create_category(feeds, "뉴스")
     assert (
         client.post(
             f"/categories/{category_id}/webhook", data={"webhook_id": str(webhook_id)}
@@ -311,7 +312,7 @@ def test_a_category_webhook_can_be_set_and_cleared(client, app, feeds):
 
 
 def test_an_unknown_webhook_is_refused_for_a_category(client, feeds):
-    category_id = feeds.add_category("뉴스")
+    category_id = create_category(feeds, "뉴스")
     response = client.post(f"/categories/{category_id}/webhook", data={"webhook_id": "999"})
     assert response.status_code == 400 and "웹훅을 찾을 수 없음" in response.text
     assert feeds.list_categories()[0].webhook_id is None
@@ -351,14 +352,14 @@ def test_a_feed_webhook_can_be_set_and_the_page_shows_it(client, app, feeds):
 
 
 def test_a_feed_in_a_category_shows_that_it_follows_the_categorys_webhook(client, feeds):
-    category = feeds.add_category("뉴스")
+    category = create_category(feeds, "뉴스")
     feeds.add("https://a.example.com/rss", "A", category_id=category)
     assert "카테고리 &#39;뉴스&#39;의 웹훅을 따름" in client.get("/feeds").text
 
 
 def test_a_webhook_cannot_be_forced_onto_a_feed_in_a_category(client, app, feeds):
     webhook_id = app.state.settings_service.add_webhook("dev", WEBHOOK)
-    category = feeds.add_category("뉴스")
+    category = create_category(feeds, "뉴스")
     feed_id = feeds.add("https://a.example.com/rss", "A", category_id=category)
     response = client.post(f"/feeds/{feed_id}/webhook", data={"webhook_id": str(webhook_id)})
     assert (
@@ -369,7 +370,7 @@ def test_a_webhook_cannot_be_forced_onto_a_feed_in_a_category(client, app, feeds
 
 
 def test_a_feed_can_join_and_leave_a_category(client, feeds):
-    category = feeds.add_category("뉴스")
+    category = create_category(feeds, "뉴스")
     feed_id = feeds.add("https://a.example.com/rss", "A")
     assert (
         client.post(f"/feeds/{feed_id}/category", data={"category_id": str(category)}).status_code
@@ -382,7 +383,7 @@ def test_a_feed_can_join_and_leave_a_category(client, feeds):
 
 def test_a_feed_with_a_webhook_cannot_join_a_category_from_the_page(client, app, feeds):
     webhook_id = app.state.settings_service.add_webhook("dev", WEBHOOK)
-    category = feeds.add_category("뉴스")
+    category = create_category(feeds, "뉴스")
     feed_id = feeds.add("https://a.example.com/rss", "A", webhook_id=webhook_id)
     response = client.post(f"/feeds/{feed_id}/category", data={"category_id": str(category)})
     assert response.status_code == 400 and "먼저 웹훅 지정을 해제하세요" in response.text

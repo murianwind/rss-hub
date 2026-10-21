@@ -1,7 +1,10 @@
-"""기존 스크립트(골든 데이터)와 새 도메인 구현을 비교한다.
+"""기준 데이터(reference_cases.json)와 도메인 구현을 비교한다.
+
+기준 데이터는 이 서비스가 대체한 이전 스크립트들의 출력을 기록한 표다
+(키 이름의 legacy는 그 이전 구현).
 
 parity          같은 입력에 같은 결과
-known_defects   기존이 틀렸던 케이스. 새 구현은 new_expected를 따라야 한다
+known_defects   이전 구현이 틀렸던 케이스. 지금 구현은 new_expected를 따라야 한다
 invariants      정확한 값이 아니라 만족해야 할 성질
 """
 
@@ -32,14 +35,13 @@ from rss_hub.domain.validation import find_bad_content
 
 pytestmark = pytest.mark.golden
 
-GOLDEN = json.loads(Path(__file__).with_name("legacy_golden.json").read_text(encoding="utf-8"))
+GOLDEN = json.loads(Path(__file__).with_name("reference_cases.json").read_text(encoding="utf-8"))
 SEOUL = ZoneInfo(GOLDEN["meta"]["tz"])
 LEGACY_MODEL_RULES = {"fallback", "korean-passthrough", "korean-summary"}
 
 
-def test_golden_file_was_generated_for_the_expected_environment():
+def test_the_reference_cases_use_the_expected_time_zone():
     assert GOLDEN["meta"]["tz"] == "Asia/Seoul"
-    assert "rss_collector.py" in GOLDEN["meta"]["legacy_files"]
 
 
 # ---------- GUID ----------

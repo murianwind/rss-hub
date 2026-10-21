@@ -87,7 +87,7 @@ def _parse_role(raw: str) -> int | None:
     value = raw.strip()
     if not value:
         return None
-    if not value.isdigit():
+    if not value.isdecimal():
         raise SettingError("올바르지 않은 웹훅 선택")
     return int(value)
 

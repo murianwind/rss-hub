@@ -4,6 +4,7 @@ from rss_hub.domain.settings_rules import SettingError
 from rss_hub.services.settings import SettingsService
 from rss_hub.storage.database import Database
 from tests.fakes.clock import FakeClock
+from tests.keywords.store import raw_connection
 
 WEBHOOK = "https://discord.com/api/webhooks/123/abcDEF"
 OTHER_WEBHOOK = "https://discord.com/api/webhooks/456/ghiJKL"
@@ -169,15 +170,16 @@ def test_secret_values_never_appear_in_the_audit_log_or_settings_snapshot(servic
 
 
 def test_secret_values_are_not_stored_in_the_plain_settings_table(service, tmp_path):
-    import sqlite3
 
     service.set_openrouter_key(KEY)
     service.add_webhook("dev", WEBHOOK)
-    conn = sqlite3.connect(tmp_path / "rss_hub.db")
-    plain = " ".join(str(v) for row in conn.execute("SELECT * FROM settings") for v in row)
-    audit = " ".join(str(v) for row in conn.execute("SELECT * FROM settings_audit") for v in row)
-    assert KEY not in plain + audit
-    assert "abcDEF" not in plain + audit
+    with raw_connection(tmp_path / "rss_hub.db") as conn:
+        plain = " ".join(str(v) for row in conn.execute("SELECT * FROM settings") for v in row)
+        audit = " ".join(
+            str(v) for row in conn.execute("SELECT * FROM settings_audit") for v in row
+        )
+        assert KEY not in plain + audit
+        assert "abcDEF" not in plain + audit
 
 
 # ---------- 웹훅 ----------

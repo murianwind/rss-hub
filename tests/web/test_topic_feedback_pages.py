@@ -8,8 +8,7 @@ from rss_hub.domain.topics import TopicFields
 from rss_hub.web.feedback import safe_next
 from tests.fakes.viewer_world import World
 from tests.fakes.web_parts import start_app
-
-BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
+from tests.keywords.browser import post
 
 
 @pytest.fixture
@@ -20,10 +19,6 @@ def world(tmp_path):
         w.ott = w.topics.list_all()[0].id
         w.game = w.topics.add(TopicFields("게임", "게임 소식", ("steam",)))
         yield w
-
-
-def post(world, path, **data):
-    return world.client.post(path, data=data, headers=BROWSER)
 
 
 def membership(world, article, topic):

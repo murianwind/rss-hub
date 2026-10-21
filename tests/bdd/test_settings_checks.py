@@ -1,7 +1,5 @@
 """09_settings.feature: SET-13(웹훅 시험 전송), SET-14(OpenRouter 키 확인)."""
 
-import re
-
 import pytest
 from pytest_bdd import given, parsers, then, when
 
@@ -10,6 +8,7 @@ from rss_hub.storage.llm_usage import LlmUsageRepository
 from tests.bdd.binding import bind
 from tests.fakes.llm_env import KEY
 from tests.fakes.web_parts import start_app
+from tests.keywords.page import text_of
 
 bind(globals(), "09_settings.feature", ["SET-13", "SET-14"])
 
@@ -24,10 +23,6 @@ def parts(tmp_path):
         parts.webhook_ids = {}
         parts.usage_before = None
         yield parts
-
-
-def text_of(response):
-    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", response.text))
 
 
 @given(parsers.parse('웹훅 "{name}"가 저장되어 있다'))

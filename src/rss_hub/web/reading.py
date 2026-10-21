@@ -80,10 +80,10 @@ def build_reading_router(*, articles: ArticleRepository, reader: ReaderRepositor
         kind = str(form.get("kind", "all"))
         ident = str(form.get("ident", ""))
         if kind not in SCOPE_KINDS or (
-            kind in ("feed", "category", "topic") and not ident.isdigit()
+            kind in ("feed", "category", "topic") and not ident.isdecimal()
         ):
             return PlainTextResponse("알 수 없는 목록입니다", status_code=400)
-        number = int(ident) if ident.isdigit() else None
+        number = int(ident) if ident.isdecimal() else None
         reader.mark_all_read(
             feed_id=number if kind == "feed" else None,
             category_id=number if kind == "category" else None,

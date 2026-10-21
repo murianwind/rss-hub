@@ -7,20 +7,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 from rss_hub.domain.benchmark import SAMPLES
-from rss_hub.domain.models import FreeModel
 from rss_hub.storage.models import ModelRepository
 from rss_hub.web.app import create_app
 from tests.fakes.clock import FakeClock
 from tests.fakes.delivery_env import FakeWebhookSender
 from tests.fakes.llm_client import FakeLlmClient, reply
 from tests.fakes.llm_env import KEY
+from tests.fakes.models_env import free
+from tests.keywords.browser import BROWSER
 
 BASE = "https://rss.example.com"
-BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
-
-
-def free(model_id, **kw):
-    return FreeModel(model_id, model_id, 32768, kw.get("json", True), False)
 
 
 @pytest.fixture

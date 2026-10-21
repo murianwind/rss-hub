@@ -8,6 +8,7 @@ from rss_hub.domain.topics import TopicInputError, validate_topic_fields
 from rss_hub.services.settings import SettingsService
 from rss_hub.services.topic_probe import ProbeResult, TopicProbe
 from rss_hub.storage.topics import TopicRepository
+from rss_hub.web.forms import id_or_none
 from rss_hub.web.ui import done, done_after_delete
 
 
@@ -17,11 +18,6 @@ def _counts(topics: TopicRepository, topic_id: int) -> tuple[int, int]:
         sum(1 for s in samples if s.source == "manual" and not s.rejected),
         sum(1 for s in samples if s.rejected),
     )
-
-
-def _webhook_id(value: object) -> int | None:
-    text = str(value or "").strip()
-    return int(text) if text.isdigit() else None
 
 
 def build_topic_router(
@@ -76,7 +72,7 @@ def build_topic_router(
             )
             topics.add(
                 fields,
-                webhook_id=_webhook_id(form.get("webhook_id")),
+                webhook_id=id_or_none(form.get("webhook_id")),
                 enabled=form.get("enabled") == "yes",
             )
         except TopicInputError as error:
@@ -95,7 +91,7 @@ def build_topic_router(
             found = topics.update(
                 topic_id,
                 fields,
-                webhook_id=_webhook_id(form.get("webhook_id")),
+                webhook_id=id_or_none(form.get("webhook_id")),
                 enabled=form.get("enabled") == "yes",
             )
         except TopicInputError as error:

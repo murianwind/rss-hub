@@ -8,7 +8,7 @@ from rss_hub.adapters.discord_webhook import (
     RequestsWebhookSender,
     check_webhook_address,
 )
-from tests.tools.fake_apis import FakeServer, json_reply
+from tests.fakes.http_server import FakeServer, json_reply
 
 TOKEN = "SECRETTOKEN123"
 

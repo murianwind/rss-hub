@@ -18,7 +18,8 @@ from rss_hub.storage.llm_usage import LlmUsageRepository
 from rss_hub.web.app import create_app
 from tests.bdd.binding import bind
 from tests.fakes.delivery_env import DeliveryEnv, webhook_url
-from tests.tools.fake_apis import FakeServer, json_reply
+from tests.fakes.http_server import FakeServer, json_reply
+from tests.keywords.store import create_category, topic_matches
 
 bind(
     globals(),
@@ -118,8 +119,8 @@ def _on_two_topics(ctx):
 def _choose_targets(env, ctx):
     category_id = None
     if ctx.category_webhook:
-        category_id = env.feeds.add_category(
-            "카테고리", webhook_id=env.webhooks[ctx.category_webhook]
+        category_id = create_category(
+            env.feeds, "카테고리", webhook_id=env.webhooks[ctx.category_webhook]
         )
     # 피드 웹훅은 카테고리에 속하지 않은 피드에만 지정할 수 있다
     feed_id = env.add_feed(
@@ -561,6 +562,6 @@ def _earlier_unchanged(env, ctx):
 
 @then('주제 "OTT"에 해당했다는 기록과 일치한 키워드가 남는다')
 def _matches_recorded(env, ctx):
-    matches = env.topics.matches_for(ctx.article_id)
+    matches = topic_matches(env.db, ctx.article_id)
     assert set(matches) == {env.topic_id("OTT")}
     assert "netflix" in matches[env.topic_id("OTT")]

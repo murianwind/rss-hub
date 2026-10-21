@@ -9,9 +9,8 @@ import pytest
 from rss_hub.domain.topics import TopicFields
 from tests.fakes.viewer_world import World
 from tests.fakes.web_parts import start_app
+from tests.keywords.browser import BROWSER, FRAGMENT, post
 
-BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
-FRAGMENT = {"x-panel": "1"}
 WEBHOOK = "https://discord.com/api/webhooks/9/abc"
 
 
@@ -26,10 +25,6 @@ def world(tmp_path):
 
 def panel(world, path, **headers):
     return world.client.get(path, headers=FRAGMENT | headers)
-
-
-def post(world, path, **data):
-    return world.client.post(path, data=data, headers=BROWSER)
 
 
 # ---------- 조각과 전체 화면 ----------

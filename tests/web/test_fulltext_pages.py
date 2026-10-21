@@ -3,10 +3,10 @@
 import pytest
 
 from tests.fakes.discovery_fetcher import FakeDiscoveryFetcher
-from tests.fakes.viewer_world import World
-from tests.fakes.web_parts import start_app
+from tests.fakes.viewer_world import open_world
+from tests.keywords.browser import post
+from tests.keywords.page import body
 
-BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 LINK = "https://blog.example.com/post/1"
 FULL = "원문 전체에만 있는 본문 문장입니다. " * 30
 PAGE = (
@@ -17,20 +17,8 @@ PAGE = (
 
 @pytest.fixture
 def world(tmp_path):
-    fetcher = FakeDiscoveryFetcher()
-    parts, client = start_app(tmp_path, feed_fetcher=fetcher)
-    with client:
-        w = World(parts)
-        w.fetcher = fetcher
-        yield w
-
-
-def body(html):
-    return html.split('class="article-body"')[1].split('<div class="doc-foot">')[0]
-
-
-def post(world, path, **data):
-    return world.client.post(path, data=data, headers=BROWSER)
+    with open_world(tmp_path, fetcher=FakeDiscoveryFetcher()) as opened:
+        yield opened
 
 
 def test_opening_an_article_shows_the_full_text_from_the_original_page(world):

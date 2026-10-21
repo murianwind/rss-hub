@@ -5,27 +5,8 @@ from urllib.parse import quote
 
 import pytest
 
-from tests.fakes.viewer_world import World
-from tests.fakes.web_parts import start_app
-
-BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
-
-
-@pytest.fixture
-def world(tmp_path):
-    parts, client = start_app(tmp_path)
-    with client:
-        yield World(parts)
-
-
-def post(world, path, **data):
-    return world.client.post(path, data=data, headers=BROWSER)
-
-
-def card(html, title):
-    """제목이 든 목록 카드 하나."""
-    cards = html.split('<article class="card')[1:]
-    return next(c for c in cards if title in c.split("</article>")[0])
+from tests.keywords.browser import post
+from tests.keywords.page import card
 
 
 def side_count(world, href):

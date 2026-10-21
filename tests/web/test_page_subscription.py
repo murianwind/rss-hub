@@ -2,7 +2,6 @@
 
 # ruff: noqa: E501  (HTML 정규식과 견본은 한 줄이 읽기 쉽다)
 
-import html as html_module
 import re
 
 import pytest
@@ -10,26 +9,18 @@ import pytest
 from rss_hub.storage.feeds import KIND_FEED, KIND_PAGE, STATUS_ACTIVE, STATUS_BASELINE
 from tests.fakes.discovery_fetcher import FakeDiscoveryFetcher
 from tests.fakes.page_html import BASE, listing, sample_items
-from tests.fakes.viewer_world import World
-from tests.fakes.web_parts import start_app
+from tests.fakes.viewer_world import open_world
+from tests.keywords.browser import post
+from tests.keywords.page import row
 
-BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 LIST_URL = f"{BASE}/news"
 FAIL_TEXT = "글 목록을 찾지 못했습니다(사이트 구조가 바뀌었을 수 있습니다)"
 
 
 @pytest.fixture
 def world(tmp_path):
-    fetcher = FakeDiscoveryFetcher()
-    parts, client = start_app(tmp_path, feed_fetcher=fetcher)
-    with client:
-        w = World(parts)
-        w.fetcher = fetcher
-        yield w
-
-
-def post(world, path, **data):
-    return world.client.post(path, data=data, headers=BROWSER)
+    with open_world(tmp_path, fetcher=FakeDiscoveryFetcher()) as opened:
+        yield opened
 
 
 def serve_list(world, count=4, url=LIST_URL):
@@ -133,11 +124,6 @@ def test_an_unknown_kind_value_is_treated_as_a_regular_feed(world):
 
 
 # ---------- 표시와 깨졌을 때의 안내 ----------
-
-
-def row(html, name):
-    rows = html.split('<li class="feed-row">')[1:]
-    return html_module.unescape(next(r for r in rows if name in r.split("</li>")[0]))
 
 
 def test_the_feed_management_page_marks_web_page_subscriptions(world):

@@ -17,11 +17,11 @@ from tests.fakes.entries import today as entries_today
 from tests.fakes.feed_fetcher import FakeFeedFetcher
 from tests.fakes.viewer_world import World
 from tests.fakes.web_parts import start_app
+from tests.keywords.browser import BROWSER, FRAGMENT, post
+from tests.keywords.page import row
 
 bind(globals(), "17_feed_management.feature", [f"FMG-{n:02d}" for n in range(1, 14)])
 
-BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
-FRAGMENT = {"x-panel": "1"}
 FREE_URL, NEWS_URL = "https://f.example.com/rss", "https://n.example.com/rss"
 
 
@@ -53,17 +53,8 @@ def ctx():
     return SimpleNamespace(response=None, page=None)
 
 
-def post(world, path, **data):
-    return world.client.post(path, data=data, headers=BROWSER)
-
-
 def feed_id(world, name):
     return world.f_news if name == "뉴스 블로그" else world.f_free
-
-
-def row(html, name):
-    rows = html.split('<li class="feed-row">')[1:]
-    return html_module.unescape(next(r for r in rows if name in r.split("</li>")[0]))
 
 
 @given('사이트 "뉴스 블로그"(카테고리 "뉴스")와 사이트 "자유 블로그"가 있다')

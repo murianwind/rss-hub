@@ -5,6 +5,7 @@ import pytest
 from rss_hub.storage.database import Database
 from rss_hub.storage.llm_usage import LlmUsageRepository
 from tests.fakes.clock import FakeClock
+from tests.keywords.store import raw_connection, usage_breakdown
 
 
 @pytest.fixture
@@ -13,8 +14,13 @@ def clock():
 
 
 @pytest.fixture
-def usage(tmp_path, clock):
-    return LlmUsageRepository(Database(tmp_path / "rss_hub.db"), clock)
+def db(tmp_path):
+    return Database(tmp_path / "rss_hub.db")
+
+
+@pytest.fixture
+def usage(db, clock):
+    return LlmUsageRepository(db, clock)
 
 
 def test_every_call_is_counted_for_its_utc_day(usage):
@@ -43,19 +49,18 @@ def test_count_since_covers_a_sliding_window(usage, clock):
     assert usage.count_since(now - timedelta(seconds=62)) == 2
 
 
-def test_breakdown_separates_models_and_outcomes(usage):
+def test_breakdown_separates_models_and_outcomes(db, usage):
     usage.record(model="a", outcome="success", status=200)
     usage.record(model="a", outcome="success", status=200)
     usage.record(model="a", outcome="unavailable", status=503)
     usage.record(model="b", outcome="success", status=200)
-    assert usage.breakdown(date(2026, 10, 16)) == {
+    assert usage_breakdown(db, date(2026, 10, 16)) == {
         "a": {"success": 2, "unavailable": 1},
         "b": {"success": 1},
     }
 
 
 def test_token_numbers_are_stored_for_later_analysis(usage, tmp_path):
-    import sqlite3
 
     usage.record(
         model="a",
@@ -65,13 +70,12 @@ def test_token_numbers_are_stored_for_later_analysis(usage, tmp_path):
         completion_tokens=100,
         reasoning_tokens=0,
     )
-    row = (
-        sqlite3.connect(tmp_path / "rss_hub.db")
-        .execute("SELECT prompt_tokens, completion_tokens, reasoning_tokens FROM llm_usage")
-        .fetchone()
-    )
-    assert row == (250, 100, 0)
+    with raw_connection(tmp_path / "rss_hub.db") as conn:
+        row = conn.execute(
+            "SELECT prompt_tokens, completion_tokens, reasoning_tokens FROM llm_usage"
+        ).fetchone()
+    assert tuple(row) == (250, 100, 0)
 
 
-def test_empty_day_has_an_empty_breakdown(usage):
-    assert usage.breakdown(date(2026, 1, 1)) == {}
+def test_empty_day_has_an_empty_breakdown(db, usage):
+    assert usage_breakdown(db, date(2026, 1, 1)) == {}

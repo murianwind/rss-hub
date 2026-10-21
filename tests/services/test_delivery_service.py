@@ -6,6 +6,7 @@ import pytest
 from rss_hub.domain.topics import TopicFields
 from rss_hub.services.ports import SendResult
 from tests.fakes.delivery_env import DeliveryEnv, ok, webhook_url
+from tests.keywords.store import create_category, topic_matches
 
 
 @pytest.fixture
@@ -86,7 +87,7 @@ def test_the_time_is_shown_in_the_service_timezone(env):
 
 
 def test_a_category_without_a_webhook_falls_back_to_the_default_webhook(env):
-    category = env.feeds.add_category("뉴스")
+    category = create_category(env.feeds, "뉴스")
     feed = env.add_feed("N", category=category)
     env.add_ready_article(feed_id=feed)
     env.service.run()
@@ -94,7 +95,7 @@ def test_a_category_without_a_webhook_falls_back_to_the_default_webhook(env):
 
 
 def test_the_category_webhook_wins_over_the_default_webhook(env):
-    category = env.feeds.add_category("뉴스", webhook_id=env.webhooks["dev"])
+    category = create_category(env.feeds, "뉴스", webhook_id=env.webhooks["dev"])
     feed = env.add_feed("G", category=category)
     env.add_ready_article(feed_id=feed)
     env.service.run()
@@ -102,7 +103,7 @@ def test_the_category_webhook_wins_over_the_default_webhook(env):
 
 
 def test_the_category_webhook_is_used_when_the_feed_has_none(env):
-    category = env.feeds.add_category("뉴스", webhook_id=env.webhooks["dev"])
+    category = create_category(env.feeds, "뉴스", webhook_id=env.webhooks["dev"])
     feed = env.add_feed("N", category=category)
     env.add_ready_article(feed_id=feed)
     env.service.run()
@@ -162,14 +163,14 @@ def test_a_topic_without_a_webhook_sends_nothing_extra_but_the_match_is_recorded
     article_id = env.add_ready_article(title="New CVE found", topics=("보안",))
     env.service.run()
     assert len(env.sender.calls) == 1
-    assert env.topics.matches_for(article_id) == {topic_id: ("cve",)}
+    assert topic_matches(env.db, article_id) == {topic_id: ("cve",)}
 
 
 def test_the_matched_keywords_are_recorded_for_every_topic_the_article_matched(env):
     game = env.add_topic("게임", ("steam",), webhook="gizmodo")
     article_id = env.add_ready_article(title="Netflix trailer on Steam", topics=("OTT", "게임"))
     env.service.run()
-    matches = env.topics.matches_for(article_id)
+    matches = topic_matches(env.db, article_id)
     assert matches[game] == ("steam",)
     assert set(matches[env.topic_id("OTT")]) == {"netflix", "trailer"}
 
@@ -179,7 +180,7 @@ def test_matches_are_not_recorded_while_delivery_is_on_hold(tmp_path):
     env.settings.set_webhook_roles(default_id=None, system_id=None)
     article_id = env.add_ready_article(title="Netflix movie", topics=("OTT",))
     env.service.run()
-    assert env.topics.matches_for(article_id) == {}
+    assert topic_matches(env.db, article_id) == {}
 
 
 def test_a_topic_webhook_equal_to_the_default_webhook_receives_one_message(env):
@@ -190,7 +191,7 @@ def test_a_topic_webhook_equal_to_the_default_webhook_receives_one_message(env):
 
 
 def test_a_topic_webhook_equal_to_the_category_webhook_receives_one_message(env):
-    category = env.feeds.add_category("뉴스", webhook_id=env.webhooks["dev"])
+    category = create_category(env.feeds, "뉴스", webhook_id=env.webhooks["dev"])
     env.add_topic("게임", (), webhook="dev")
     env.add_ready_article(feed_id=env.add_feed("N", category=category), topics=("게임",))
     env.service.run()
@@ -224,7 +225,7 @@ def test_an_article_without_any_topic_goes_only_to_the_primary_webhook(env):
 
 
 def test_a_topic_whose_webhook_is_the_primary_one_does_not_send_twice(env):
-    category = env.feeds.add_category("영화", webhook_id=env.webhooks["ott"])
+    category = create_category(env.feeds, "영화", webhook_id=env.webhooks["ott"])
     feed = env.add_feed("O", category=category)
     env.add_ready_article(feed_id=feed, title="Netflix movie", topics=("OTT",))
     env.service.run()
@@ -485,7 +486,7 @@ def test_an_article_whose_feed_has_disappeared_is_skipped(env, monkeypatch):
 
 
 def test_each_dead_webhook_gets_its_own_alert(env):
-    category = env.feeds.add_category("G", webhook_id=env.webhooks["gizmodo"])
+    category = create_category(env.feeds, "G", webhook_id=env.webhooks["gizmodo"])
     env.add_ready_article(feed_id=env.add_feed("G", category=category))
     env.add_ready_article()
     env.sender.will(webhook_url("gizmodo"), http(404))
@@ -523,7 +524,7 @@ def test_a_topic_article_from_a_feed_with_its_own_webhook_goes_to_it_and_the_top
 
 
 def test_a_topic_article_from_a_category_feed_goes_to_the_category_and_the_topic_only(env):
-    category = env.feeds.add_category("뉴스", webhook_id=env.webhooks["dev"])
+    category = create_category(env.feeds, "뉴스", webhook_id=env.webhooks["dev"])
     article_id = env.add_ready_article(
         feed_id=env.add_feed("N", category=category), title="Netflix movie", topics=("OTT",)
     )

@@ -6,7 +6,7 @@ import pytest
 
 from rss_hub.adapters.http_feed_fetcher import RequestsFeedFetcher
 from rss_hub.services.ports import FetchError
-from tests.tools.fake_apis import FakeServer
+from tests.fakes.http_server import FakeServer
 
 RSS = b'<?xml version="1.0"?><rss version="2.0"><channel><title>t</title></channel></rss>'
 

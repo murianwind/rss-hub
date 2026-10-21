@@ -8,6 +8,7 @@ from rss_hub.services.ports import LlmErrorKind
 from rss_hub.storage.articles import MODEL_FALLBACK, STATUS_COLLECTED, STATUS_READY
 from tests.fakes.llm_client import failure, good, reply
 from tests.fakes.llm_env import LlmEnv
+from tests.keywords.store import topic_matches
 
 
 @pytest.fixture
@@ -449,7 +450,7 @@ def test_the_topics_a_summary_confirmed_are_recorded_with_their_keywords_right_a
     article_id = env.add_article(title="Netflix announces a drama")
     env.client.default = reply("t", "s", topics=[ott])
     env.summarizer.run()
-    assert env.topics.matches_for(article_id) == {ott: ("netflix", "drama")}
+    assert topic_matches(env.db, article_id) == {ott: ("netflix", "drama")}
 
 
 def test_nothing_is_recorded_when_no_topic_is_confirmed(env):
@@ -457,7 +458,7 @@ def test_nothing_is_recorded_when_no_topic_is_confirmed(env):
     article_id = env.add_article(title="Netflix announces a drama")
     env.client.default = reply("t", "s", topics=[])
     env.summarizer.run()
-    assert env.topics.matches_for(article_id) == {}
+    assert topic_matches(env.db, article_id) == {}
 
 
 def test_a_topic_without_keywords_is_recorded_with_an_empty_keyword_list(env):
@@ -465,7 +466,7 @@ def test_a_topic_without_keywords_is_recorded_with_an_empty_keyword_list(env):
     article_id = env.add_article(title="Anything")
     env.client.default = reply("t", "s", topics=[topic_id])
     env.summarizer.run()
-    assert env.topics.matches_for(article_id) == {topic_id: ()}
+    assert topic_matches(env.db, article_id) == {topic_id: ()}
 
 
 def test_a_failed_summary_records_no_topics(env):
@@ -473,7 +474,7 @@ def test_a_failed_summary_records_no_topics(env):
     article_id = env.add_article(title="Netflix announces a drama")
     env.client.default = good("이건 JSON이 아닙니다")
     env.summarizer.run()
-    assert env.topics.matches_for(article_id) == {}
+    assert topic_matches(env.db, article_id) == {}
 
 
 # ---------- 사용자가 확인한 예시를 요청에 넣는 설정 ----------

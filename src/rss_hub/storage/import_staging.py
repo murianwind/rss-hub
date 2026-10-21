@@ -1,14 +1,11 @@
 """가져오기 미리보기의 임시 보관. 확정하기 전까지 구독 목록은 바뀌지 않는다."""
 
 import secrets
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
 from rss_hub.services.clock import Clock
 from rss_hub.storage.database import Database
-
-
-def _iso(moment: datetime) -> str:
-    return moment.astimezone(UTC).isoformat()
+from rss_hub.storage.timestamps import to_iso
 
 
 class ImportStagingRepository:
@@ -24,7 +21,7 @@ class ImportStagingRepository:
             conn.execute(
                 "INSERT INTO import_staging(token, payload, created_at, expires_at) "
                 "VALUES(?, ?, ?, ?)",
-                (token, payload, _iso(now), _iso(now + ttl)),
+                (token, payload, to_iso(now), to_iso(now + ttl)),
             )
         return token
 
@@ -48,7 +45,7 @@ class ImportStagingRepository:
     def purge_expired(self) -> int:
         with self._db.connect() as conn:
             cursor = conn.execute(
-                "DELETE FROM import_staging WHERE expires_at <= ?", (_iso(self._clock.now()),)
+                "DELETE FROM import_staging WHERE expires_at <= ?", (to_iso(self._clock.now()),)
             )
             return cursor.rowcount
 
