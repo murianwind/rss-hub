@@ -9,8 +9,7 @@ from rss_hub.storage.articles import ArticleRepository, NewArticle
 from rss_hub.storage.feeds import FeedRepository
 from tests.fakes.discovery_fetcher import FakeDiscoveryFetcher
 from tests.fakes.web_parts import start_app
-
-BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
+from tests.keywords.browser import BROWSER
 
 
 @pytest.fixture

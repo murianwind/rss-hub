@@ -4,9 +4,13 @@ from rss_hub.domain.keywords import (
     DEFAULT_OTT_KEYWORDS,
     KeywordSet,
     find_keywords,
-    passes_keyword_gate,
     split_keywords,
 )
+
+
+def has_keyword(title, content_html="", keywords=DEFAULT_OTT_KEYWORDS):
+    """제목과 본문에 키워드가 하나라도 있는가."""
+    return bool(find_keywords(title, content_html, keywords))
 
 
 @pytest.mark.parametrize(
@@ -22,23 +26,23 @@ from rss_hub.domain.keywords import (
     ],
 )
 def test_keyword_gate_basic(title, expected):
-    assert passes_keyword_gate(title, "") is expected
+    assert has_keyword(title, "") is expected
 
 
 @pytest.mark.parametrize("title", ["A bottle of water", "Lotto results", "gotta love it"])
 def test_ott_abbreviation_does_not_match_inside_words(title):
-    assert passes_keyword_gate(title, "") is False
+    assert has_keyword(title, "") is False
 
 
 def test_ott_abbreviation_matches_as_a_word():
-    assert passes_keyword_gate("OTT 요금제 비교", "") is True
-    assert passes_keyword_gate("the OTT market", "") is True
+    assert has_keyword("OTT 요금제 비교", "") is True
+    assert has_keyword("the OTT market", "") is True
 
 
 def test_english_keyword_next_to_korean_text_still_matches():
     # 한글은 영문 단어의 일부로 보지 않는다 (예: "OTT서비스", "movie를")
-    assert passes_keyword_gate("OTT서비스 요금", "") is True
-    assert passes_keyword_gate("신작 movie를 봤다", "") is True
+    assert has_keyword("OTT서비스 요금", "") is True
+    assert has_keyword("신작 movie를 봤다", "") is True
 
 
 @pytest.mark.parametrize(
@@ -52,7 +56,7 @@ def test_english_keyword_next_to_korean_text_still_matches():
     ],
 )
 def test_keywords_ending_with_plus(title, expected):
-    assert passes_keyword_gate(title, "") is expected
+    assert has_keyword(title, "") is expected
 
 
 @pytest.mark.parametrize(
@@ -60,25 +64,25 @@ def test_keywords_ending_with_plus(title, expected):
     ['<img src="https://x.com/movie.jpg"> text', '<a class="trailer-link">text</a>'],
 )
 def test_words_inside_html_markup_are_ignored(content):
-    assert passes_keyword_gate("Apple event recap", content) is False
+    assert has_keyword("Apple event recap", content) is False
 
 
 def test_words_in_visible_text_are_found():
-    assert passes_keyword_gate("Weekend picks", "<p>New <b>trailer</b> released today</p>") is True
+    assert has_keyword("Weekend picks", "<p>New <b>trailer</b> released today</p>") is True
 
 
 def test_matching_is_case_insensitive():
-    assert passes_keyword_gate("NETFLIX", "") is True
+    assert has_keyword("NETFLIX", "") is True
 
 
 def test_korean_keywords_match_as_substrings():
-    assert passes_keyword_gate("신작드라마추천", "") is True
+    assert has_keyword("신작드라마추천", "") is True
 
 
 def test_custom_keywords():
     keywords = KeywordSet(ko=(), en=("stage play",))
-    assert passes_keyword_gate("Stage play adaptation announced", "", keywords) is True
-    assert passes_keyword_gate("New Netflix drama", "", keywords) is False
+    assert has_keyword("Stage play adaptation announced", "", keywords) is True
+    assert has_keyword("New Netflix drama", "", keywords) is False
 
 
 def test_default_keywords_do_not_contain_the_substring_prone_abbreviation_in_korean_list():
@@ -88,8 +92,8 @@ def test_default_keywords_do_not_contain_the_substring_prone_abbreviation_in_kor
 
 def test_empty_english_keyword_list_only_uses_korean_keywords():
     keywords = KeywordSet(ko=("드라마",), en=())
-    assert passes_keyword_gate("Netflix", "", keywords) is False
-    assert passes_keyword_gate("새 드라마", "", keywords) is True
+    assert has_keyword("Netflix", "", keywords) is False
+    assert has_keyword("새 드라마", "", keywords) is True
 
 
 @pytest.mark.parametrize(
@@ -97,12 +101,12 @@ def test_empty_english_keyword_list_only_uses_korean_keywords():
 )
 def test_keyword_at_the_end_of_a_longer_word_does_not_match(title):
     # 앞에 글자가 붙은 경우: Scott(…ott), bigmovie(…movie), preseason(…season)
-    assert passes_keyword_gate(title, "") is False
+    assert has_keyword(title, "") is False
 
 
 def test_keyword_at_the_start_of_a_longer_word_does_not_match():
-    assert passes_keyword_gate("Ottawa weather", "") is False
-    assert passes_keyword_gate("movies tonight", "") is False
+    assert has_keyword("Ottawa weather", "") is False
+    assert has_keyword("movies tonight", "") is False
 
 
 def test_find_keywords_returns_what_matched_in_the_order_korean_then_english():

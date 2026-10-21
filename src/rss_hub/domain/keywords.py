@@ -67,10 +67,3 @@ def find_keywords(
     if pattern:
         found.extend(dict.fromkeys(match.group(0) for match in pattern.finditer(text)))
     return tuple(found)
-
-
-def passes_keyword_gate(
-    title: str, content_html: str, keywords: KeywordSet = DEFAULT_OTT_KEYWORDS
-) -> bool:
-    """제목과 본문(HTML 제거 후)에 키워드가 하나라도 있는지."""
-    return bool(find_keywords(title, content_html, keywords))

@@ -16,20 +16,11 @@ from tests.bdd.binding import bind
 from tests.fakes.delivery_env import webhook_url
 from tests.fakes.llm_client import reply
 from tests.fakes.llm_env import KEY
-from tests.fakes.viewer_world import World
-from tests.fakes.web_parts import start_app
+from tests.keywords.browser import BROWSER
 
 bind(globals(), "13_topic_feedback.feature", [f"FBK-{n:02d}" for n in range(1, 13)])
 
-BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 ACTIONS = {"싫어요": "reject", "되돌리기": "restore", "주제로": "add"}
-
-
-@pytest.fixture
-def world(tmp_path):
-    parts, client = start_app(tmp_path)
-    with client:
-        yield World(parts)
 
 
 @pytest.fixture

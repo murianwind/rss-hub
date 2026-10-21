@@ -21,6 +21,7 @@ from tests.fakes.collect_env import CollectEnv
 from tests.fakes.entries import entry, today, yesterday
 from tests.fakes.http_server import LocalServer
 from tests.fakes.network import allow_all
+from tests.keywords.store import set_poll_priority, stored_stats
 
 bind(
     globals(),
@@ -205,17 +206,17 @@ def _activity_entries(env, ctx):
 
 @then(parsers.parse("최근 7일 글 수는 {count:d}이다"))
 def _recent_count(env, ctx, count):
-    assert env.feeds.stats(ctx.feed_id).recent_count_7d == count
+    assert stored_stats(env.db, ctx.feed_id).recent_count_7d == count
 
 
 @then(parsers.parse("오늘 글 수는 {count:d}이다"))
 def _today_count(env, ctx, count):
-    assert env.feeds.stats(ctx.feed_id).target_date_count == count
+    assert stored_stats(env.db, ctx.feed_id).target_date_count == count
 
 
 @then("가장 최근 발행 시각이 기록된다")
 def _latest_recorded(env, ctx):
-    assert env.feeds.stats(ctx.feed_id).last_published is not None
+    assert stored_stats(env.db, ctx.feed_id).last_published is not None
 
 
 @given("피드의 글에 HTML이 포함된 요약이 있다")
@@ -337,7 +338,7 @@ def _etag_stored(env, ctx):
     new_feed(env, ctx)
     env.fetcher.serve(ctx.url, today(2), etag='"v1"')
     env.collect(ctx.feed_id)
-    ctx.stats_before = env.feeds.stats(ctx.feed_id)
+    ctx.stats_before = stored_stats(env.db, ctx.feed_id)
     ctx.articles_before = len(collected(env))
 
 
@@ -349,7 +350,7 @@ def _not_modified(env, ctx):
 @then("피드 내용은 해석하지 않는다")
 def _not_parsed(env, ctx):
     assert env.fetcher.calls[-1].etag == '"v1"'
-    assert env.feeds.stats(ctx.feed_id) == ctx.stats_before
+    assert stored_stats(env.db, ctx.feed_id) == ctx.stats_before
     assert len(collected(env)) == ctx.articles_before
     assert ctx.report.added == 0
 
@@ -446,7 +447,7 @@ def apply_change(env, ctx, change):
     elif change == "피드가 삭제되었다":
         env.feeds.delete(ctx.feeds["f0"][0])
     elif change == "피드의 폴링 우선순위가 바뀌었다":
-        env.feeds.set_poll_priority(ctx.feeds["f0"][0], PRIORITY_EVERY_SLOT)
+        set_poll_priority(env.feeds, ctx.feeds["f0"][0], PRIORITY_EVERY_SLOT)
     elif change == "피드 개수는 같지만 피드 구성이 바뀌었다":
         env.feeds.delete(ctx.feeds["f0"][0])
         _, url = env.add_feed(51)

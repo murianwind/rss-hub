@@ -2,18 +2,9 @@
 
 import pytest
 
-from tests.fakes.viewer_world import World
-from tests.fakes.web_parts import start_app
+from tests.keywords.browser import BROWSER
 
-BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 CROSS = {"origin": "https://evil.example.com", "sec-fetch-site": "cross-site"}
-
-
-@pytest.fixture
-def world(tmp_path):
-    parts, client = start_app(tmp_path)
-    with client:
-        yield World(parts)
 
 
 def post(world, path, headers=BROWSER, **data):

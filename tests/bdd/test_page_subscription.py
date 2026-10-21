@@ -14,38 +14,25 @@ from rss_hub.storage.feeds import KIND_PAGE, STATUS_BASELINE
 from tests.bdd.binding import bind
 from tests.fakes.discovery_fetcher import FakeDiscoveryFetcher
 from tests.fakes.page_html import BASE, COMSCORE_LIKE, article_html, listing, sample_items
-from tests.fakes.viewer_world import World
-from tests.fakes.web_parts import start_app
+from tests.fakes.viewer_world import open_world
+from tests.keywords.browser import post
+from tests.keywords.page import row
 
 bind(globals(), "20_page_subscription.feature", [f"WPS-{n:02d}" for n in range(1, 14)])
 
-BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 LIST_URL = f"{BASE}/news"
 FAIL_TEXT = "글 목록을 찾지 못했습니다(사이트 구조가 바뀌었을 수 있습니다)"
 
 
 @pytest.fixture
 def world(tmp_path):
-    fetcher = FakeDiscoveryFetcher()
-    parts, client = start_app(tmp_path, feed_fetcher=fetcher)
-    with client:
-        w = World(parts)
-        w.fetcher = fetcher
-        yield w
+    with open_world(tmp_path, fetcher=FakeDiscoveryFetcher()) as opened:
+        yield opened
 
 
 @pytest.fixture
 def ctx():
     return SimpleNamespace(response=None, feed=None, new=None, before=None)
-
-
-def post(world, path, **data):
-    return world.client.post(path, data=data, headers=BROWSER)
-
-
-def row(html, name):
-    rows = html.split('<li class="feed-row">')[1:]
-    return html_module.unescape(next(r for r in rows if name in r.split("</li>")[0]))
 
 
 @given('사이트 "자유 블로그"가 있다')

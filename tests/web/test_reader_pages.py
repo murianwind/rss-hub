@@ -4,16 +4,7 @@ import re
 
 import pytest
 
-from tests.fakes.viewer_world import World, groups
-from tests.fakes.web_parts import start_app
-
-
-@pytest.fixture
-def world(tmp_path):
-    parts, client = start_app(tmp_path)
-    with client:
-        yield World(parts)
-
+from tests.fakes.viewer_world import groups
 
 # ---------- 사이드바 ----------
 

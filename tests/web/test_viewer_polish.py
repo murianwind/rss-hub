@@ -6,25 +6,13 @@ import re
 
 import pytest
 
-from tests.fakes.viewer_world import World
-from tests.fakes.web_parts import start_app
+from tests.keywords.browser import post
+from tests.keywords.page import category_section, feed_ids, heading_link, rss_section
 
-BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 KEY = "sk-or-v1-abcdefghijklmnop"
 ENGLISH = "This is a long English article body about software design and testing. " * 12
 # 프록시(NPM의 Block Common Exploits 등)가 막는 모양: 쿼리의 이름=/글자/
 WAF_SHAPE = re.compile(r"[?&;][A-Za-z0-9_]+=/")
-
-
-@pytest.fixture
-def world(tmp_path):
-    parts, client = start_app(tmp_path)
-    with client:
-        yield World(parts)
-
-
-def post(world, path, **data):
-    return world.client.post(path, data=data, headers=BROWSER)
 
 
 # ---------- 프록시 차단 규칙(403) 회피 ----------
@@ -260,13 +248,6 @@ def test_an_empty_search_shows_every_feed_and_the_form_is_live_searchable(world)
 
 
 # ---------- 사이트 제목 링크, 이어 보기, 진하게/연하게 ----------
-
-
-def heading_link(html):
-    found = re.search(
-        r'<h1><a class="site-link" href="([^"]+)" target="_blank" rel="([^"]+)"', html
-    )
-    return None if found is None else (found.group(1), found.group(2))
 
 
 def test_the_feed_title_links_to_the_site_in_a_new_window(world):
@@ -508,18 +489,6 @@ def test_the_remaining_number_is_never_negative_even_if_the_server_says_over_the
 
 
 # ---------- 사이드바: 카테고리에 넣은 피드는 카테고리에만, 세 구역이 한 화면에 ----------
-
-
-def rss_section(html):
-    return html.split('id="sec-rss"')[1].split("</details>")[0]
-
-
-def category_section(html):
-    return html.split('id="sec-categories"')[1].split('id="sec-topics"')[0]
-
-
-def feed_ids(section):
-    return [int(n) for n in re.findall(r'data-drag-kind="feed" data-drag-id="(\d+)"', section)]
 
 
 def test_a_feed_in_a_category_is_listed_only_under_its_category(world):

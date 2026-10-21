@@ -17,6 +17,8 @@ from rss_hub.storage.feeds import FeedRepository
 from tests.bdd.binding import bind
 from tests.fakes.discovery_fetcher import FakeDiscoveryFetcher
 from tests.fakes.web_parts import start_app
+from tests.keywords.page import text_of
+from tests.keywords.store import create_category
 
 bind(globals(), "11_feed_management.feature", [f"FED-{n:02d}" for n in range(1, 15)])
 
@@ -41,10 +43,6 @@ def world(tmp_path):
 
 def feed_named(world, name):
     return next(f for f in world.feeds.list_all() if f.name == name)
-
-
-def text_of(response):
-    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", response.text))
 
 
 def candidates(world):
@@ -164,7 +162,7 @@ def _no_requests(world):
 
 @given(parsers.re(r'카테고리 "(?P<category>[^"]+)"와 웹훅 "(?P<webhook>[^"]+)"가 있다'))
 def _category_and_webhook(world, category, webhook):
-    world.category_ids[category] = world.feeds.add_category(category)
+    world.category_ids[category] = create_category(world.feeds, category)
     world.webhook_ids[webhook] = world.settings.add_webhook(webhook, SECRET_URL)
 
 

@@ -5,22 +5,9 @@ import re
 import pytest
 
 from rss_hub.web.ui import done, safe_return
-from tests.fakes.viewer_world import World
-from tests.fakes.web_parts import start_app
+from tests.keywords.browser import post
 
-BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 WEBHOOK = "https://discord.com/api/webhooks/9/abc"
-
-
-@pytest.fixture
-def world(tmp_path):
-    parts, client = start_app(tmp_path)
-    with client:
-        yield World(parts)
-
-
-def post(world, path, **data):
-    return world.client.post(path, data=data, headers=BROWSER)
 
 
 def feed_order(world):

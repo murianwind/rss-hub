@@ -22,7 +22,7 @@ def env(tmp_path):
 
 
 def model(model_id, *, json=False, context=32768, name=None):
-    return FreeModel(model_id, name or model_id, context, json, False)
+    return FreeModel(model_id, name or model_id, context, json)
 
 
 def score(name, value=80.0, calls=6, ok=6):

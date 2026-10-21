@@ -15,6 +15,7 @@ from rss_hub.storage.database import Database
 from rss_hub.storage.feeds import STATUS_BASELINE, FeedRepository
 from tests.fakes.clock import FakeClock
 from tests.fakes.discovery_fetcher import FakeDiscoveryFetcher
+from tests.keywords.store import create_category
 
 PAGE_URL = "https://blog.example.com/"
 
@@ -241,7 +242,7 @@ def test_an_already_subscribed_feed_is_not_registered_twice(env):
 
 def test_a_feed_can_join_a_category_when_it_is_registered(env):
     env.fetcher.feed("https://new.example.com/rss", "새 블로그")
-    category_id = env.feeds.add_category("뉴스")
+    category_id = create_category(env.feeds, "뉴스")
     result = env.service.register("https://new.example.com/rss", category_id=category_id)
     assert env.feeds.get(result.feed_id).category_id == category_id
 
@@ -256,7 +257,7 @@ def test_a_feed_outside_any_category_can_get_its_own_webhook(env):
 def test_a_category_and_a_feed_webhook_together_are_refused_without_saving(env):
     env.fetcher.feed("https://new.example.com/rss", "새 블로그")
     webhook_id = env.settings.add_webhook("dev", "https://discord.com/api/webhooks/1/abc")
-    category_id = env.feeds.add_category("뉴스")
+    category_id = create_category(env.feeds, "뉴스")
     result = env.service.register(
         "https://new.example.com/rss", category_id=category_id, webhook_id=webhook_id
     )

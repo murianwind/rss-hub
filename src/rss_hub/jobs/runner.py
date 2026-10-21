@@ -76,10 +76,6 @@ class JobRunner:
         self._stop.set()
 
     @property
-    def stopping(self) -> bool:
-        return self._stop.is_set()
-
-    @property
     def running(self) -> frozenset[str]:
         with self._lock:
             return frozenset(self._running)

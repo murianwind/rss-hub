@@ -7,6 +7,7 @@ from rss_hub.storage.ordering import OrderRepository
 from rss_hub.storage.reader import ReaderRepository
 from rss_hub.storage.topics import TopicRepository
 from tests.fakes.clock import FakeClock
+from tests.keywords.store import create_category
 
 
 @pytest.fixture
@@ -26,7 +27,7 @@ def test_a_saved_order_decides_the_sidebar_order(env):
 
 def test_categories_and_topics_can_be_ordered_too(env):
     _, feeds, topics, orders, reader, _ = env
-    first, second = feeds.add_category("가"), feeds.add_category("나")
+    first, second = create_category(feeds, "가"), create_category(feeds, "나")
     t1 = topics.add(TopicFields("가주제", "", ()))
     t2 = topics.add(TopicFields("나주제", "", ()))
     assert orders.set_order("category", [second, first]) and orders.set_order("topic", [t2, t1])
@@ -58,7 +59,7 @@ def test_only_the_listed_items_are_renumbered_and_the_rest_keep_their_place(env)
 
 def test_renaming_a_category_checks_for_duplicates(env):
     _, feeds, _, _, _, _ = env
-    first, second = feeds.add_category("뉴스"), feeds.add_category("기술")
+    first, second = create_category(feeds, "뉴스"), create_category(feeds, "기술")
     assert feeds.rename_category(first, "소식") is True
     assert {c.name for c in feeds.list_categories()} == {"소식", "기술"}
     with pytest.raises(FeedRuleError, match="같은 이름"):
@@ -68,7 +69,7 @@ def test_renaming_a_category_checks_for_duplicates(env):
 
 def test_deleting_a_category_keeps_its_feeds_without_a_category(env):
     _, feeds, _, _, _, (a, _, _) = env
-    category = feeds.add_category("뉴스")
+    category = create_category(feeds, "뉴스")
     feeds.set_feed_category(a, category)
     assert feeds.delete_category(category) is True
     assert feeds.get(a) is not None and feeds.get(a).category_id is None

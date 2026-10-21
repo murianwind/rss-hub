@@ -10,12 +10,12 @@ from pytest_bdd import given, parsers, then, when
 
 from tests.bdd.binding import bind
 from tests.fakes.discovery_fetcher import FakeDiscoveryFetcher
-from tests.fakes.viewer_world import World
-from tests.fakes.web_parts import start_app
+from tests.fakes.viewer_world import open_world
+from tests.keywords.browser import BROWSER
+from tests.keywords.page import body
 
 bind(globals(), "18_full_text.feature", [f"FTX-{n:02d}" for n in range(1, 14)])
 
-BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 LINK = "https://blog.example.com/post/1"
 FULL = "원문 전체에만 있는 본문 문장입니다. " * 30
 PAGE = (
@@ -26,21 +26,13 @@ PAGE = (
 
 @pytest.fixture
 def world(tmp_path):
-    fetcher = FakeDiscoveryFetcher()
-    parts, client = start_app(tmp_path, feed_fetcher=fetcher)
-    with client:
-        w = World(parts)
-        w.fetcher = fetcher
-        yield w
+    with open_world(tmp_path, fetcher=FakeDiscoveryFetcher()) as opened:
+        yield opened
 
 
 @pytest.fixture
 def ctx():
     return SimpleNamespace(article=None, response=None)
-
-
-def body(html):
-    return html.split('class="article-body"')[1].split('<div class="doc-foot">')[0]
 
 
 @given('사이트 "자유 블로그"가 있다')

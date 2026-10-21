@@ -9,6 +9,7 @@ from rss_hub.storage.feeds import FeedRepository
 from rss_hub.storage.reader import PER_PAGE, ReaderRepository
 from rss_hub.storage.topics import TopicRepository
 from tests.fakes.clock import FakeClock
+from tests.keywords.store import create_category
 
 BASE = datetime(2026, 10, 16, 1, 0, tzinfo=UTC)
 
@@ -21,7 +22,7 @@ class Env:
         self.articles = ArticleRepository(self.db, self.clock)
         self.topics = TopicRepository(self.db, self.clock)
         self.reader = ReaderRepository(self.db, self.clock)
-        self.news = self.feeds.add_category("뉴스")
+        self.news = create_category(self.feeds, "뉴스")
         self.a = self.feeds.add("https://a.example.com/rss", "A 블로그", category_id=self.news)
         self.b = self.feeds.add("https://b.example.com/rss", "B 블로그")
         self.n = 0

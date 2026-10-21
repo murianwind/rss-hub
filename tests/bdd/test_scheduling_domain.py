@@ -1,9 +1,12 @@
 from collections import Counter
+from datetime import datetime
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 import pytest
 from pytest_bdd import given, parsers, then, when
 
+from rss_hub.domain.jobs import due_slot
 from rss_hub.domain.schedule import (
     PRIORITY_EVERY_SLOT,
     Activity,
@@ -11,7 +14,6 @@ from rss_hub.domain.schedule import (
     activity_score,
     build_schedule,
     desired_checks,
-    run_minutes,
     slot_for,
     slots_per_hour,
 )
@@ -163,7 +165,13 @@ def _now(ctx, minute):
 
 @when("14시 한 시간 동안의 수집 실행 시각을 계산한다")
 def _run_times(ctx):
-    ctx.minutes = run_minutes(ctx.interval)
+    """잡이 매 분 0초에 점검한다고 보고, 실제 판정(due_slot)이 "실행"이라고 하는 분을 모은다."""
+    hour = datetime(2026, 10, 16, 14, tzinfo=ZoneInfo("Asia/Seoul"))
+    ctx.minutes = [
+        minute
+        for minute in range(60)
+        if due_slot(hour.replace(minute=minute), None, ctx.interval) is not None
+    ]
 
 
 # ---------- 검증 ----------

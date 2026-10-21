@@ -7,8 +7,8 @@ DB는 처음 필요할 때 만들어진다.
 import logging
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
-from contextlib import asynccontextmanager
-from datetime import timedelta
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI, Request, Response
@@ -80,6 +80,95 @@ DATABASE_FILENAME = "rss_hub.db"
 TEMPLATE_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
 REJECTED_MESSAGE = "요청이 거부되었습니다(출처가 다릅니다)."
+
+
+def _lifespan(
+    topics: TopicRepository, models: ModelRepository, runner: JobRunner | None
+) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
+    """서버 시작과 종료 때 할 일: 기본 주제 만들기, 끊긴 벤치마크 정리, 잡 시작과 종료."""
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        # 서버가 실제로 시작될 때 처음 설치용 기본 주제(OTT)를 만든다.
+        # 앱을 만드는 것만으로는 디스크를 건드리지 않는다(/healthz가 파일을 만들지 않게).
+        try:
+            topics.ensure_defaults()
+        except Exception:
+            logger.exception(
+                "기본 주제를 만들지 못했습니다"
+            )  # 데이터 폴더 문제는 /healthz가 알린다
+        try:
+            models.interrupt_stale_runs()  # 서비스가 꺼지면서 끝나지 못한 벤치마크를 정리한다
+        except Exception:
+            logger.exception("중단된 벤치마크를 정리하지 못했습니다")
+        if runner is not None:
+            runner.start()
+        try:
+            yield
+        finally:
+            if runner is not None:  # 진행 중인 작업(발송 등)을 끝내고 멈춘다
+                runner.shutdown(SHUTDOWN_WAIT_SECONDS)
+
+    return lifespan
+
+
+def _install_protection(app: FastAPI) -> None:
+    """다른 사이트에서 온 상태 변경 요청을 막고, 응답에 캐시 규칙과 보안 헤더를 붙인다."""
+
+    @app.middleware("http")
+    async def protect(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        if request.method not in SAFE_METHODS and not request_is_same_origin(request.headers):
+            response: Response = PlainTextResponse(REJECTED_MESSAGE, status_code=403)
+        else:
+            response = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            # 주소에 버전(?v=)이 붙어 있어서 오래 캐시해도 새 버전이 나오면 새로 받는다
+            response.headers["Cache-Control"] = "public, max-age=3600"
+        for name, value in SECURITY_HEADERS.items():
+            response.headers.setdefault(name, value)
+        return response
+
+
+def _add_service_routes(
+    app: FastAPI,
+    *,
+    data_dir: Path,
+    runner: JobRunner | None,
+    job_runs: JobRunRepository,
+    service: SettingsService,
+    clock: Clock,
+    created_at: datetime,
+) -> None:
+    """첫 화면 이동(/)과 상태 확인(/healthz)."""
+
+    @app.get("/", include_in_schema=False)
+    def root() -> RedirectResponse:
+        """처음 접속하면 글 목록을 보여 준다(상태 화면은 /status)."""
+        return RedirectResponse("/reader", status_code=307)
+
+    @app.get("/healthz")
+    def healthz(response: Response) -> dict[str, str | None]:
+        if not data_dir_is_writable(data_dir):
+            response.status_code = 503
+            return {"status": "error", "reason": "data_dir_not_writable"}
+        body: dict[str, str | None] = {"status": "ok", "version": get_version()}
+        if runner is None:
+            return body
+        runs = job_runs.all()
+        for name in ("collect", "summarize", "deliver"):
+            ok_at = runs[name].last_ok_at if name in runs else None
+            body[f"last_{name}"] = None if ok_at is None else ok_at.isoformat()
+        # 수집이 오래 멈춰 있으면 컨테이너를 비정상으로 표시한다.
+        # 방금 시작해서 아직 한 번도 안 돌았다면 시작 시각을 기준으로 한다.
+        interval = service.snapshot().collect_interval_minutes
+        limit = timedelta(minutes=max(STALE_MINUTES, 3 * interval))
+        last_ok = runs["collect"].last_ok_at if "collect" in runs else None
+        if clock.now() - (last_ok or created_at) > limit:
+            response.status_code = 503
+            body["status"] = "stale"
+        return body
 
 
 def create_app(
@@ -192,29 +281,7 @@ def create_app(
     app.state.runner = runner
     created_at = app_clock.now()
 
-    @asynccontextmanager
-    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-        # 서버가 실제로 시작될 때 처음 설치용 기본 주제(OTT)를 만든다.
-        # 앱을 만드는 것만으로는 디스크를 건드리지 않는다(/healthz가 파일을 만들지 않게).
-        try:
-            topics.ensure_defaults()
-        except Exception:
-            logger.exception(
-                "기본 주제를 만들지 못했습니다"
-            )  # 데이터 폴더 문제는 /healthz가 알린다
-        try:
-            models.interrupt_stale_runs()  # 서비스가 꺼지면서 끝나지 못한 벤치마크를 정리한다
-        except Exception:
-            logger.exception("중단된 벤치마크를 정리하지 못했습니다")
-        if runner is not None:
-            runner.start()
-        try:
-            yield
-        finally:
-            if runner is not None:  # 진행 중인 작업(발송 등)을 끝내고 멈춘다
-                runner.shutdown(SHUTDOWN_WAIT_SECONDS)
-
-    app.router.lifespan_context = lifespan
+    app.router.lifespan_context = _lifespan(topics, models, runner)
     app.include_router(build_import_router(importer, templates))
     probe = TopicProbe(
         gateway=llm.gateway,
@@ -245,46 +312,15 @@ def create_app(
 
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-    @app.middleware("http")
-    async def protect(
-        request: Request, call_next: Callable[[Request], Awaitable[Response]]
-    ) -> Response:
-        if request.method not in SAFE_METHODS and not request_is_same_origin(request.headers):
-            response: Response = PlainTextResponse(REJECTED_MESSAGE, status_code=403)
-        else:
-            response = await call_next(request)
-        if request.url.path.startswith("/static/"):
-            # 주소에 버전(?v=)이 붙어 있어서 오래 캐시해도 새 버전이 나오면 새로 받는다
-            response.headers["Cache-Control"] = "public, max-age=3600"
-        for name, value in SECURITY_HEADERS.items():
-            response.headers.setdefault(name, value)
-        return response
+    _install_protection(app)
 
-    @app.get("/", include_in_schema=False)
-    def root() -> RedirectResponse:
-        """처음 접속하면 글 목록을 보여 준다(상태 화면은 /status)."""
-        return RedirectResponse("/reader", status_code=307)
-
-    @app.get("/healthz")
-    def healthz(response: Response) -> dict[str, str | None]:
-        if not data_dir_is_writable(data_dir):
-            response.status_code = 503
-            return {"status": "error", "reason": "data_dir_not_writable"}
-        body: dict[str, str | None] = {"status": "ok", "version": get_version()}
-        if runner is None:
-            return body
-        runs = job_runs.all()
-        for name in ("collect", "summarize", "deliver"):
-            ok_at = runs[name].last_ok_at if name in runs else None
-            body[f"last_{name}"] = None if ok_at is None else ok_at.isoformat()
-        # 수집이 오래 멈춰 있으면 컨테이너를 비정상으로 표시한다.
-        # 방금 시작해서 아직 한 번도 안 돌았다면 시작 시각을 기준으로 한다.
-        interval = service.snapshot().collect_interval_minutes
-        limit = timedelta(minutes=max(STALE_MINUTES, 3 * interval))
-        last_ok = runs["collect"].last_ok_at if "collect" in runs else None
-        if app_clock.now() - (last_ok or created_at) > limit:
-            response.status_code = 503
-            body["status"] = "stale"
-        return body
-
+    _add_service_routes(
+        app,
+        data_dir=data_dir,
+        runner=runner,
+        job_runs=job_runs,
+        service=service,
+        clock=app_clock,
+        created_at=created_at,
+    )
     return app

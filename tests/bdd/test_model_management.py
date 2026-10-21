@@ -17,14 +17,14 @@ from rss_hub.web.app import create_app
 from tests.bdd.binding import bind
 from tests.fakes.clock import FakeClock
 from tests.fakes.delivery_env import FakeWebhookSender, webhook_url
+from tests.fakes.http_server import FakeServer, json_reply
 from tests.fakes.llm_client import FakeLlmClient, failure, reply
 from tests.fakes.llm_env import KEY
 from tests.fakes.models_env import Env, free
-from tests.tools.fake_apis import FakeServer, json_reply
+from tests.keywords.browser import BROWSER
 
 bind(globals(), "14_model_management.feature", [f"MDL-{n:02d}" for n in range(1, 13)])
 
-BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 CATALOG = {
     "data": [
         {

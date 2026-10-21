@@ -15,8 +15,8 @@ from rss_hub.services.importer import PREVIEW_TTL, ImportChoices, PreviewExpired
 from rss_hub.storage.feeds import STATUS_ACTIVE, STATUS_BASELINE
 from tests.bdd.binding import bind
 from tests.fakes.entries import entry, today
+from tests.fakes.http_server import FakeServer
 from tests.fakes.import_env import ImportEnv
-from tests.tools.fake_apis import FakeServer
 
 IMPORT_SCENARIOS = [1, *range(4, 22)]  # IMP-02, 03은 JSON 전용이라 없앴다
 bind(globals(), "07_feed_import.feature", [f"IMP-{n:02d}" for n in IMPORT_SCENARIOS])

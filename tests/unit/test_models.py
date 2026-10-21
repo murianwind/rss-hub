@@ -30,14 +30,14 @@ def parse(*items):
 
 def test_free_text_models_are_listed_with_their_abilities():
     found = parse(item(params=["response_format", "reasoning", "temperature"], name="Free Model"))
-    assert [
-        (m.id, m.name, m.context_length, m.supports_json, m.supports_reasoning) for m in found
-    ] == [("a/free-model:free", "Free Model", 32768, True, True)]
+    assert [(m.id, m.name, m.context_length, m.supports_json) for m in found] == [
+        ("a/free-model:free", "Free Model", 32768, True)
+    ]
 
 
-def test_a_model_without_json_or_reasoning_support_says_so():
+def test_a_model_without_json_support_says_so():
     (model,) = parse(item(params=["temperature"]))
-    assert (model.supports_json, model.supports_reasoning) == (False, False)
+    assert model.supports_json is False
 
 
 @pytest.mark.parametrize(

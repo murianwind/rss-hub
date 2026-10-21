@@ -43,12 +43,16 @@ def build_import_router(importer: ImportService, templates: Jinja2Templates) -> 
         if declared > MAX_UPLOAD_BYTES + UPLOAD_OVERHEAD:
             return page(request, error=TOO_LARGE, status_code=413)
         form = await request.form(max_files=1, max_fields=20)
-        upload = form.get("file")
-        if not isinstance(upload, UploadFile) or not upload.filename:
-            return page(request, error=NO_FILE, status_code=400)
-        data = await upload.read(MAX_UPLOAD_BYTES + 1)
         try:
-            stored = importer.preview(upload.filename, data)
+            upload = form.get("file")
+            if not isinstance(upload, UploadFile) or not upload.filename:
+                return page(request, error=NO_FILE, status_code=400)
+            filename = upload.filename
+            data = await upload.read(MAX_UPLOAD_BYTES + 1)
+        finally:
+            await form.close()  # 업로드 임시 파일을 바로 닫는다(수거를 기다리지 않는다)
+        try:
+            stored = importer.preview(filename, data)
         except ImportFileError as error:
             return page(request, error=error.message, status_code=400)
 

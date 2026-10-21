@@ -69,6 +69,21 @@ def test_the_import_page_has_a_multipart_form_and_is_linked_from_the_menu(client
 # ---------- 미리보기 ----------
 
 
+def test_the_uploaded_temporary_file_is_closed_when_the_request_ends(client, monkeypatch):
+    from starlette.datastructures import UploadFile
+
+    closed = []
+    original = UploadFile.close
+
+    async def recording_close(self):
+        closed.append(self.filename)
+        await original(self)
+
+    monkeypatch.setattr(UploadFile, "close", recording_close)
+    upload(client, "feeds.opml", feed_file("https://a.example.com/rss"))
+    assert closed == ["feeds.opml"]
+
+
 def test_a_preview_shows_the_counts_and_changes_nothing(client, feeds):
     response = upload(
         client, "feeds.opml", feed_file("https://a.example.com/rss", "https://b.example.com/rss")

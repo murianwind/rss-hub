@@ -5,6 +5,7 @@ from rss_hub.services.ports import LlmErrorKind
 from rss_hub.services.topic_probe import MAX_BODY_LENGTH, MAX_TITLE_LENGTH, MIN_INTERVAL, TopicProbe
 from tests.fakes.llm_client import failure, good, reply
 from tests.fakes.llm_env import LlmEnv
+from tests.keywords.store import topic_matches
 
 MATCHING_TITLE = "Netflix announces a new drama"  # 주제 OTT의 키워드(netflix)가 맞는 제목
 
@@ -116,7 +117,7 @@ def test_the_probe_costs_exactly_one_llm_call_and_creates_nothing(env, probe):
     before = calls_today(env)
     probe.run(MATCHING_TITLE)
     assert len(env.client.calls) == 1 and calls_today(env) == before + 1
-    assert env.articles.count_by_status() == {} and env.topics.matches_for(1) == {}
+    assert env.articles.count_by_status() == {} and topic_matches(env.db, 1) == {}
 
 
 def test_disabled_topics_are_not_candidates(env, probe):

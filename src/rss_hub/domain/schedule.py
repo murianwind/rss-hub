@@ -62,11 +62,6 @@ def slot_for(minute: int, interval_minutes: int) -> int:
     return min(slots - 1, max(0, minute // interval_minutes))
 
 
-def run_minutes(interval_minutes: int) -> list[int]:
-    """한 시간 안에서 수집 잡이 실행되는 분 목록(주기의 배수)."""
-    return list(range(0, MINUTES_PER_HOUR, interval_minutes))
-
-
 def activity_score(activity: Activity) -> int:
     """추가 점검의 우선순위를 정하는 점수."""
     return activity.target_date_count * TODAY_WEIGHT + activity.recent_count_7d * WEEK_WEIGHT

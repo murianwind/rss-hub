@@ -7,8 +7,9 @@ from tests.fakes.entries import today
 from tests.fakes.feed_fetcher import FakeFeedFetcher
 from tests.fakes.viewer_world import World
 from tests.fakes.web_parts import start_app
+from tests.keywords.browser import post
+from tests.keywords.store import set_poll_priority
 
-BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 WEBHOOK = "https://discord.com/api/webhooks/9/abc"
 NEWS_URL, FREE_URL = "https://n.example.com/rss", "https://f.example.com/rss"
 
@@ -21,10 +22,6 @@ def world(tmp_path):
         w = World(parts)
         w.fetcher = fetcher
         yield w
-
-
-def post(world, path, **data):
-    return world.client.post(path, data=data, headers=BROWSER)
 
 
 def settings_form(world, feed, **override):
@@ -126,7 +123,7 @@ def test_saving_the_feed_settings_changes_name_emoji_and_max_entries(world):
 
 
 def test_the_feed_priority_is_left_alone_because_the_panel_no_longer_has_it(world):
-    world.feeds.set_poll_priority(world.f_free, "every_slot")
+    set_poll_priority(world.feeds, world.f_free, "every_slot")
     settings_form(world, world.f_free, name="이름만 바꿈")
     assert world.feeds.get(world.f_free).poll_priority == "every_slot"
 

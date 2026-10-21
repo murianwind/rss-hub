@@ -15,17 +15,9 @@ from rss_hub.storage.feeds import STATUS_BASELINE
 from tests.bdd.binding import bind
 from tests.fakes.entries import today
 from tests.fakes.feed_fetcher import FakeFeedFetcher
-from tests.fakes.viewer_world import BASE, World, groups
-from tests.fakes.web_parts import start_app
+from tests.fakes.viewer_world import BASE, groups
 
 bind(globals(), "12_viewer.feature", [f"VWR-{n:02d}" for n in range(1, 15)])
-
-
-@pytest.fixture
-def world(tmp_path):
-    parts, client = start_app(tmp_path)
-    with client:
-        yield World(parts)
 
 
 @pytest.fixture

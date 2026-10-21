@@ -4,12 +4,12 @@ import json
 import sqlite3
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC
 
 from rss_hub.domain.keywords import DEFAULT_OTT_KEYWORDS
 from rss_hub.domain.topics import MAX_TOPICS, Topic, TopicFields, TopicInputError
 from rss_hub.services.clock import Clock
 from rss_hub.storage.database import Database
+from rss_hub.storage.timestamps import to_iso
 
 SEEDED_KEY = "topics_seeded"
 DEFAULT_TOPIC_NAME = "OTT"
@@ -77,7 +77,7 @@ class TopicRepository:
                         _dump(fields.keywords),
                         webhook_id,
                         int(enabled),
-                        self._clock.now().astimezone(UTC).isoformat(),
+                        to_iso(self._clock.now()),
                     ),
                 )
             except sqlite3.IntegrityError as error:
@@ -127,7 +127,7 @@ class TopicRepository:
     # ---------- 글이 해당한 주제 ----------
 
     def record_matches(self, article_id: int, matches: Mapping[int, Sequence[str]]) -> None:
-        """글이 해당한 주제와 일치한 키워드를 기록한다(M5의 피드백과 키워드 개선 제안에 쓴다)."""
+        """글이 해당한 주제와 일치한 키워드를 기록한다(피드백과 키워드 개선 제안에 쓴다)."""
         with self._db.connect() as conn:
             for topic_id, keywords in matches.items():
                 # 이미 있는 줄이면 키워드만 갱신하고, 사용자가 정한 source와 rejected는 그대로 둔다
@@ -138,7 +138,7 @@ class TopicRepository:
                     (article_id, topic_id, _dump(keywords)),
                 )
 
-    # ---------- 사용자가 정한 소속(M5) ----------
+    # ---------- 사용자가 정한 소속 ----------
 
     def memberships(self, article_id: int) -> list["Membership"]:
         """글이 속한(또는 싫어요로 뺀) 주제들."""
@@ -169,7 +169,7 @@ class TopicRepository:
         return self._decide(article_id, topic_id, rejected=0)
 
     def _decide(self, article_id: int, topic_id: int, *, rejected: int) -> bool:
-        now = self._clock.now().astimezone(UTC).isoformat()
+        now = to_iso(self._clock.now())
         with self._db.connect() as conn:
             cursor = conn.execute(
                 "UPDATE article_topics SET rejected = ?, decided_at = ? "
@@ -180,7 +180,7 @@ class TopicRepository:
 
     def add_manual(self, article_id: int, topic_id: int) -> bool:
         """ "주제로": 글을 주제에 넣는다. 싫어요로 뺀 글이면 되돌린다. 없는 글이나 주제면 False."""
-        now = self._clock.now().astimezone(UTC).isoformat()
+        now = to_iso(self._clock.now())
         with self._db.connect() as conn:
             exists = conn.execute(
                 "SELECT (SELECT COUNT(*) FROM articles WHERE id = ?) + "
@@ -237,19 +237,11 @@ class TopicRepository:
             ).fetchall()
         return [(tuple(json.loads(r["matched_keywords"])), bool(r["rejected"])) for r in rows]
 
-    def matches_for(self, article_id: int) -> dict[int, tuple[str, ...]]:
-        with self._db.connect() as conn:
-            rows = conn.execute(
-                "SELECT topic_id, matched_keywords FROM article_topics WHERE article_id = ?",
-                (article_id,),
-            ).fetchall()
-        return {row["topic_id"]: tuple(json.loads(row["matched_keywords"])) for row in rows}
-
     # ---------- 처음 설치할 때 ----------
 
     def ensure_defaults(self) -> bool:
         """주제가 없고 만든 적도 없으면 기본 주제(OTT)를 만든다. 지워도 다시 만들지 않는다."""
-        now = self._clock.now().astimezone(UTC).isoformat()
+        now = to_iso(self._clock.now())
         with self._db.connect() as conn:
             if conn.execute("SELECT 1 FROM settings WHERE key = ?", (SEEDED_KEY,)).fetchone():
                 return False

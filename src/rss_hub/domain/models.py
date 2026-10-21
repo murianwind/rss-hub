@@ -11,7 +11,6 @@ class FreeModel:
     name: str
     context_length: int
     supports_json: bool  # response_format 지원
-    supports_reasoning: bool  # reasoning 옵션 지원(추론 끄기에 쓴다)
 
 
 def _is_zero(value: object) -> bool:
@@ -43,7 +42,6 @@ def _free(item: dict[str, object]) -> FreeModel | None:
         name=name if isinstance(name, str) and name else model_id,
         context_length=context,
         supports_json="response_format" in params,
-        supports_reasoning="reasoning" in params,
     )
 
 

@@ -21,7 +21,7 @@ bind(
 
 SEOUL = ZoneInfo("Asia/Seoul")
 GOLDEN = json.loads(
-    (Path(__file__).resolve().parents[1] / "golden" / "legacy_golden.json").read_text(
+    (Path(__file__).resolve().parents[1] / "golden" / "reference_cases.json").read_text(
         encoding="utf-8"
     )
 )

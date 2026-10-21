@@ -1,14 +1,15 @@
-"""무료 모델 목록(스캔 결과)과 벤치마크 실행, 점수 저장소(M3)."""
+"""무료 모델 목록(스캔 결과)과 벤치마크 실행, 점수 저장소."""
 
 import json
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
 from rss_hub.domain.benchmark import ModelScore
 from rss_hub.domain.models import FreeModel
 from rss_hub.services.clock import Clock
 from rss_hub.storage.database import Database
+from rss_hub.storage.timestamps import from_iso, to_iso
 
 RUN_RUNNING = "running"
 RUN_DONE = "done"
@@ -44,14 +45,6 @@ class RunInfo:
     note: str
 
 
-def _iso(moment: datetime) -> str:
-    return moment.astimezone(UTC).isoformat()
-
-
-def _parse(value: str | None) -> datetime | None:
-    return datetime.fromisoformat(value) if value else None
-
-
 class ModelRepository:
     def __init__(self, db: Database, clock: Clock) -> None:
         self._db = db
@@ -61,7 +54,7 @@ class ModelRepository:
 
     def save_scan(self, models: Sequence[FreeModel]) -> ScanDiff:
         """스캔 결과를 반영하고 새로 보인 모델, 사라진 모델, 돌아온 모델을 알려 준다."""
-        now = _iso(self._clock.now())
+        now = to_iso(self._clock.now())
         seen = {m.id for m in models}
         new: list[str] = []
         returned: list[str] = []
@@ -122,7 +115,7 @@ class ModelRepository:
         with self._db.connect() as conn:
             cursor = conn.execute(
                 "INSERT INTO benchmark_runs(status, started_at, total) VALUES(?, ?, ?)",
-                (RUN_RUNNING, _iso(self._clock.now()), total),
+                (RUN_RUNNING, to_iso(self._clock.now()), total),
             )
             return int(cursor.lastrowid or 0)
 
@@ -134,7 +127,7 @@ class ModelRepository:
         with self._db.connect() as conn:
             conn.execute(
                 "UPDATE benchmark_runs SET status = ?, finished_at = ?, note = ? WHERE id = ?",
-                (status, _iso(self._clock.now()), note, run_id),
+                (status, to_iso(self._clock.now()), note, run_id),
             )
 
     def running_run(self) -> RunInfo | None:
@@ -152,14 +145,14 @@ class ModelRepository:
 
     def interrupt_stale_runs(self, older_than: timedelta = timedelta(0)) -> int:
         """서비스가 꺼지면서 끝나지 못한 실행을 중단으로 표시한다(older_than보다 오래된 것만)."""
-        cutoff = _iso(self._clock.now() - older_than)
+        cutoff = to_iso(self._clock.now() - older_than)
         with self._db.connect() as conn:
             return conn.execute(
                 "UPDATE benchmark_runs SET status = ?, finished_at = ?, note = ? "
                 "WHERE status = ? AND started_at <= ?",
                 (
                     RUN_INTERRUPTED,
-                    _iso(self._clock.now()),
+                    to_iso(self._clock.now()),
                     "서비스가 멈춰서 끝나지 못했습니다",
                     RUN_RUNNING,
                     cutoff,
@@ -216,7 +209,7 @@ def _run(row: object) -> RunInfo:
     return RunInfo(
         id=row["id"],  # type: ignore[index]
         status=row["status"],  # type: ignore[index]
-        finished_at=_parse(row["finished_at"]),  # type: ignore[index]
+        finished_at=from_iso(row["finished_at"]),  # type: ignore[index]
         total=row["total"],  # type: ignore[index]
         done=row["done"],  # type: ignore[index]
         note=row["note"],  # type: ignore[index]

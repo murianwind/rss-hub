@@ -7,6 +7,7 @@ from fastapi.templating import Jinja2Templates
 from rss_hub.domain.categories import CategoryInputError, validate_category_name
 from rss_hub.services.settings import SettingsService
 from rss_hub.storage.feeds import FeedRepository, FeedRuleError
+from rss_hub.web.forms import id_or_none
 from rss_hub.web.ui import done, done_after_delete
 
 
@@ -47,8 +48,7 @@ def build_category_router(
     @router.post("/categories/{category_id}/webhook", response_class=HTMLResponse)
     async def set_webhook(request: Request, category_id: int) -> Response:
         form = await request.form()
-        text = str(form.get("webhook_id", "")).strip()
-        webhook_id = int(text) if text.isdigit() else None
+        webhook_id = id_or_none(form.get("webhook_id"))
         if webhook_id is not None and webhook_id not in {w.id for w in settings.list_webhooks()}:
             return page(request, error="웹훅을 찾을 수 없음", status_code=400)
         if not feeds.set_category_webhook(category_id, webhook_id):
@@ -71,8 +71,7 @@ def build_category_router(
     async def save_category_settings(request: Request, category_id: int) -> Response:
         """이름과 웹훅을 한 번에 저장한다. 웹훅이 없는 번호면 아무것도 바꾸지 않는다."""
         form = await request.form()
-        text = str(form.get("webhook_id", "")).strip()
-        webhook_id = int(text) if text.isdigit() else None
+        webhook_id = id_or_none(form.get("webhook_id"))
         if webhook_id is not None and webhook_id not in {w.id for w in settings.list_webhooks()}:
             return page(request, error="웹훅을 찾을 수 없음", status_code=400)
         try:

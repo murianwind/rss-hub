@@ -6,6 +6,7 @@ from datetime import datetime
 from rss_hub.storage.articles import VIEWABLE_STATUSES
 from rss_hub.storage.database import Database
 from rss_hub.storage.reader import feed_state
+from rss_hub.storage.timestamps import from_iso
 
 
 @dataclass(frozen=True)
@@ -30,10 +31,6 @@ class FeedOverview:
     total: int
     unread: int
     kind: str = "feed"  # feed 또는 page(웹페이지 구독)
-
-
-def _parse(value: str | None) -> datetime | None:
-    return datetime.fromisoformat(value) if value else None
 
 
 class OverviewRepository:
@@ -70,10 +67,10 @@ class OverviewRepository:
                 state=feed_state(r["fail_count"], r["last_checked_at"]),
                 fail_count=r["fail_count"],
                 last_error=r["last_error"] or "",
-                last_checked_at=_parse(r["last_checked_at"]),
+                last_checked_at=from_iso(r["last_checked_at"]),
                 recent_count_7d=r["recent_count_7d"] or 0,
                 today_count=r["target_date_count"] or 0,
-                last_published=_parse(r["last_published_dt"]),
+                last_published=from_iso(r["last_published_dt"]),
                 total=r["total"],
                 unread=r["unread"],
                 kind=r["kind"],

@@ -11,18 +11,10 @@ import pytest
 from rss_hub.domain.activity import FeedMeasurement
 from rss_hub.domain.schedule import Activity, FeedCycle
 from rss_hub.web.feeds import _cycle_matches, _feeds_url, _last_matches
-from tests.fakes.viewer_world import World
-from tests.fakes.web_parts import start_app
+from tests.keywords.browser import post
 
 # 활동량으로 시간당 1, 2, 3회가 배정되는 값(탐색해서 확인한 값)
 ACTIVITY = {1: Activity(0, 0), 2: Activity(3, 0), 3: Activity(10, 1)}
-
-
-@pytest.fixture
-def world(tmp_path):
-    parts, client = start_app(tmp_path)
-    with client:
-        yield World(parts)
 
 
 def add(world, name, cycle, ago):
@@ -387,12 +379,6 @@ def test_each_last_published_option_names_its_band(world):
 
 
 # ---------- 작업을 해도 필터가 유지된다 ----------
-
-BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
-
-
-def post(world, path, **data):
-    return world.client.post(path, data=data, headers=BROWSER)
 
 
 def test_the_panel_links_and_delete_forms_carry_the_current_filters(seeded):

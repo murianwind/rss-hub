@@ -11,6 +11,7 @@ from rss_hub.storage.topics import (
     TopicRepository,
 )
 from tests.fakes.clock import FakeClock
+from tests.keywords.store import topic_matches
 
 WEBHOOK = "https://discord.com/api/webhooks/9/abc"
 
@@ -152,20 +153,20 @@ def test_matches_are_recorded_with_their_keywords_and_replaced_when_recorded_aga
     topic_id = env.topics.add(fields())
     article_id = env.article()
     env.topics.record_matches(article_id, {topic_id: ("steam",)})
-    assert env.topics.matches_for(article_id) == {topic_id: ("steam",)}
+    assert topic_matches(env.db, article_id) == {topic_id: ("steam",)}
     env.topics.record_matches(article_id, {topic_id: ("스팀", "steam")})
-    assert env.topics.matches_for(article_id) == {topic_id: ("스팀", "steam")}
+    assert topic_matches(env.db, article_id) == {topic_id: ("스팀", "steam")}
 
 
 def test_a_match_without_keywords_is_recorded_as_empty(env):
     topic_id = env.topics.add(fields(keywords=()))
     article_id = env.article()
     env.topics.record_matches(article_id, {topic_id: ()})
-    assert env.topics.matches_for(article_id) == {topic_id: ()}
+    assert topic_matches(env.db, article_id) == {topic_id: ()}
 
 
 def test_an_article_without_matches_has_none(env):
-    assert env.topics.matches_for(env.article()) == {}
+    assert topic_matches(env.db, env.article()) == {}
 
 
 def test_matches_disappear_with_their_topic_or_article(env):
@@ -173,11 +174,11 @@ def test_matches_disappear_with_their_topic_or_article(env):
     article_id = env.article()
     env.topics.record_matches(article_id, {topic_id: ("steam",)})
     env.topics.delete(topic_id)
-    assert env.topics.matches_for(article_id) == {}
+    assert topic_matches(env.db, article_id) == {}
     other = env.topics.add(fields("다른"))
     env.topics.record_matches(article_id, {other: ()})
     env.feeds.delete(env.feeds.list_all()[0].id)
-    assert env.topics.matches_for(article_id) == {}
+    assert topic_matches(env.db, article_id) == {}
 
 
 # ---------- 처음 설치할 때의 기본 주제 ----------

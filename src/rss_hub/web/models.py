@@ -1,4 +1,4 @@
-"""모델 화면(M3): 무료 모델 스캔, 벤치마크, 추천, 승인 후 체인 교체."""
+"""모델 화면: 무료 모델 스캔, 벤치마크, 추천, 승인 후 체인 교체."""
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse

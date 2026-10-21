@@ -200,7 +200,7 @@ def test_after_a_stop_request_nothing_new_starts(env):
     stop = threading.Event()
     runner = env.runner(stop_event=stop)
     stop.set()
-    assert runner.stopping is True and runner.tick() == []
+    assert runner.tick() == []
 
 
 def test_shutdown_waits_for_a_running_job_to_finish(tmp_path):
@@ -282,9 +282,9 @@ def test_an_error_inside_the_loop_is_logged_and_the_loop_keeps_running(
 def test_a_stop_request_is_visible_to_everyone_sharing_the_event(env):
     stop = threading.Event()
     runner = env.runner(stop_event=stop)
-    assert runner.stopping is False
+    assert not stop.is_set()
     runner.request_stop()
-    assert runner.stopping is True and stop.is_set()
+    assert stop.is_set()
 
 
 def test_slots_follow_the_service_timezone_even_when_its_minutes_differ_from_utc(tmp_path):

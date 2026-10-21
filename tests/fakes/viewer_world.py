@@ -1,11 +1,14 @@
 """뷰어 시험용 세계: 카테고리 둘, 사이트 둘, 글을 쉽게 만드는 도우미."""
 
 import re
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 
 from rss_hub.storage.articles import ArticleRepository, NewArticle
 from rss_hub.storage.feeds import FeedRepository
 from rss_hub.storage.topics import TopicRepository
+from tests.fakes.web_parts import start_app
+from tests.keywords.store import create_category
 
 BASE = datetime(2026, 10, 16, 1, 0, tzinfo=UTC)  # 한국 시각 10:00
 
@@ -17,8 +20,8 @@ class World:
         self.feeds = FeedRepository(parts.db, parts.clock)
         self.articles = ArticleRepository(parts.db, parts.clock)
         self.topics = TopicRepository(parts.db, parts.clock)
-        self.news = self.feeds.add_category("뉴스")
-        self.tech = self.feeds.add_category("기술")
+        self.news = create_category(self.feeds, "뉴스")
+        self.tech = create_category(self.feeds, "기술")
         self.f_news = self.feeds.add(
             "https://n.example.com/rss", "뉴스 블로그", category_id=self.news
         )
@@ -75,3 +78,13 @@ def groups(html):
     nav = html.split('<nav aria-label="구독 목록">')[1].split("</nav>")[0]
     parts = re.split(r'<details class="sec" id="sec-', nav)[1:]
     return {SECTION_NAMES[part.split('"', 1)[0]]: part for part in parts}
+
+
+@contextmanager
+def open_world(tmp_path, *, fetcher=None):
+    """실행 중인 앱과 World. fetcher를 주면 피드 수집기로 쓰고 world.fetcher로도 꺼내 쓴다."""
+    parts, client = start_app(tmp_path, feed_fetcher=fetcher)
+    with client:
+        world = World(parts)
+        world.fetcher = fetcher
+        yield world

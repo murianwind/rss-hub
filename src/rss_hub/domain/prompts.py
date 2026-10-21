@@ -1,4 +1,6 @@
-"""LLM에 보내는 요약 요청 만들기. 호출 방식의 근거는 docs/07-spike-s1-result.md."""
+"""LLM에 보내는 요약 요청 만들기. 호출 방식의 근거:
+추론 모델은 답보다 '생각'에 토큰을 먼저 써서 글자 수 한도 안에서 답이 잘리거나 비므로,
+추론을 끄고(`reasoning.effort=none`) JSON 출력을 강제한다."""
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass

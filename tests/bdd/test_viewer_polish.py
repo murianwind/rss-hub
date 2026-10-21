@@ -11,12 +11,11 @@ from pytest_bdd import given, parsers, then, when
 
 from rss_hub.storage.llm_usage import LlmUsageRepository
 from tests.bdd.binding import bind
-from tests.fakes.viewer_world import World
-from tests.fakes.web_parts import start_app
+from tests.keywords.browser import post
+from tests.keywords.page import category_section, feed_ids, heading_link, rss_section
 
 bind(globals(), "19_viewer_polish.feature", [f"VPL-{n:02d}" for n in range(1, 17)])
 
-BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 KEY = "sk-or-v1-abcdefghijklmnop"
 ENGLISH = "This is a long English article body about software design and testing. " * 12
 KOREAN = "이것은 한국어로 쓴 충분히 긴 본문입니다. " * 20
@@ -24,19 +23,8 @@ WAF_SHAPE = re.compile(r"[?&;][A-Za-z0-9_]+=/")
 
 
 @pytest.fixture
-def world(tmp_path):
-    parts, client = start_app(tmp_path)
-    with client:
-        yield World(parts)
-
-
-@pytest.fixture
 def ctx():
     return SimpleNamespace(response=None, article=None, articles=[])
-
-
-def post(world, path, **data):
-    return world.client.post(path, data=data, headers=BROWSER)
 
 
 @given('사이트 "뉴스 블로그"(카테고리 "뉴스")와 사이트 "자유 블로그"가 있다')
@@ -272,13 +260,6 @@ def _none_found(ctx):
 # ---------- 사이트 링크, 진하게/연하게, 쪽 이동 ----------
 
 
-def heading_link(html):
-    found = re.search(
-        r'<h1><a class="site-link" href="([^"]+)" target="_blank" rel="([^"]+)"', html
-    )
-    return None if found is None else (found.group(1), found.group(2))
-
-
 @given(
     parsers.re(
         r'사이트 "블로그"의 피드 주소는 "(?P<feed>[^"]+)"이고 사이트 주소는 "(?P<site>[^"]*)"이다'
@@ -396,18 +377,6 @@ def _toggle_script(world):
 
 
 # ---------- 카테고리 소속 피드, 한 화면 ----------
-
-
-def rss_section(html):
-    return html.split('id="sec-rss"')[1].split("</details>")[0]
-
-
-def category_section(html):
-    return html.split('id="sec-categories"')[1].split('id="sec-topics"')[0]
-
-
-def feed_ids(section):
-    return [int(n) for n in re.findall(r'data-drag-kind="feed" data-drag-id="(\d+)"', section)]
 
 
 @then('사이드바의 RSS 피드에는 "자유 블로그"만 있고 "뉴스 블로그"는 카테고리 "뉴스" 아래에만 있다')

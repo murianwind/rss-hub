@@ -4,10 +4,11 @@ import json
 import sqlite3
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
 from rss_hub.services.clock import Clock
 from rss_hub.storage.database import Database
+from rss_hub.storage.timestamps import to_iso
 
 STATUS_COLLECTED = "collected"
 STATUS_READY = "ready"  # 요약(또는 원문 발췌)이 끝나서 발송할 수 있다
@@ -58,10 +59,6 @@ class Article:
     full_error: str | None = None  # 실패 분류(예: ReadTimeout)
 
 
-def _iso(moment: datetime) -> str:
-    return moment.astimezone(UTC).isoformat()
-
-
 def _article(row: sqlite3.Row) -> Article:
     return Article(
         id=row["id"],
@@ -102,7 +99,7 @@ class ArticleRepository:
 
     def mark_seen(self, guids: Iterable[str], reason: str) -> int:
         """글을 만들지 않고 "이미 본 글"로만 기록한다. 새로 기록한 개수를 돌려준다."""
-        now = _iso(self._clock.now())
+        now = to_iso(self._clock.now())
         recorded = 0
         with self._db.connect() as conn:
             for guid in guids:
@@ -115,7 +112,7 @@ class ArticleRepository:
 
     def add(self, article: NewArticle) -> int | None:
         """새 글을 저장한다. 이미 본 글이면 저장하지 않고 None을 돌려준다."""
-        now = _iso(self._clock.now())
+        now = to_iso(self._clock.now())
         with self._db.connect() as conn:
             seen = conn.execute(
                 "INSERT OR IGNORE INTO seen_guids(guid, reason, first_seen_at) VALUES(?, ?, ?)",
@@ -133,7 +130,7 @@ class ArticleRepository:
                     article.link,
                     article.content_html,
                     article.published_raw,
-                    _iso(article.published_dt),
+                    to_iso(article.published_dt),
                     article.published_date,
                     now,
                 ),
@@ -145,7 +142,7 @@ class ArticleRepository:
 
         요약과 알림의 대상이 아니다(status가 archived). 본 글 기록은 baseline으로 남긴다.
         """
-        now = _iso(self._clock.now())
+        now = to_iso(self._clock.now())
         with self._db.connect() as conn:
             if conn.execute("SELECT 1 FROM articles WHERE guid = ?", (article.guid,)).fetchone():
                 return None
@@ -164,7 +161,7 @@ class ArticleRepository:
                     article.link,
                     article.content_html,
                     article.published_raw,
-                    _iso(article.published_dt),
+                    to_iso(article.published_dt),
                     article.published_date,
                     now,
                     STATUS_ARCHIVED,
@@ -181,7 +178,7 @@ class ArticleRepository:
         with self._db.connect() as conn:
             return conn.execute(
                 "DELETE FROM articles WHERE discovered_at < ? AND bookmarked_at IS NULL",
-                (_iso(cutoff),),
+                (to_iso(cutoff),),
             ).rowcount
 
     # ---------- 읽음과 북마크 ----------
@@ -189,7 +186,7 @@ class ArticleRepository:
     def mark_read(self, article_id: int) -> bool:
         """사용자가 읽음으로 표시한다(글을 열거나 읽음 버튼). 처음 읽은 시각을 지키고,
         "읽지 않음으로 고정"한 표시도 푼다. 바뀐 것이 없으면 False."""
-        now = _iso(self._clock.now())
+        now = to_iso(self._clock.now())
         with self._db.connect() as conn:
             return (
                 conn.execute(
@@ -246,7 +243,7 @@ class ArticleRepository:
             return conn.execute(
                 f"UPDATE articles SET read_at = ? WHERE id IN ({marks}) "
                 "AND read_at IS NULL AND keep_unread = 0",
-                [_iso(self._clock.now()), *article_ids],
+                [to_iso(self._clock.now()), *article_ids],
             ).rowcount
 
     def set_bookmark(self, article_id: int, on: bool) -> bool:
@@ -254,7 +251,7 @@ class ArticleRepository:
         return self._set("bookmarked_at", article_id, on=on)
 
     def _set(self, column: str, article_id: int, *, on: bool) -> bool:
-        value = _iso(self._clock.now()) if on else None
+        value = to_iso(self._clock.now()) if on else None
         condition = "IS NULL" if on else "IS NOT NULL"
         with self._db.connect() as conn:
             cursor = conn.execute(

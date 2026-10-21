@@ -1,5 +1,3 @@
-import sqlite3
-
 import pytest
 
 from rss_hub.domain.activity import FeedMeasurement
@@ -10,13 +8,14 @@ from rss_hub.storage.feeds import FeedRepository
 from rss_hub.storage.migrations import MIGRATIONS
 from rss_hub.storage.overview import OverviewRepository
 from tests.fakes.clock import FakeClock
+from tests.keywords.store import create_category, raw_connection
 
 
 @pytest.fixture
 def env(tmp_path):
     db, clock = Database(tmp_path / "rss_hub.db"), FakeClock()
     feeds, articles = FeedRepository(db, clock), ArticleRepository(db, clock)
-    category = feeds.add_category("뉴스")
+    category = create_category(feeds, "뉴스")
     a = feeds.add(
         "https://a.example.com/rss",
         "가 피드",
@@ -95,16 +94,16 @@ def test_an_empty_service_has_no_feeds(tmp_path):
 
 
 def test_the_migration_returns_every_slot_feeds_to_the_automatic_schedule(tmp_path):
-    conn = sqlite3.connect(tmp_path / "old.db")
-    for script in MIGRATIONS[:10]:
-        conn.executescript(script)
-    for n, priority in enumerate(("normal", "every_slot", "every_slot"), start=1):
-        conn.execute(
-            "INSERT INTO feeds(url, url_key, name, emoji, poll_priority, status, created_at) "
-            "VALUES(?, ?, 'n', 'x', ?, 'active', '2026-01-01')",
-            (f"u{n}", f"k{n}", priority),
-        )
-    conn.executescript(MIGRATIONS[10])
-    assert [r[0] for r in conn.execute("SELECT poll_priority FROM feeds ORDER BY id")] == [
-        "normal"
-    ] * 3
+    with raw_connection(tmp_path / "old.db") as conn:
+        for script in MIGRATIONS[:10]:
+            conn.executescript(script)
+        for n, priority in enumerate(("normal", "every_slot", "every_slot"), start=1):
+            conn.execute(
+                "INSERT INTO feeds(url, url_key, name, emoji, poll_priority, status, created_at) "
+                "VALUES(?, ?, 'n', 'x', ?, 'active', '2026-01-01')",
+                (f"u{n}", f"k{n}", priority),
+            )
+        conn.executescript(MIGRATIONS[10])
+        assert [r[0] for r in conn.execute("SELECT poll_priority FROM feeds ORDER BY id")] == [
+            "normal"
+        ] * 3

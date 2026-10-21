@@ -14,6 +14,7 @@ from rss_hub.storage.import_staging import ImportStagingRepository
 from rss_hub.storage.topics import TopicRepository
 from tests.bdd.binding import bind
 from tests.fakes.clock import FakeClock
+from tests.keywords.store import create_category
 
 bind(globals(), "10_topics_and_categories.feature", [f"TOP-{n:02d}" for n in range(1, 15)])
 
@@ -158,7 +159,7 @@ def _error_shown(ctx, message):
 
 @given(parsers.parse('카테고리 "{name}"와 주제 "{topic}"이 웹훅 "{webhook}"를 쓰고 있다'))
 def _category_and_topic_use_webhook(env, name, topic, webhook):
-    env.feeds.add_category(name, webhook_id=env.webhooks[webhook])
+    create_category(env.feeds, name, webhook_id=env.webhooks[webhook])
     env.topics.add(TopicFields(topic, "", ()), webhook_id=env.webhooks[webhook])
 
 
@@ -169,7 +170,7 @@ def _delete_webhook(env, name):
 
 @given(parsers.re(r'카테고리 "(?P<name>[^"]+)"가 있다'))
 def _category_exists(env, name):
-    env.feeds.add_category(name)
+    create_category(env.feeds, name)
 
 
 @when(parsers.parse('카테고리 "{name}"의 웹훅을 "{webhook}"로 지정한다'))

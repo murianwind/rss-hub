@@ -10,20 +10,13 @@ from pytest_bdd import given, parsers, then, when
 from rss_hub.services.retention import RetentionService
 from rss_hub.storage.articles import NewArticle
 from tests.bdd.binding import bind
-from tests.fakes.viewer_world import BASE, World
-from tests.fakes.web_parts import start_app
+from tests.fakes.viewer_world import BASE
+from tests.keywords.browser import post
+from tests.keywords.page import card
 
 bind(globals(), "15_reader_ui.feature", [f"RUI-{n:02d}" for n in range(1, 18)])
 
-BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 FILTERS = {"전체": "", "읽지 않은 글": "unread", "북마크": "bookmarks"}
-
-
-@pytest.fixture
-def world(tmp_path):
-    parts, client = start_app(tmp_path)
-    with client:
-        yield World(parts)
 
 
 @pytest.fixture
@@ -33,15 +26,6 @@ def ctx():
 
 def feed_id(world, name):
     return world.f_news if name == "뉴스 블로그" else world.f_free
-
-
-def post(world, path, **data):
-    return world.client.post(path, data=data, headers=BROWSER)
-
-
-def card(html, title):
-    cards = html.split('<article class="card')[1:]
-    return next(c for c in cards if title in c.split("</article>")[0])
 
 
 def sidebar_count(html, label_pattern):

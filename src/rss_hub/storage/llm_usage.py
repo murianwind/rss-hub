@@ -4,6 +4,7 @@ from datetime import UTC, date, datetime
 
 from rss_hub.services.clock import Clock
 from rss_hub.storage.database import Database
+from rss_hub.storage.timestamps import to_iso
 
 
 class LlmUsageRepository:
@@ -49,19 +50,6 @@ class LlmUsageRepository:
         with self._db.connect() as conn:
             row = conn.execute(
                 "SELECT COUNT(*) AS n FROM llm_usage WHERE called_at >= ?",
-                (moment.astimezone(UTC).isoformat(),),
+                (to_iso(moment),),
             ).fetchone()
         return int(row["n"])
-
-    def breakdown(self, day: date) -> dict[str, dict[str, int]]:
-        """모델별, 결과별 호출 수."""
-        with self._db.connect() as conn:
-            rows = conn.execute(
-                "SELECT model, outcome, COUNT(*) AS n FROM llm_usage WHERE day = ? "
-                "GROUP BY model, outcome",
-                (day.isoformat(),),
-            ).fetchall()
-        result: dict[str, dict[str, int]] = {}
-        for row in rows:
-            result.setdefault(row["model"], {})[row["outcome"]] = row["n"]
-        return result

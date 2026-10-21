@@ -7,6 +7,7 @@ from rss_hub.services.llm_gateway import BudgetBlocked, LlmNotConfigured, LlmOut
 from rss_hub.services.ports import LlmErrorKind, ServerUsage
 from tests.fakes.llm_client import failure, good
 from tests.fakes.llm_env import LlmEnv
+from tests.keywords.store import usage_breakdown
 
 TODAY = date(2026, 10, 16)
 
@@ -26,7 +27,7 @@ def ask(env):
 def test_a_good_answer_comes_back_with_the_model_and_is_recorded_with_tokens(env):
     answer = ask(env)
     assert (answer.model, answer.finish_reason) == ("model-a", "stop")
-    assert env.usage.breakdown(TODAY) == {"model-a": {"success": 1}}
+    assert usage_breakdown(env.db, TODAY) == {"model-a": {"success": 1}}
 
 
 def test_without_a_key_nothing_is_called(tmp_path):
@@ -167,7 +168,7 @@ def test_every_attempt_is_recorded_including_failures_and_retries(env):
     )
     ask(env)  # a(429) → a(503) → b(성공)
     assert env.usage.count_day(TODAY) == 3
-    assert env.usage.breakdown(TODAY) == {
+    assert usage_breakdown(env.db, TODAY) == {
         "model-a": {"rate_limited": 1, "unavailable": 1},
         "model-b": {"success": 1},
     }

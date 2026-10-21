@@ -6,6 +6,7 @@ from rss_hub.domain.schedule import PRIORITY_EVERY_SLOT
 from rss_hub.storage.feeds import STATUS_ACTIVE, STATUS_BASELINE
 from tests.fakes.collect_env import KST_14_00, CollectEnv
 from tests.fakes.entries import entry, today, yesterday
+from tests.keywords.store import set_poll_priority
 
 
 @pytest.fixture
@@ -278,7 +279,7 @@ def test_the_schedule_is_reused_within_the_hour_and_rebuilt_when_inputs_change(e
     env.feeds.delete(env.feeds.list_all()[0].id)
     assert env.service.run_slot().schedule_rebuilt is True  # 피드 삭제
 
-    env.feeds.set_poll_priority(env.feeds.list_all()[0].id, PRIORITY_EVERY_SLOT)
+    set_poll_priority(env.feeds, env.feeds.list_all()[0].id, PRIORITY_EVERY_SLOT)
     assert env.service.run_slot().schedule_rebuilt is True  # 우선순위 변경
 
     env.settings.update({"collect_interval_minutes": "10"})

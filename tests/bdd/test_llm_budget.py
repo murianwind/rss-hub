@@ -14,6 +14,7 @@ from rss_hub.services.ports import LlmErrorKind, ServerUsage
 from tests.bdd.binding import bind
 from tests.fakes.llm_client import failure, good
 from tests.fakes.llm_env import LlmEnv
+from tests.keywords.store import usage_breakdown
 
 bind(globals(), "06_llm_budget.feature", [f"BUD-{n:02d}" for n in range(1, 18)])
 
@@ -178,7 +179,7 @@ def _count_today(env, count):
 
 @then("모델별 성공과 실패가 따로 기록된다")
 def _breakdown(env):
-    assert env.usage.breakdown(today(env)) == {"model-a": {"success": 2, "unavailable": 1}}
+    assert usage_breakdown(env.db, today(env)) == {"model-a": {"success": 2, "unavailable": 1}}
 
 
 @when("호출이 429로 실패하고 기다린 뒤 다시 시도한 호출은 성공한다")

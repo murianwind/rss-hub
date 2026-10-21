@@ -15,6 +15,7 @@ from rss_hub.storage.feeds import (
     FeedRepository,
 )
 from tests.fakes.clock import FakeClock
+from tests.keywords.store import create_category, raw_connection, set_poll_priority, stored_stats
 
 URL = "https://a.example.com/feed"
 
@@ -138,7 +139,7 @@ def test_stats_are_saved_and_exposed_as_activity_by_feed_key(feeds):
 
 def test_poll_priority_can_be_changed(feeds):
     feed_id = feeds.add(URL, "A")
-    feeds.set_poll_priority(feed_id, PRIORITY_EVERY_SLOT)
+    set_poll_priority(feeds, feed_id, PRIORITY_EVERY_SLOT)
     feed = feeds.get(feed_id)
     assert feed is not None
     assert feed.poll_priority == PRIORITY_EVERY_SLOT
@@ -160,16 +161,16 @@ def test_deleting_a_feed_removes_its_stats_and_articles_but_not_the_seen_record(
     )  # 지운 피드의 글이 구독을 다시 추가했을 때 되살아나지 않게
 
 
-def test_stored_stats_can_be_read_back(feeds):
+def test_stored_stats_can_be_read_back(db, feeds):
     feed_id = feeds.add(URL, "A")
-    assert feeds.stats(feed_id) is None
+    assert stored_stats(db, feed_id) is None
     latest = datetime(2026, 10, 16, 1, 0, tzinfo=UTC)
     feeds.save_stats(feed_id, FeedMeasurement(Activity(5, 2), latest))
-    stats = feeds.stats(feed_id)
+    stats = stored_stats(db, feed_id)
     assert stats is not None
     assert (stats.recent_count_7d, stats.target_date_count, stats.last_published) == (5, 2, latest)
     feeds.save_stats(feed_id, FeedMeasurement(Activity(0, 0), None))
-    assert feeds.stats(feed_id).last_published is None
+    assert stored_stats(db, feed_id).last_published is None
 
 
 def test_last_checked_time_is_recorded_on_success_and_on_failure(feeds, clock):
@@ -188,9 +189,9 @@ def test_last_checked_time_is_recorded_on_success_and_on_failure(feeds, clock):
 def test_a_category_can_have_a_webhook(feeds, db, clock):
     settings = SettingsService(db, clock)
     webhook_id = settings.add_webhook("dev", "https://discord.com/api/webhooks/1/abc")
-    category_id = feeds.add_category("뉴스", webhook_id=webhook_id)
+    category_id = create_category(feeds, "뉴스", webhook_id=webhook_id)
     assert feeds.category_webhook_id(category_id) == webhook_id
-    assert feeds.category_webhook_id(feeds.add_category("기타")) is None
+    assert feeds.category_webhook_id(create_category(feeds, "기타")) is None
     assert feeds.category_webhook_id(None) is None
     assert feeds.category_webhook_id(999) is None
 
@@ -198,7 +199,7 @@ def test_a_category_can_have_a_webhook(feeds, db, clock):
 def test_deleting_a_webhook_clears_the_category_reference(feeds, db, clock):
     settings = SettingsService(db, clock)
     webhook_id = settings.add_webhook("dev", "https://discord.com/api/webhooks/1/abc")
-    category_id = feeds.add_category("뉴스", webhook_id=webhook_id)
+    category_id = create_category(feeds, "뉴스", webhook_id=webhook_id)
     settings.delete_webhook(webhook_id)
     assert feeds.category_webhook_id(category_id) is None
 
@@ -221,7 +222,7 @@ def test_get_or_create_category_reuses_an_existing_name(feeds):
 
 
 def test_category_names_lists_all_of_them(feeds):
-    feeds.add_category("뉴스")
+    create_category(feeds, "뉴스")
     feeds.get_or_create_category("IT")
     assert feeds.category_names() == {"뉴스", "IT"}
 
@@ -230,8 +231,8 @@ def test_category_names_lists_all_of_them(feeds):
 
 
 def test_categories_are_listed_by_name_with_their_feed_counts(feeds):
-    news = feeds.add_category("뉴스")
-    empty = feeds.add_category("가나다")
+    news = create_category(feeds, "뉴스")
+    empty = create_category(feeds, "가나다")
     feeds.add("https://a.example.com/rss", "A", category_id=news)
     feeds.add("https://b.example.com/rss", "B", category_id=news)
     feeds.add("https://c.example.com/rss", "C")
@@ -243,7 +244,7 @@ def test_categories_are_listed_by_name_with_their_feed_counts(feeds):
 def test_a_category_webhook_can_be_set_and_cleared(feeds, db, clock):
     settings = SettingsService(db, clock)
     webhook_id = settings.add_webhook("dev", "https://discord.com/api/webhooks/1/abc")
-    category_id = feeds.add_category("뉴스")
+    category_id = create_category(feeds, "뉴스")
     assert feeds.set_category_webhook(category_id, webhook_id) is True
     assert feeds.list_categories()[0].webhook_id == webhook_id
     assert feeds.set_category_webhook(category_id, None) is True
@@ -277,7 +278,7 @@ def test_a_feed_outside_any_category_can_be_added_with_a_webhook(feeds, webhook_
 
 
 def test_a_feed_cannot_be_added_with_both_a_category_and_a_webhook(feeds, webhook_id):
-    category = feeds.add_category("뉴스")
+    category = create_category(feeds, "뉴스")
     with pytest.raises(FeedRuleError) as info:
         feeds.add(URL, "A", category_id=category, webhook_id=webhook_id)
     assert info.value.message == RULE_CATEGORY_FEED_WEBHOOK
@@ -299,7 +300,7 @@ def test_a_feed_webhook_can_be_set_and_cleared(feeds, webhook_id):
 
 
 def test_the_webhook_of_a_feed_in_a_category_cannot_be_set_but_can_be_cleared(feeds, webhook_id):
-    category = feeds.add_category("뉴스")
+    category = create_category(feeds, "뉴스")
     feed_id = feeds.add(URL, "A", category_id=category)
     with pytest.raises(FeedRuleError) as info:
         feeds.set_feed_webhook(feed_id, webhook_id)
@@ -318,7 +319,7 @@ def test_an_unknown_feed_or_webhook_is_reported(feeds):
 def test_a_feed_with_a_webhook_cannot_join_a_category_until_the_webhook_is_cleared(
     feeds, webhook_id
 ):
-    category = feeds.add_category("뉴스")
+    category = create_category(feeds, "뉴스")
     feed_id = feeds.add(URL, "A", webhook_id=webhook_id)
     with pytest.raises(FeedRuleError) as info:
         feeds.set_feed_category(feed_id, category)
@@ -330,7 +331,7 @@ def test_a_feed_with_a_webhook_cannot_join_a_category_until_the_webhook_is_clear
 
 
 def test_leaving_the_category_makes_the_feed_webhook_available_again(feeds, webhook_id):
-    category = feeds.add_category("뉴스")
+    category = create_category(feeds, "뉴스")
     feed_id = feeds.add(URL, "A", category_id=category)
     assert feeds.set_feed_category(feed_id, None) is True
     assert feeds.set_feed_webhook(feed_id, webhook_id) is True
@@ -402,22 +403,20 @@ def test_the_subscription_kind_defaults_to_feed_and_page_is_remembered(tmp_path)
 
 
 def test_upgrading_from_the_previous_schema_keeps_old_feeds_as_plain_feeds(tmp_path):
-    import sqlite3
 
     from rss_hub.storage.migrations import MIGRATIONS, apply_migrations
 
-    conn = sqlite3.connect(tmp_path / "old.db")
-    conn.row_factory = sqlite3.Row
-    for number, script in enumerate(MIGRATIONS[:13], start=1):  # 13번까지만 적용한 예전 DB
-        conn.executescript(script)
-        conn.execute(f"PRAGMA user_version = {number}")
-    conn.execute(
-        "INSERT INTO feeds(url, url_key, name, created_at) "
-        "VALUES('https://old.example.com/rss', 'old', '옛 피드', '2026-01-01T00:00:00+00:00')"
-    )
-    apply_migrations(conn)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS) >= 14
-    assert conn.execute("SELECT kind FROM feeds").fetchone()[0] == "feed"
+    with raw_connection(tmp_path / "old.db") as conn:
+        for number, script in enumerate(MIGRATIONS[:13], start=1):  # 13번까지만 적용한 예전 DB
+            conn.executescript(script)
+            conn.execute(f"PRAGMA user_version = {number}")
+        conn.execute(
+            "INSERT INTO feeds(url, url_key, name, created_at) "
+            "VALUES('https://old.example.com/rss', 'old', '옛 피드', '2026-01-01T00:00:00+00:00')"
+        )
+        apply_migrations(conn)
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS) >= 14
+        assert conn.execute("SELECT kind FROM feeds").fetchone()[0] == "feed"
 
 
 def test_the_page_subscription_keys_list_only_web_page_feeds(tmp_path):
