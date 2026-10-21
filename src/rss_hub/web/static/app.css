@@ -443,3 +443,9 @@ body:not(.sidebar-collapsed).sw-480 .sidebar { width: 480px; }
 .sample-list { margin: 4px 0 8px; padding-left: 22px; font-size: 13px; line-height: 1.6; }
 .sample-list li { overflow-wrap: anywhere; }
 input[readonly] { background: var(--panel); color: var(--muted); cursor: default; }
+
+
+/* ---------- 후보: 제목과 주소는 항상 줄을 나눠서 ---------- */
+.cand-title { display: block; font-weight: 700; overflow-wrap: anywhere; }
+.cand-url { display: block; margin-top: 2px; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.candidate .cand-head { margin: 0 0 4px; }

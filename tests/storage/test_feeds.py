@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 import pytest
 
 from rss_hub.domain.activity import FeedMeasurement
+from rss_hub.domain.feed_url import feed_url_key
 from rss_hub.domain.schedule import PRIORITY_EVERY_SLOT, Activity
 from rss_hub.services.settings import SettingsService
 from rss_hub.storage.articles import ArticleRepository, NewArticle
@@ -417,3 +418,13 @@ def test_upgrading_from_the_previous_schema_keeps_old_feeds_as_plain_feeds(tmp_p
     apply_migrations(conn)
     assert conn.execute("PRAGMA user_version").fetchone()[0] == len(MIGRATIONS) >= 14
     assert conn.execute("SELECT kind FROM feeds").fetchone()[0] == "feed"
+
+
+def test_the_page_subscription_keys_list_only_web_page_feeds(tmp_path):
+    from rss_hub.storage.feeds import KIND_PAGE
+
+    feeds = FeedRepository(Database(tmp_path / "rss_hub.db"), FakeClock())
+    feeds.add("https://a.example.com/rss", "피드")
+    feeds.add("https://b.example.com/news/", "페이지", kind=KIND_PAGE)
+    assert feeds.page_url_keys() == {feed_url_key("https://b.example.com/news/")}
+    assert len(feeds.existing_url_keys()) == 2

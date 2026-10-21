@@ -42,7 +42,7 @@ def test_a_feed_address_shows_the_title_in_an_editable_registration_form(world):
     world.fetcher.feed("https://new.example.com/rss", "새 블로그", "https://new.example.com")
     html = world.client.post("/feeds/discover", data={"url": "https://new.example.com/rss"}).text
     assert (
-        "<strong>새 블로그</strong>" in html
+        'class="cand-title">새 블로그' in html
         and 'name="url" value="https://new.example.com/rss"' in html
     )
     assert 'name="name" value="새 블로그"' in html and 'action="/feeds/register"' in html

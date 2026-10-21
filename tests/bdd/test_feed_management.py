@@ -54,7 +54,9 @@ def candidates(world):
     )
     found = []
     for form in forms:
-        title = html.unescape(re.search(r"<strong>(.*?)</strong>", form, re.S).group(1))
+        title = html.unescape(
+            re.search(r'class="cand-title">(.*?) <span class="kind-badge">', form, re.S).group(1)
+        )
         url = html.unescape(re.search(r'name="url" value="([^"]*)"', form).group(1))
         found.append((title, url))
     return found

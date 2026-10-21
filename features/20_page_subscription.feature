@@ -90,3 +90,32 @@ Feature: 웹페이지 구독: RSS가 없는 사이트의 글 목록 페이지를
     When 피드 "자유 블로그"의 설정 패널을 연다
     Then 주소 칸은 읽기 전용이고 "변경" 버튼이 있으며 안내에 "변경" 버튼으로 바꾼다고 적혀 있다
 
+  @WPS-11 @new
+  Scenario Outline: RSS가 있어도 글 목록이 보이면 RSS 피드와 웹페이지 구독 두 가지를, RSS가 없으면 웹페이지 구독만 고르게 한다
+    Given 글 목록 페이지에 글이 4개 있고 RSS 피드 <rss>
+    When 그 주소를 피드 추가에서 확인한다
+    Then 후보는 <options>이다
+
+    Examples:
+      | rss               | options                        |
+      | 가 있다            | "RSS 피드"와 "웹페이지 구독" 순서의 두 가지 |
+      | 는 없다            | "웹페이지 구독" 한 가지            |
+
+  @WPS-12 @new
+  Scenario Outline: 주소 변경에서 고른 종류로 저장되고 RSS가 있는 페이지도 웹페이지 구독으로 저장할 수 있다
+    Given 일반 피드 "자유 블로그"의 주소를 고치려고 한다
+    And 글 목록 페이지에 글이 4개 있고 RSS 피드가 있다
+    When 후보에서 "<choice>"를 골라 주소를 고쳐 저장한다
+    Then <result>
+
+    Examples:
+      | choice  | result                                                |
+      | 웹페이지 구독 | 구독 종류는 "page"로 저장되고 처음부터 다시 점검한다 |
+      | RSS 피드  | 구독 종류는 "feed"로 저장되고 처음부터 다시 점검한다 |
+
+  @WPS-13 @new
+  Scenario: 후보의 제목과 주소는 줄을 나눠 보인다
+    Given 글 목록 페이지에 글이 4개 있고 RSS 피드가 있다
+    When 그 주소를 피드 추가에서 확인한다
+    Then 각 후보의 제목과 주소는 서로 다른 줄에 보인다
+

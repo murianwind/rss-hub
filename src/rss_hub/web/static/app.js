@@ -600,10 +600,13 @@
     } else if (target.closest("[data-finder-run]")) {
       runFinder(box);
     } else if (target.closest("[data-pick-url]")) {
-      var picked = target.closest("[data-pick-url]").getAttribute("data-pick-url");
+      var button = target.closest("[data-pick-url]");
+      var picked = button.getAttribute("data-pick-url");
       var note = field.querySelector("[data-picked]");
       field.querySelector("input[name=url]").value = picked;
-      note.textContent = "선택한 주소를 넣었습니다. 저장하면 적용됩니다.";
+      field.querySelector("input[name=kind]").value = button.getAttribute("data-pick-kind") || "";
+      note.textContent =
+        "선택한 주소를 넣었습니다(" + (button.getAttribute("data-pick-label") || "") + "). 저장하면 적용됩니다.";
       note.hidden = false;
       box.hidden = true;
     }

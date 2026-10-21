@@ -46,6 +46,7 @@ class Candidate:
     kind: str = KIND_FEED  # page면 RSS가 없어서 글 목록 페이지로 구독하는 후보
     count: int = 0  # page일 때 목록에서 찾은 글 수
     sample: tuple[str, ...] = ()  # page일 때 찾은 글 제목 몇 개(맞게 찾았는지 눈으로 확인용)
+    alongside_feed: bool = False  # page일 때 이 사이트에 RSS 피드도 있다(둘 중 고르게 한다)
 
 
 @dataclass(frozen=True)
@@ -79,7 +80,9 @@ def _usable(url: str) -> bool:
     return True
 
 
-def _page_candidate(url: str, final_url: str, listing: PageListing) -> Candidate:
+def _page_candidate(
+    url: str, final_url: str, listing: PageListing, alongside_feed: bool = False
+) -> Candidate:
     return Candidate(
         url,
         listing.title or _host(url),
@@ -87,6 +90,7 @@ def _page_candidate(url: str, final_url: str, listing: PageListing) -> Candidate
         kind=KIND_PAGE,
         count=len(listing.items),
         sample=tuple(item.title for item in listing.items[:SAMPLE_SIZE]),
+        alongside_feed=alongside_feed,
     )
 
 
@@ -110,7 +114,8 @@ class FeedRegistrationService:
         except FeedUrlError as error:
             return DiscoveryResult(error=error.message)
         existing = self._feeds.existing_url_keys()
-        if feed_url_key(url) in existing:
+        # 웹페이지 구독 중인 주소는 막지 않는다(같은 사이트의 RSS 피드를 찾아 바꿀 수 있어야 한다)
+        if feed_url_key(url) in existing and feed_url_key(url) not in self._feeds.page_url_keys():
             return DiscoveryResult(error=ALREADY_SUBSCRIBED)
 
         try:
@@ -148,43 +153,55 @@ class FeedRegistrationService:
             candidates.append(
                 Candidate(link_url, _title(result, link.title, link_url), result.site_url)
             )
+        # RSS가 있어도 홈페이지만 갱신되는 사이트가 있어서 글 목록이 보이면 웹페이지 구독도 낸다
+        listing = extract_page_items(page.text, page.final_url)
+        page_subscribed = feed_url_key(url) in existing  # 이 페이지는 이미 웹페이지 구독 중
+        if len(listing.items) >= MIN_ITEMS and not page_subscribed:
+            has_feed = bool(candidates) or skipped_as_subscribed > 0
+            candidates.append(_page_candidate(url, page.final_url, listing, has_feed))
         if candidates:
             return DiscoveryResult(candidates=tuple(candidates))
         if skipped_as_subscribed:
             return DiscoveryResult(error=ALL_SUBSCRIBED)
-        listing = extract_page_items(page.text, page.final_url)
-        if len(listing.items) >= MIN_ITEMS:  # 피드는 없지만 글 목록 페이지로는 구독할 수 있다
-            return DiscoveryResult(candidates=(_page_candidate(url, page.final_url, listing),))
+        if page_subscribed:
+            return DiscoveryResult(error=ALREADY_SUBSCRIBED)
         return DiscoveryResult(error=NOTHING_FOUND)
 
-    def resolve(self, raw_url: str) -> Resolution:
+    def resolve(self, raw_url: str, kind: str = "") -> Resolution:
         """주소를 판정한다(저장하지 않는다). 피드 주소면 feed, 글 목록 페이지면 page.
 
-        피드 주소를 바꿀 때 쓴다. 피드를 먼저 보고, 피드가 아니면 글 목록 페이지로 본다.
+        피드 주소를 바꿀 때 쓴다. kind를 주면(사용자가 후보에서 고른 종류) 그 종류로만 본다:
+        page면 그 주소의 글 목록을(그 페이지가 RSS를 알려 줘도 웹페이지 구독을 고른 것이다),
+        feed면 피드인지만 본다. kind가 없으면 피드를 먼저 보고 아니면 글 목록 페이지로 본다.
         단, 그 페이지가 피드를 알려 주고 있으면 거부한다(그 피드를 고르도록 안내한다).
         """
         try:
             url = validate_feed_url(raw_url)
         except FeedUrlError as error:
             return Resolution(error=error.message)
+        if kind == KIND_PAGE:
+            return self._resolve_page(url, chosen=True)
         try:
             result = self._fetcher.fetch(url, etag=None, last_modified=None)
         except FetchError as error:
             if error.reason != "NotAFeed":
                 return Resolution(error=describe_fetch_failure(error.reason))
-            return self._resolve_page(url)
+            if kind == KIND_FEED:  # 피드를 골랐는데 피드가 아니다
+                return Resolution(error=describe_fetch_failure(error.reason))
+            return self._resolve_page(url, chosen=False)
         return Resolution(
             kind=KIND_FEED,
             site_url=result.site_url[:MAX_URL_TEXT_LENGTH],
             title=_title(result, "", url),
         )
 
-    def _resolve_page(self, url: str) -> Resolution:
+    def _resolve_page(self, url: str, *, chosen: bool) -> Resolution:
         try:
             page = self._fetcher.fetch_page(url)
         except FetchError as error:
             return Resolution(error=describe_fetch_failure(error.reason))
-        if any(_usable(link.url) for link in find_feed_links(page.text, page.final_url)):
+        feeds_found = any(_usable(link.url) for link in find_feed_links(page.text, page.final_url))
+        if feeds_found and not chosen:
             return Resolution(error=PAGE_HAS_FEEDS)
         listing = extract_page_items(page.text, page.final_url)
         if len(listing.items) < MIN_ITEMS:

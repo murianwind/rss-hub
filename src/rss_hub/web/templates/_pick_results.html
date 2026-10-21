@@ -1,9 +1,10 @@
 {% if result.error %}<div class="banner error" role="alert">{{ result.error }}</div>
 {% else %}<h3 class="slide-sub">찾은 주소</h3>
 {% for c in result.candidates %}<div class="candidate pick">
-  <p class="wide"><strong>{{ c.title }}</strong>{% if c.kind == 'page' %} <span class="kind-badge">웹페이지 구독</span>{% endif %}<br><span class="hint">{{ c.url }}</span></p>
-  {% if c.kind == 'page' %}<p class="hint wide">RSS 피드가 없어 글 목록 페이지에서 글 {{ c.count }}개를 찾았습니다. 최근 글:</p>
+  <span class="cand-title">{{ c.title }}{% if c.kind == 'page' %} <span class="kind-badge">웹페이지 구독</span>{% else %} <span class="kind-badge">RSS 피드</span>{% endif %}</span>
+  <span class="cand-url">{{ c.url }}</span>
+  {% if c.kind == 'page' %}<p class="hint wide">{% if c.alongside_feed %}이 사이트에는 RSS 피드도 있습니다. RSS가 갱신되지 않고 홈페이지만 갱신될 때는 웹페이지 구독을 고르세요. {% else %}RSS 피드가 없어 {% endif %}글 목록 페이지에서 글 {{ c.count }}개를 찾았습니다. 최근 글:</p>
   <ol class="sample-list wide">{% for title in c.sample %}<li>{{ title }}</li>{% endfor %}</ol>{% endif %}
-  <div class="row wide"><button type="button" class="primary" data-pick-url="{{ c.url }}">선택</button></div>
+  <div class="row wide"><button type="button" class="primary" data-pick-url="{{ c.url }}" data-pick-kind="{{ c.kind }}" data-pick-label="{{ '웹페이지 구독' if c.kind == 'page' else 'RSS 피드' }}">선택</button></div>
 </div>
 {% endfor %}{% endif %}

@@ -253,6 +253,12 @@ class FeedRepository:
         with self._db.connect() as conn:
             return {row["url_key"] for row in conn.execute("SELECT url_key FROM feeds")}
 
+    def page_url_keys(self) -> set[str]:
+        """웹페이지 구독 중인 피드의 정규화한 주소(같은 주소에서 RSS를 찾아 줄 수 있다)."""
+        with self._db.connect() as conn:
+            rows = conn.execute("SELECT url_key FROM feeds WHERE kind = ?", (KIND_PAGE,))
+            return {row["url_key"] for row in rows}
+
     def category_webhook_id(self, category_id: int | None) -> int | None:
         """카테고리에 지정된 웹훅. 카테고리가 없거나 지정이 없으면 None."""
         if category_id is None:

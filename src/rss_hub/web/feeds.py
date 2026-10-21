@@ -328,7 +328,7 @@ def build_feed_router(
         new_site: str | None = None
         new_kind: str | None = None
         if url_changed:  # RSS가 있는지 먼저 보고, 없으면 글 목록 페이지로 본다(바꾸기 전에)
-            resolved = await run_in_threadpool(registration.resolve, url)
+            resolved = await run_in_threadpool(registration.resolve, url, str(form.get("kind", "")))
             if resolved.error:
                 message = f"새 주소를 확인하지 못했습니다: {resolved.error}"
                 return page(request, error=message, status_code=400)

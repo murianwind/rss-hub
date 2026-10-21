@@ -17,7 +17,7 @@ from tests.fakes.page_html import BASE, COMSCORE_LIKE, article_html, listing, sa
 from tests.fakes.viewer_world import World
 from tests.fakes.web_parts import start_app
 
-bind(globals(), "20_page_subscription.feature", [f"WPS-{n:02d}" for n in range(1, 11)])
+bind(globals(), "20_page_subscription.feature", [f"WPS-{n:02d}" for n in range(1, 14)])
 
 BROWSER = {"origin": "null", "sec-fetch-site": "same-origin"}
 LIST_URL = f"{BASE}/news"
@@ -329,3 +329,66 @@ def _readonly(ctx):
         and "data-finder-open>변경</button>" in html
     )
     assert '오른쪽 "변경" 버튼으로 바꿉니다' in html
+
+
+# ---------- RSS와 웹페이지 구독을 함께 고르게 한다 ----------
+
+FEED_URL = "https://blog.example.com/feed.xml"
+
+
+def _serve_rss(world):
+    advertised = f'<head><link rel="alternate" type="application/rss+xml" href="{FEED_URL}">'
+    world.fetcher.page(LIST_URL, listing(sample_items(4)).replace("<head>", advertised))
+    world.fetcher.feed(FEED_URL, "공식 피드", BASE)
+
+
+@given(parsers.re(r"글 목록 페이지에 글이 4개 있고 RSS 피드 ?(?P<rss>가 있다|는 없다)$"))
+def _list_with_or_without_rss(world, rss):
+    if rss == "가 있다":
+        _serve_rss(world)
+    else:
+        world.fetcher.page(LIST_URL, listing(sample_items(4)))
+
+
+@given("글 목록 페이지에 글이 4개 있고 RSS 피드가 있다")
+def _list_with_rss(world):
+    _serve_rss(world)
+
+
+@then(parsers.re(r"후보는 (?P<options>.+)이다"))
+def _options(ctx, options):
+    kinds = re.findall(r'<input type="hidden" name="kind" value="(feed|page)">', ctx.response.text)
+    assert kinds == (["feed", "page"] if "순서의 두 가지" in options else ["page"])
+
+
+@when(parsers.re(r'후보에서 "(?P<choice>[^"]+)"를 골라 주소를 고쳐 저장한다'))
+def _choose_and_save(world, ctx, choice):
+    kind, url = ("page", LIST_URL) if choice == "웹페이지 구독" else ("feed", FEED_URL)
+    ctx.new = url
+    ctx.before = world.feeds.get(ctx.feed)
+    ctx.response = post(
+        world,
+        f"/feeds/{ctx.feed}/settings",
+        name=ctx.before.name,
+        emoji="📢",
+        max_entries="",
+        category_id="",
+        webhook_id="",
+        url=url,
+        kind=kind,
+        next="/feeds",
+    )
+
+
+@then("각 후보의 제목과 주소는 서로 다른 줄에 보인다")
+def _separate_lines(ctx):
+    html = ctx.response.text
+    assert (
+        len(
+            re.findall(
+                r'<span class="cand-title">[^<]*<span class="kind-badge">[^<]+</span></span>\s*<span class="cand-url">https://',
+                html,
+            )
+        )
+        == 2
+    )

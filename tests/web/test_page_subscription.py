@@ -1,5 +1,7 @@
 """웹페이지 구독 화면: 추가(후보 확인), 등록, 표시, 주소 고치기, 깨졌을 때의 안내."""
 
+# ruff: noqa: E501  (HTML 정규식과 견본은 한 줄이 읽기 쉽다)
+
 import html as html_module
 import re
 
@@ -439,3 +441,135 @@ def test_a_read_only_value_is_still_submitted_and_a_picked_address_still_saves(w
 
 def test_the_read_only_field_has_its_own_look(world):
     assert "input[readonly] { background: var(--panel);" in world.client.get("/static/app.css").text
+
+
+# ---------- RSS가 있어도 웹페이지 구독을 고를 수 있다(RSS가 갱신되지 않고 홈페이지만 갱신되는 사이트) ----------
+
+FEED_URL = "https://blog.example.com/feed.xml"
+
+
+def serve_with_rss(world):
+    serve_list(world)
+    advertised = f'<head><link rel="alternate" type="application/rss+xml" href="{FEED_URL}">'
+    world.fetcher.page(LIST_URL, world.fetcher.pages[LIST_URL].replace("<head>", advertised))
+    world.fetcher.feed(FEED_URL, "공식 피드", f"{BASE}")
+
+
+def test_the_add_panel_offers_both_the_rss_feed_and_the_web_page_subscription(world):
+    serve_with_rss(world)
+    html = post(world, "/feeds/discover", url=LIST_URL, next="/feeds").text
+    forms = re.findall(r'<input type="hidden" name="kind" value="(feed|page)">', html)
+    assert forms == ["feed", "page"]  # RSS 피드가 먼저, 웹페이지 구독이 그다음
+    assert (
+        "이 사이트에는 RSS 피드도 있습니다. RSS가 갱신되지 않고 홈페이지만 갱신될 때는 웹페이지 구독을 고르세요."
+        in html
+    )
+    assert (
+        "RSS 피드를 제공하지 않아" not in html
+        and '<span class="kind-badge">RSS 피드</span>' in html
+    )
+
+
+def test_without_rss_only_the_web_page_subscription_is_offered_with_the_old_wording(world):
+    serve_list(world)
+    html = post(world, "/feeds/discover", url=LIST_URL, next="/feeds").text
+    assert re.findall(r'<input type="hidden" name="kind" value="(feed|page)">', html) == ["page"]
+    assert "RSS 피드를 제공하지 않아" in html and "RSS 피드도 있습니다" not in html
+
+
+def test_the_pick_fragment_offers_both_options_with_the_kind_on_each_select_button(world):
+    serve_with_rss(world)
+    html = post(world, "/feeds/discover", url=LIST_URL, pick="1", next="/feeds").text
+    assert re.findall(
+        r'data-pick-url="([^"]+)" data-pick-kind="(feed|page)" data-pick-label="([^"]+)"', html
+    ) == [(FEED_URL, "feed", "RSS 피드"), (LIST_URL, "page", "웹페이지 구독")]
+
+
+def test_the_title_and_the_address_of_a_candidate_are_separate_blocks(world):
+    serve_with_rss(world)
+    for extra in ({}, {"pick": "1"}):
+        html = post(world, "/feeds/discover", url=LIST_URL, next="/feeds", **extra).text
+        assert re.search(
+            r'<span class="cand-title">[^<]*<span class="kind-badge">[^<]+</span></span>\s*<span class="cand-url">https://',
+            html,
+        ), extra
+    css = world.client.get("/static/app.css").text
+    assert ".cand-title { display: block;" in css and ".cand-url { display: block;" in css
+
+
+def test_the_settings_panel_has_a_hidden_kind_field_that_starts_empty(world):
+    html = world.client.get(f"/panel/settings/feed/{world.f_free}", headers={"x-panel": "1"}).text
+    assert re.search(
+        r'<input type="hidden" name="kind" value="">\s*<p class="hint" data-picked hidden>', html
+    )
+
+
+def test_the_script_puts_the_chosen_kind_into_the_form_without_sending_anything(world):
+    js = world.client.get("/static/app.js").text
+    assert (
+        'field.querySelector("input[name=kind]").value = button.getAttribute("data-pick-kind") || "";'
+        in js
+    )
+    assert '"선택한 주소를 넣었습니다(" + (button.getAttribute("data-pick-label")' in js
+
+
+def test_saving_with_the_web_page_kind_makes_a_page_subscription_even_though_the_page_has_rss(
+    world,
+):
+    serve_with_rss(world)
+    assert settings_post(world, world.f_free, url=LIST_URL, kind="page").status_code == 303
+    saved = world.feeds.get(world.f_free)
+    assert (saved.kind, saved.url, saved.status, saved.html_url) == (
+        KIND_PAGE,
+        LIST_URL,
+        STATUS_BASELINE,
+        f"{BASE}/",
+    )
+
+
+def test_saving_with_the_feed_kind_makes_a_regular_feed(world):
+    feed = add_page_feed(world)
+    serve_with_rss(world)
+    assert settings_post(world, feed, url=FEED_URL, kind="feed").status_code == 303
+    assert (world.feeds.get(feed).kind, world.feeds.get(feed).url) == (KIND_FEED, FEED_URL)
+
+
+def test_a_feed_kind_with_a_page_address_is_refused_and_nothing_changes(world):
+    serve_with_rss(world)
+    response = settings_post(world, world.f_free, name="바뀌면 안 됨", url=LIST_URL, kind="feed")
+    assert response.status_code == 400 and "피드가 아닙니다" in response.text
+    assert (
+        world.feeds.get(world.f_free).url != LIST_URL
+        and world.feeds.get(world.f_free).name != "바뀌면 안 됨"
+    )
+
+
+def test_without_a_kind_the_page_with_rss_is_still_refused_like_before(world):
+    serve_with_rss(world)
+    assert "버튼으로 찾아서 고르세요" in settings_post(world, world.f_free, url=LIST_URL).text
+
+
+@pytest.mark.parametrize("kind", ["bogus", "PAGE", " page", "<script>"])
+def test_an_unknown_kind_value_is_treated_as_automatic(world, kind):
+    serve_with_rss(world)
+    assert (
+        "버튼으로 찾아서 고르세요"
+        in settings_post(world, world.f_free, url=LIST_URL, kind=kind).text
+    )
+
+
+def test_the_kind_is_ignored_when_the_address_is_unchanged(world):
+    feed = add_page_feed(world)
+    assert settings_post(world, feed, name="이름만", url=LIST_URL, kind="feed").status_code == 303
+    assert world.feeds.get(feed).kind == KIND_PAGE and world.fetcher.fetch_calls == []
+
+
+def test_a_web_page_subscription_can_be_switched_back_to_the_rss_feed_from_its_own_address(world):
+    feed = add_page_feed(world)
+    serve_with_rss(world)
+    html = post(world, "/feeds/discover", url=LIST_URL, pick="1", next="/feeds").text
+    assert re.findall(r'data-pick-url="([^"]+)" data-pick-kind="(feed|page)"', html) == [
+        (FEED_URL, "feed")
+    ]
+    assert settings_post(world, feed, url=FEED_URL, kind="feed").status_code == 303
+    assert (world.feeds.get(feed).kind, world.feeds.get(feed).url) == (KIND_FEED, FEED_URL)

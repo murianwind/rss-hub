@@ -1,3 +1,5 @@
+# ruff: noqa: E501  (HTML 견본과 긴 단언은 한 줄이 읽기 쉽다)
+
 import pytest
 
 from rss_hub.services.feed_registration import (
@@ -346,7 +348,7 @@ def test_a_page_with_too_few_posts_is_still_nothing_found(env):
     assert env.service.discover(LIST_PAGE).error == NOTHING_FOUND
 
 
-def test_a_page_with_feed_links_offers_only_the_feeds_not_the_web_page(env):
+def test_a_page_with_feed_links_and_a_post_list_offers_the_feeds_and_then_the_web_page(env):
     with_posts(env)
     env.fetcher.page(
         LIST_PAGE,
@@ -355,17 +357,50 @@ def test_a_page_with_feed_links_offers_only_the_feeds_not_the_web_page(env):
         ),
     )
     env.fetcher.feed("https://blog.example.com/feed.xml", "공식 피드", "https://blog.example.com")
-    kinds = [c.kind for c in env.service.discover(LIST_PAGE).candidates]
-    assert kinds == ["feed"]
+    result = env.service.discover(LIST_PAGE)
+    assert [(c.kind, c.alongside_feed) for c in result.candidates] == [
+        ("feed", False),
+        ("page", True),
+    ]
+    assert result.candidates[1].url == LIST_PAGE and result.candidates[1].count == 4
 
 
-def test_when_every_found_feed_is_already_subscribed_the_web_page_is_not_offered(env):
+def test_a_page_with_feed_links_but_no_post_list_offers_only_the_feeds(env):
+    env.fetcher.page(
+        LIST_PAGE,
+        f"<html><head>{link('https://blog.example.com/feed.xml')}</head><body><p>글 목록 없음</p></body></html>",
+    )
+    env.fetcher.feed("https://blog.example.com/feed.xml", "공식 피드", "https://blog.example.com")
+    assert [c.kind for c in env.service.discover(LIST_PAGE).candidates] == ["feed"]
+
+
+def test_a_feed_address_itself_never_gets_a_web_page_option(env):
+    env.fetcher.feed("https://blog.example.com/feed.xml", "공식 피드", "https://blog.example.com")
+    assert [
+        c.kind for c in env.service.discover("https://blog.example.com/feed.xml").candidates
+    ] == ["feed"]
+
+
+def test_when_every_found_feed_is_already_subscribed_the_web_page_is_still_offered_if_posts_are_found(
+    env,
+):
     with_posts(env)
     env.fetcher.page(
         LIST_PAGE,
         env.fetcher.pages[LIST_PAGE].replace(
             "<head>", f"<head>{link('https://a.example.com/feed')}"
         ),
+    )
+    (candidate,) = env.service.discover(LIST_PAGE).candidates
+    assert (
+        candidate.kind == "page" and candidate.alongside_feed is True
+    )  # RSS는 이미 구독 중이지만 웹페이지로도 구독할 수 있다
+
+
+def test_when_every_found_feed_is_already_subscribed_and_there_are_no_posts_it_says_so(env):
+    env.fetcher.page(
+        LIST_PAGE,
+        f"<html><head>{link('https://a.example.com/feed')}</head><body><p>글 목록 없음</p></body></html>",
     )
     assert env.service.discover(LIST_PAGE).error == ALL_SUBSCRIBED
 
@@ -502,3 +537,94 @@ def test_a_web_page_candidate_shows_at_most_five_recent_posts(env):
         and len(candidate.sample) == 5
         and candidate.sample[4].startswith("새 소식 5번")
     )
+
+
+# ---------- 고른 종류로 판정한다(주소 수정에서 후보를 고른 경우) ----------
+
+
+def advertise(env, with_feed_file=True):
+    with_posts(env)
+    env.fetcher.page(
+        LIST_PAGE,
+        env.fetcher.pages[LIST_PAGE].replace(
+            "<head>", f"<head>{link('https://blog.example.com/feed.xml')}"
+        ),
+    )
+    if with_feed_file:
+        env.fetcher.feed(
+            "https://blog.example.com/feed.xml", "공식 피드", "https://blog.example.com"
+        )
+
+
+def test_choosing_the_web_page_kind_accepts_a_page_even_when_it_advertises_feeds(env):
+    advertise(env)
+    assert env.service.resolve(LIST_PAGE).error == PAGE_HAS_FEEDS  # 종류를 안 고르면 거부(기존)
+    chosen = env.service.resolve(LIST_PAGE, "page")
+    assert (chosen.error, chosen.kind, chosen.site_url) == ("", "page", "https://blog.example.com/")
+
+
+def test_choosing_the_feed_kind_takes_the_feed_and_refuses_a_page(env):
+    advertise(env)
+    assert env.service.resolve("https://blog.example.com/feed.xml", "feed").kind == "feed"
+    refused = env.service.resolve(LIST_PAGE, "feed")
+    assert (
+        refused.error == "피드가 아닙니다" and env.fetcher.page_calls == []
+    )  # 웹페이지로 바꿔 보지 않는다
+
+
+def test_choosing_the_web_page_kind_for_a_feed_file_fails_because_it_has_no_posts(env):
+    advertise(env)
+    env.fetcher.page(
+        "https://blog.example.com/feed.xml", "<rss><channel><title>피드</title></channel></rss>"
+    )
+    assert (
+        "글 목록을 찾지 못했습니다"
+        in env.service.resolve("https://blog.example.com/feed.xml", "page").error
+    )
+
+
+def test_an_unknown_kind_value_falls_back_to_the_automatic_decision(env):
+    advertise(env)
+    assert env.service.resolve(LIST_PAGE, "bogus").error == PAGE_HAS_FEEDS
+    assert env.service.resolve("https://blog.example.com/feed.xml", "bogus").kind == "feed"
+
+
+# ---------- 웹페이지 구독 중인 주소에서도 RSS를 찾아 바꿀 수 있다 ----------
+
+
+def subscribe_page(env, url=LIST_PAGE):
+    return env.feeds.add(url, "예제 블로그", kind="page")
+
+
+def test_a_page_subscribed_address_still_shows_the_rss_feed_but_not_the_page_again(env):
+    with_posts(env)
+    env.fetcher.page(
+        LIST_PAGE,
+        env.fetcher.pages[LIST_PAGE].replace(
+            "<head>", f"<head>{link('https://blog.example.com/feed.xml')}"
+        ),
+    )
+    env.fetcher.feed("https://blog.example.com/feed.xml", "공식 피드", "https://blog.example.com")
+    subscribe_page(env)
+    result = env.service.discover(LIST_PAGE)
+    assert [c.kind for c in result.candidates] == ["feed"] and result.error == ""
+
+
+def test_a_page_subscribed_address_without_rss_says_it_is_already_subscribed(env):
+    with_posts(env)
+    subscribe_page(env)
+    assert env.service.discover(LIST_PAGE).error == ALREADY_SUBSCRIBED
+
+
+def test_a_page_subscribed_address_whose_structure_broke_says_already_subscribed_not_nothing_found(
+    env,
+):
+    env.fetcher.page(LIST_PAGE, "<html><body><p>글 없음</p></body></html>")
+    subscribe_page(env)
+    assert env.service.discover(LIST_PAGE).error == ALREADY_SUBSCRIBED
+
+
+def test_a_regular_subscribed_feed_address_is_refused_without_any_fetch(env):
+    env.feeds.add("https://blog.example.com/feed.xml", "이미 있는 피드")
+    assert env.service.discover("https://blog.example.com/feed.xml").error == ALREADY_SUBSCRIBED
+    assert env.fetcher.fetch_calls == [] and env.fetcher.page_calls == []
