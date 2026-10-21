@@ -294,3 +294,10 @@ def test_reserve_calls_may_be_zero_but_not_negative_or_huge(service):
     assert service.update({"llm_reserve_calls": "1001"}).errors == {
         "llm_reserve_calls": "0~1000 사이"
     }
+
+
+def test_every_setting_has_a_short_help_line():
+    from rss_hub.services.settings import SETTING_DEFS
+
+    for definition in SETTING_DEFS:
+        assert definition.help and len(definition.help) <= 80, definition.key

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% from "_ui.html" import settings_form %}
+{% block title %}Discord · RSS Hub{% endblock %}
+{% block content %}
+<div class="settings-page">
+<h1>Discord</h1>
+
+{% if notice %}<div class="banner" role="status">{{ notice }}</div>{% endif %}
+{% if test_result %}<div class="banner {{ 'error' if test_result[0] == 'error' else '' }}" role="status">{{ test_result[1] }}</div>{% endif %}
+{% if section_error %}<div class="banner error" role="alert">{{ section_error[1] }}</div>{% endif %}
+
+<p class="note">알림은 Discord 웹훅으로 보냅니다. 채널의 설정 > 연동 > 웹훅에서 주소를 만들어 아래에 추가하세요. 서비스 주소가 비어 있으면 발송이 보류됩니다.</p>
+
+<h2>웹훅</h2>
+{% if webhooks %}
+<ul class="wh-list">
+  {% for w in webhooks %}
+  <li class="wh-row"><span class="wh-name">{{ w.name }}</span>
+    <form method="post" action="/settings/webhooks/{{ w.id }}/test">
+      <input type="hidden" name="next" value="/discord">
+      <button type="submit" title="이 웹훅으로 시험 메시지 한 건을 보냅니다">시험</button>
+    </form>
+    <form method="post" action="/settings/webhooks/{{ w.id }}/delete" data-confirm="‘{{ w.name }}’ 웹훅을 삭제합니다. 이 웹훅으로 가던 알림이 멈춥니다. 삭제할까요?">
+      <input type="hidden" name="next" value="/discord">
+      <input type="hidden" name="confirm" value="yes">
+      <button type="submit" class="danger">삭제</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="note">등록된 웹훅이 없습니다.</p>
+{% endif %}
+<form method="post" action="/settings/webhooks" class="panel">
+  <input type="hidden" name="next" value="/discord">
+  <div class="inline-fields">
+    <div class="field">
+      <label for="webhook_name">이름</label>
+      <input type="text" id="webhook_name" name="name" value="{{ webhook_name }}" autocomplete="off" placeholder="예: 뉴스">
+    </div>
+    <div class="field grow">
+      <label for="webhook_url">웹훅 주소</label>
+      <input type="password" id="webhook_url" name="url" autocomplete="off" placeholder="Discord에서 복사한 웹훅 주소">
+    </div>
+    <div class="btn-cell"><button type="submit" class="primary">추가</button></div>
+  </div>
+  <p class="hint">저장한 뒤에는 주소를 다시 보여 주지 않습니다.</p>
+</form>
+
+{% if webhooks %}
+<h2>웹훅 역할</h2>
+<form method="post" action="/settings/webhook-roles" class="panel">
+  <input type="hidden" name="next" value="/discord">
+  <div class="inline-fields">
+    {% for field, label, help in (('default_id', '기본', '피드, 카테고리, 주제에 웹훅을 따로 정하지 않은 글이 가는 곳'), ('system_id', '시스템 알림', '한도 도달, 모델 장애 같은 서비스 알림이 가는 곳')) %}
+    <div class="field">
+      <label for="{{ field }}">{{ label }}</label>
+      <p class="hint">{{ help }}</p>
+      <select id="{{ field }}" name="{{ field }}">
+        <option value="">지정 안 함</option>
+        {% for w in webhooks %}<option value="{{ w.id }}" {% if roles[field] == w.id %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+      </select>
+    </div>
+    {% endfor %}
+    <div class="btn-cell"><button type="submit" class="primary">저장</button></div>
+  </div>
+</form>
+{% endif %}
+
+<h2>시스템 알림</h2>
+<div class="panel">
+{{ settings_form('/discord/settings', '/discord', sections, values, errors) }}
+</div>
+</div>
+{% endblock %}

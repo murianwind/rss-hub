@@ -1,17 +1,89 @@
-"""모델 화면: 무료 모델 스캔, 벤치마크, 추천, 승인 후 체인 교체."""
+"""모델 화면: 키와 호출 한도, 스캔, 벤치마크(진행 상황), 추천, 끌어다 놓아 바꾸는 체인."""
+
+from collections.abc import Sequence
+from typing import Any
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from rss_hub.domain.benchmark import SAMPLES, recommend
+from rss_hub.domain.benchmark import (
+    SAMPLES,
+    describe_error,
+    explain_score,
+    format_tokens,
+    recommend,
+)
+from rss_hub.domain.settings_rules import SettingError
 from rss_hub.services.model_benchmark import MAX_MODELS, BenchmarkRunner
-from rss_hub.services.model_chain import ModelChainService
+from rss_hub.services.model_chain import MAX_CHAIN, ModelChainService
 from rss_hub.services.model_scan import ModelScanService
-from rss_hub.services.settings import SettingsService
-from rss_hub.storage.models import RUN_RUNNING, ModelRepository
+from rss_hub.services.ports import LlmClient
+from rss_hub.services.settings import SETTING_BY_KEY, SettingsService
+from rss_hub.storage.models import (
+    CALL_FAILED,
+    CALL_OK,
+    CALL_SKIPPED,
+    RUN_RUNNING,
+    CallRecord,
+    ModelRepository,
+    RunInfo,
+)
+from rss_hub.web.setting_groups import keys_of, sections
+from rss_hub.web.ui import done
 
 CONFIRM_MESSAGE = "교체하려면 확인란을 선택해 주세요"
+DELETE_CONFIRM_MESSAGE = "삭제 확인이 필요합니다"
+
+
+def _cell(index: int, record: CallRecord | None, *, running: bool) -> dict[str, Any]:
+    """시험 글 하나의 칸. 기록이 없으면 대기, 지금 부르는 칸이면 진행 중이다."""
+    title = SAMPLES[index].title
+    if record is None:
+        return {
+            "n": index + 1,
+            "title": title,
+            "state": "running" if running else "pending",
+            "latency_ms": None,
+            "reason": "",
+            "detail": "",
+        }
+    info = describe_error(record.error) if record.state != CALL_OK else None
+    state = {CALL_OK: "ok", CALL_FAILED: "failed", CALL_SKIPPED: "skipped"}[record.state]
+    return {
+        "n": index + 1,
+        "title": title,
+        "state": state,
+        "latency_ms": record.latency_ms,
+        "reason": "" if info is None else info.label,
+        "detail": "" if info is None else info.explanation,
+    }
+
+
+def progress_view(run: RunInfo | None, calls: Sequence[CallRecord]) -> dict[str, Any]:
+    """진행 패널과 /models/benchmark/progress가 함께 쓰는 모양(모델마다 시험 글 칸)."""
+    if run is None:
+        return {"running": False, "status": "", "done": 0, "total": 0, "note": "", "models": []}
+    by_cell = {(c.model, c.index): c for c in calls}
+    running = run.status == RUN_RUNNING
+    marked = False  # 진행 중 칸은 전체에서 하나만
+    models = []
+    for model in run.models:
+        cells = []
+        for index in range(len(SAMPLES)):
+            record = by_cell.get((model, index))
+            current = running and record is None and not marked
+            marked = marked or current
+            cells.append(_cell(index, record, running=current))
+        models.append({"model": model, "cells": cells})
+    return {
+        "running": running,
+        "status": run.status,
+        "done": run.done,
+        "total": run.total,
+        "note": run.note,
+        "models": models,
+    }
 
 
 def build_model_router(
@@ -22,11 +94,20 @@ def build_model_router(
     chain: ModelChainService,
     settings: SettingsService,
     templates: Jinja2Templates,
+    llm_client: LlmClient,
 ) -> APIRouter:
     router = APIRouter()
+    limit_keys = keys_of("모델 체인과 호출 한도")
 
     def page(
-        request: Request, *, notice: str = "", error: str = "", status_code: int = 200
+        request: Request,
+        *,
+        notice: str = "",
+        error: str = "",
+        status_code: int = 200,
+        form_values: dict[str, str] | None = None,
+        errors: dict[str, str] | None = None,
+        test_result: tuple[str, str] | None = None,
     ) -> HTMLResponse:
         config = settings.snapshot()
         catalog = models.catalog()
@@ -34,13 +115,27 @@ def build_model_router(
         in_catalog = {e.id for e in catalog}
         scored = [score for model, (score, _) in scores.items() if model in in_catalog]
         run = models.latest_run()
+        explained = {
+            m: {
+                "explanation": explain_score(s),
+                "when": t.astimezone(config.timezone).strftime("%m-%d %H:%M"),
+            }
+            for m, (s, t) in scores.items()
+        }
         context = {
             "chain": config.model_chain,
-            "catalog": catalog,
-            "scores": {
-                m: (s, t.astimezone(config.timezone).strftime("%m-%d %H:%M"))
-                for m, (s, t) in scores.items()
-            },
+            "catalog": [
+                {
+                    "id": e.id,
+                    "context": format_tokens(e.context_length),
+                    "json": e.supports_json,
+                    "result": explained.get(e.id),
+                }
+                for e in catalog
+            ],
+            "chain_hints": {m: explained[m] for m in config.model_chain if m in explained},
+            "progress": progress_view(run, models.calls(run.id) if run else ()),
+            "max_chain": MAX_CHAIN,
             "recommendation": recommend(scored, config.model_chain) if scored else None,
             "run": run,
             "running": run is not None and run.status == RUN_RUNNING,
@@ -48,19 +143,76 @@ def build_model_router(
             "calls_per_model": len(SAMPLES),
             "notice": notice,
             "error": error,
+            "test_result": test_result,
+            "has_key": settings.has_openrouter_key(),
+            "chain_sections": [("", [SETTING_BY_KEY["model_chain"]])],
+            "limit_sections": [
+                ("", [d for d in sections("모델 체인과 호출 한도")[0][1] if d.key != "model_chain"])
+            ],
+            "values": {**settings.raw_values(), **(form_values or {})},
+            "errors": errors or {},
         }
         return templates.TemplateResponse(request, "models.html", context, status_code=status_code)
 
     @router.get("/models", response_class=HTMLResponse)
-    def model_page(request: Request, started: str = "", applied: str = "") -> HTMLResponse:
+    def model_page(
+        request: Request, started: str = "", applied: str = "", saved: str = ""
+    ) -> HTMLResponse:
         notice = (
-            "벤치마크를 시작했습니다. 이 화면은 5초마다 새로고침됩니다."
+            "벤치마크를 시작했습니다. 진행 상황은 아래 패널에서 바로 볼 수 있습니다."
             if started
             else "모델 체인을 바꿨습니다."
             if applied
+            else "저장했습니다"
+            if saved
             else ""
         )
         return page(request, notice=notice)
+
+    @router.get("/models/benchmark/progress")
+    def benchmark_progress() -> dict[str, Any]:
+        run = models.latest_run()
+        return progress_view(run, models.calls(run.id) if run else ())
+
+    @router.post("/models/settings", response_class=HTMLResponse)
+    async def save_limits(request: Request) -> Response:
+        form = await request.form()
+        submitted = {k: str(v) for k, v in form.items() if k in limit_keys}
+        result = settings.update(submitted)
+        if result.errors:
+            return page(request, status_code=400, form_values=submitted, errors=result.errors)
+        return done(form, "/models?saved=1", "saved")
+
+    @router.post("/settings/openrouter-key", response_class=HTMLResponse)
+    async def save_key(request: Request) -> Response:
+        form = await request.form()
+        try:
+            settings.set_openrouter_key(str(form.get("openrouter_key", "")))
+        except SettingError as error:
+            return page(request, error=error.message, status_code=400)
+        return done(form, "/models?saved=1", "saved")
+
+    @router.post("/settings/openrouter-key/delete", response_class=HTMLResponse)
+    async def delete_key(request: Request) -> Response:
+        form = await request.form()
+        if form.get("confirm") != "yes":
+            return page(request, error=DELETE_CONFIRM_MESSAGE, status_code=400)
+        settings.delete_openrouter_key()
+        return done(form, "/models?saved=1", "saved")
+
+    @router.post("/settings/openrouter-key/check", response_class=HTMLResponse)
+    async def check_key(request: Request) -> Response:
+        """키 정보만 조회한다(채팅 호출이 아니라서 호출 한도와 오늘 호출 수를 쓰지 않는다)."""
+        check = llm_client.check_key()
+        if check.valid:
+            usage_text = (
+                f" · 오늘 무료 모델 호출 {check.used}/{check.limit}"
+                if check.used is not None and check.limit is not None
+                else ""
+            )
+            return page(request, test_result=("ok", f"키가 유효합니다{usage_text}"))
+        kind = "error" if check.valid is False else "warn"
+        return page(request, test_result=(kind, check.reason))
 
     @router.post("/models/scan", response_class=HTMLResponse)
     async def scan(request: Request) -> Response:

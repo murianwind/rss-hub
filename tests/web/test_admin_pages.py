@@ -60,29 +60,52 @@ def test_app_starts_and_serves_pages_with_a_blank_database(client):
 
 
 def test_settings_page_shows_current_values_and_defaults(client, service):
-    service.update({"llm_daily_cap": "123"})
+    service.update({"slot_batch_size": "123"})
     html = client.get("/settings").text
-    assert 'name="llm_daily_cap"' in html and 'value="123"' in html
+    assert 'name="slot_batch_size"' in html and 'value="123"' in html
+    service.update({"llm_daily_cap": "123"})
+    models = client.get("/models").text
+    assert 'name="llm_daily_cap"' in models and 'value="123"' in models
     assert 'name="collect_interval_minutes"' in html and 'value="5"' in html
     assert 'name="service_timezone"' in html and "Asia/Seoul" in html
 
 
 def test_saving_valid_settings_redirects_and_persists(client, service):
-    response = post(client, "/settings", {"llm_daily_cap": "321", "summarize_batch": "7"})
+    response = post(client, "/settings", {"slot_batch_size": "321", "default_max_entries": "7"})
     assert response.status_code == 303
     assert response.headers["location"] == "/settings?saved=1"
-    assert service.snapshot().llm_daily_cap == 321
-    assert service.snapshot().summarize_batch == 7
+    assert service.snapshot().slot_batch_size == 321
+    assert service.snapshot().default_max_entries == 7
     assert "저장했습니다" in client.get("/settings?saved=1").text
 
 
+def test_the_model_and_alert_forms_save_and_return_to_their_own_screens(client, service):
+    models = post(client, "/models/settings", {"llm_daily_cap": "321", "summarize_batch": "7"})
+    assert (models.status_code, models.headers["location"]) == (303, "/models?saved=1")
+    alerts = post(client, "/discord/settings", {"alert_cooldown_hours": "9"})
+    assert (alerts.status_code, alerts.headers["location"]) == (303, "/discord?saved=1")
+    snapshot = service.snapshot()
+    assert (snapshot.llm_daily_cap, snapshot.summarize_batch) == (321, 7)
+    assert snapshot.alert_cooldown_hours == 9
+    assert "저장했습니다" in client.get("/models?saved=1").text
+    assert "저장했습니다" in client.get("/discord?saved=1").text
+
+
+def test_a_setting_posted_to_the_wrong_screen_is_ignored(client, service):
+    post(client, "/settings", {"llm_daily_cap": "321"})
+    post(client, "/models/settings", {"slot_batch_size": "321"})
+    assert (service.snapshot().llm_daily_cap, service.snapshot().slot_batch_size) == (700, 15)
+
+
 def test_invalid_settings_show_messages_keep_input_and_save_nothing(client, service):
-    response = post(client, "/settings", {"collect_interval_minutes": "7", "llm_daily_cap": "321"})
+    response = post(
+        client, "/settings", {"collect_interval_minutes": "7", "slot_batch_size": "321"}
+    )
     assert response.status_code == 400
     assert "60의 약수만 가능" in response.text
     assert 'value="7"' in response.text  # 입력한 값을 그대로 보여 준다
     assert service.snapshot().collect_interval_minutes == 5
-    assert service.snapshot().llm_daily_cap == 700
+    assert service.snapshot().slot_batch_size == 15
 
 
 def test_unknown_form_fields_are_ignored_not_stored(client, service):
@@ -95,7 +118,7 @@ def test_unknown_form_fields_are_ignored_not_stored(client, service):
 
 def test_html_special_characters_are_escaped(client, service):
     post(client, "/settings/webhooks", {"name": "<script>alert(1)</script>", "url": WEBHOOK})
-    html = client.get("/settings").text
+    html = client.get("/discord").text
     assert "<script>alert(1)</script>" not in html
     assert "&lt;script&gt;" in html
 
@@ -107,10 +130,10 @@ def test_saving_the_key_never_shows_it_again(client, service):
     response = post(client, "/settings/openrouter-key", {"openrouter_key": KEY})
     assert response.status_code == 303
     assert service.get_openrouter_key() == KEY
-    for path in ("/", "/settings"):
+    for path in ("/", "/settings", "/models"):
         html = client.get(path).text
         assert KEY not in html
-    assert "설정됨" in client.get("/settings").text
+    assert "설정됨" in client.get("/models").text
 
 
 def test_blank_key_is_rejected_and_old_key_stays(client, service):
@@ -134,7 +157,7 @@ def test_deleting_the_key_requires_confirmation(client, service):
 def test_adding_a_webhook_shows_only_its_name(client, service):
     response = post(client, "/settings/webhooks", {"name": "dev", "url": WEBHOOK})
     assert response.status_code == 303
-    html = client.get("/settings").text
+    html = client.get("/discord").text
     assert "dev" in html
     assert "abcDEF" not in html and "discord.com/api/webhooks" not in html
     assert service.list_webhooks()[0].name == "dev"
@@ -242,7 +265,7 @@ def test_accepting_the_suggestion_saves_it(client, service):
 def test_history_shows_changes_without_secrets(client, service):
     post(client, "/settings", {"service_base_url": BASE})
     post(client, "/settings/openrouter-key", {"openrouter_key": KEY})
-    html = client.get("/settings").text
+    html = client.get("/status").text
     assert "서비스 주소 변경" in html
     assert "OpenRouter 키 변경됨" in html
     assert KEY not in html

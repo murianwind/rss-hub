@@ -1,0 +1,24 @@
+{# 설정 계열 화면이 함께 쓰는 조각: 상위 화면으로 가는 링크, 설정 입력 칸, 설정 양식 #}
+{% macro back_link(href, label) %}<p class="back-row"><a class="back-link" href="{{ href }}">← {{ label }}</a></p>{% endmacro %}
+
+{% macro setting_field(d, values, errors) %}
+<div class="field{% if d.key == 'model_chain' %} wide{% endif %}">
+  <label for="{{ d.key }}">{{ d.label }}</label>
+  {% if d.help %}<p class="hint" id="help-{{ d.key }}">{{ d.help }}</p>{% endif %}
+  {% if d.choices %}<select id="{{ d.key }}" name="{{ d.key }}" aria-describedby="help-{{ d.key }}">{% for value, name in d.choices %}<option value="{{ value }}" {% if values[d.key] == value %}selected{% endif %}>{{ name }}</option>{% endfor %}</select>
+  {% else %}<input type="text" id="{{ d.key }}" name="{{ d.key }}" value="{{ values[d.key] }}" autocomplete="off" aria-describedby="help-{{ d.key }}">{% endif %}
+  {% if errors.get(d.key) %}<p class="error">{{ errors[d.key] }}</p>{% endif %}
+</div>
+{% endmacro %}
+
+{# 설정 값 여러 개를 한 번에 저장하는 양식. sections: [(소제목 또는 '', [SettingDef])] #}
+{% macro settings_form(action, next_url, sections, values, errors) %}
+<form method="post" action="{{ action }}">
+  <input type="hidden" name="next" value="{{ next_url }}">
+  {% for title, defs in sections %}
+  {% if title %}<h3 class="acc-sub">{{ title }}</h3>{% endif %}
+  <div class="fields-grid">{% for d in defs %}{{ setting_field(d, values, errors) }}{% endfor %}</div>
+  {% endfor %}
+  <div class="form-actions"><button type="submit" class="primary">저장</button></div>
+</form>
+{% endmacro %}

@@ -26,6 +26,8 @@ from rss_hub.services.ports import LlmErrorKind
 from rss_hub.storage.models import RUN_DONE, RUN_FAILED, ModelRepository
 
 PACE_SECONDS = 4.5  # 호출 사이 간격(분당 13회 이하)
+RATE_LIMIT_STREAK = 2  # 한도 초과가 이만큼 연달아 나오면 그 모델은 미룬다
+RETRY_WAIT_SECONDS = 60.0  # 미룬 모델을 다시 시험하기 전에 한도가 풀리기를 기다리는 시간
 MAX_MODELS = 5
 
 
@@ -37,6 +39,18 @@ ACCOUNT_PROBLEMS = {
 
 class AccountProblem(Exception):
     """키 거부나 잔액 부족처럼 모든 모델에 똑같이 일어나는 문제. 더 호출해도 소용이 없다."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+
+class _Deferred(Exception):
+    """한도 초과가 연달아 나와서 이 모델의 시험을 뒤로 미룬다."""
+
+
+class _Stop(Exception):
+    """더 시험할 수 없는 이유(한도, 키, 잔액). message는 화면에 그대로 보여 준다."""
 
     def __init__(self, message: str) -> None:
         super().__init__(message)
@@ -58,35 +72,85 @@ class BenchmarkService:
         sleep: Callable[[float], None] = time.sleep,
         monotonic: Callable[[], float] = time.monotonic,
         pace_seconds: float = PACE_SECONDS,
+        retry_wait_seconds: float = RETRY_WAIT_SECONDS,
     ) -> None:
         self._gateway = gateway
         self._models = models
         self._sleep = sleep
         self._monotonic = monotonic
         self._pace = pace_seconds
+        self._retry_wait = retry_wait_seconds
+        self._calls_made = 0
+        self._peak = 0
 
     def run(self, run_id: int, model_ids: Sequence[str]) -> BenchOutcome:
-        scores: list[ModelScore] = []
-        done = 0
-        for model in model_ids:
-            results: list[CallResult] = []
-            for index, sample in enumerate(SAMPLES):
+        """모델을 차례로 시험한다. 한도 초과가 연달아 나오면 미뤘다가 한 번만 다시 시험한다."""
+        self._calls_made = 0
+        self._peak = 0
+        scores: dict[str, ModelScore] = {}
+        deferred: list[str] = []
+        stopped = ""
+        try:
+            for model in model_ids:
                 try:
-                    results.append(self._one(model, sample))
-                except BudgetBlocked:
-                    return BenchOutcome(tuple(scores), "오늘 LLM 호출 한도에 도달해서 멈췄습니다")
-                except LlmNotConfigured:
-                    return BenchOutcome(tuple(scores), "OpenRouter 키가 설정되지 않았습니다")
-                except AccountProblem as problem:
-                    return BenchOutcome(tuple(scores), problem.message)
-                done += 1
-                self._models.advance(run_id, done)
-                if not (model == model_ids[-1] and index == len(SAMPLES) - 1):
-                    self._sleep(self._pace)
-            score = score_model(model, results)
-            self._models.save_score(run_id, score)
-            scores.append(score)
-        return BenchOutcome(tuple(scores))
+                    scores[model] = self._run_model(run_id, model, retry=False)
+                except _Deferred:
+                    deferred.append(model)
+            if deferred:
+                self._sleep(self._retry_wait)  # 한도가 풀리기를 기다린 뒤 한 번만 다시 시험한다
+            for model in deferred:
+                self._models.clear_calls(run_id, model)
+                scores[model] = self._run_model(run_id, model, retry=True)
+        except _Stop as stop:
+            stopped = stop.message
+        return BenchOutcome(tuple(scores[m] for m in model_ids if m in scores), stopped)
+
+    def _run_model(self, run_id: int, model: str, *, retry: bool) -> ModelScore:
+        """한 모델의 시험 글을 모두 보낸다. 한도 초과가 연달아 나오면 첫 시험에서는 미룬다."""
+        results: list[CallResult] = []
+        for index, sample in enumerate(SAMPLES):
+            if self._limited_in_a_row(results):
+                if not retry:
+                    raise _Deferred
+                self._skip_rest(run_id, model, index)  # 다시 시험해도 같으면 호출하지 않는다
+                break
+            if self._calls_made:
+                self._sleep(self._pace)
+            self._calls_made += 1
+            result = self._attempt(model, sample)
+            results.append(result)
+            self._models.save_call(run_id, model, index, sample.title, result)
+            self._progress(run_id)
+        score = score_model(model, results)
+        self._models.save_score(run_id, score)
+        return score
+
+    def _skip_rest(self, run_id: int, model: str, first: int) -> None:
+        for index in range(first, len(SAMPLES)):
+            reason = LlmErrorKind.RATE_LIMITED.value
+            self._models.save_skipped(run_id, model, index, SAMPLES[index].title, reason)
+            self._progress(run_id)
+
+    @staticmethod
+    def _limited_in_a_row(results: Sequence[CallResult]) -> bool:
+        tail = results[-RATE_LIMIT_STREAK:]
+        return len(tail) == RATE_LIMIT_STREAK and all(
+            r.error == LlmErrorKind.RATE_LIMITED.value for r in tail
+        )
+
+    def _progress(self, run_id: int) -> None:
+        self._peak = max(self._peak, len(self._models.calls(run_id)))  # 다시 시험해도 줄지 않게
+        self._models.advance(run_id, self._peak)
+
+    def _attempt(self, model: str, sample: BenchSample) -> CallResult:
+        try:
+            return self._one(model, sample)
+        except BudgetBlocked as blocked:
+            raise _Stop("오늘 LLM 호출 한도에 도달해서 멈췄습니다") from blocked
+        except LlmNotConfigured as missing:
+            raise _Stop("OpenRouter 키가 설정되지 않았습니다") from missing
+        except AccountProblem as problem:
+            raise _Stop(problem.message) from problem
 
     def _one(self, model: str, sample: BenchSample) -> CallResult:
         prompt = build_summary_prompt(sample.title, summary_excerpt(sample.content), [BENCH_TOPIC])
@@ -145,7 +209,7 @@ class BenchmarkRunner:
             return StartResult("invalid", message="목록에 없는 모델이 있습니다. 먼저 스캔하세요")
         if self._models.running_run() is not None:
             return StartResult("busy", message="이미 벤치마크가 실행 중입니다")
-        run_id = self._models.start_run(len(chosen) * len(SAMPLES))
+        run_id = self._models.start_run(len(chosen) * len(SAMPLES), chosen)
         self._spawn(lambda: self._execute(run_id, chosen))
         return StartResult("started", run_id)
 

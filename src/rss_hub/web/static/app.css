@@ -449,3 +449,65 @@ input[readonly] { background: var(--panel); color: var(--muted); cursor: default
 .cand-title { display: block; font-weight: 700; overflow-wrap: anywhere; }
 .cand-url { display: block; margin-top: 2px; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 .candidate .cand-head { margin: 0 0 4px; }
+
+/* ---------- 설정 계열 화면(설정, Discord, 모델, 백업·복원) ---------- */
+.settings-page button, .settings-page .button { min-height: 34px; padding: 3px 12px; font-size: 13px; }
+.settings-page .field { margin-bottom: 10px; }
+.settings-page .field > .hint { margin: 0 0 4px; }
+.settings-page .field label { font-weight: 600; font-size: 14px; }
+.settings-page .panel { padding: 10px 12px; }
+.fields-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0 18px; }
+.fields-grid .field { display: flex; flex-direction: column; }
+.fields-grid .field > :is(input, select) { margin-top: auto; }
+.fields-grid .field.wide { grid-column: 1 / -1; }
+.form-actions { display: flex; justify-content: flex-end; gap: 8px; margin: 2px 0 10px; }
+.inline-fields { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: flex-end; }
+.inline-fields .field { flex: 1 1 200px; margin-bottom: 0; display: flex; flex-direction: column; }
+.inline-fields .field.grow { flex-grow: 2; flex-basis: 280px; }
+.inline-fields .field > :is(input, select) { margin-top: auto; }
+.inline-fields .btn-cell { display: flex; gap: 6px; }
+.wh-list { list-style: none; margin: 0 0 10px; padding: 0; border: 1px solid var(--line); border-radius: 8px; }
+.wh-row { display: flex; align-items: center; gap: 8px; padding: 4px 10px; min-height: 40px; border-bottom: 1px solid var(--line-soft); }
+.wh-row:last-child { border-bottom: 0; }
+.wh-row .wh-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.wh-row form { margin: 0; }
+.key-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.key-row .field { flex: 1 1 220px; margin: 0; }
+.key-row form { margin: 0; display: contents; }
+.back-row { margin: 0 0 8px; }
+.back-link { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--accent); text-decoration: none; }
+.back-link:hover { text-decoration: underline; }
+@media (max-width: 560px) { .inline-fields .btn-cell { width: 100%; } .inline-fields .btn-cell button { flex: 1; } .form-actions { justify-content: stretch; } .form-actions button { flex: 1; } }
+
+/* ---------- 모델 화면: 체인 편집, 벤치마크 진행, 점수 풀이 ---------- */
+.chain-list { list-style: none; margin: 0 0 8px; padding: 6px; min-height: 48px; border: 2px dashed var(--line); border-radius: 8px; counter-reset: none; }
+.chain-list.drop-over, .model-list.drop-over { border-color: var(--accent); background: var(--accent-soft); }
+.chain-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; margin: 4px 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; cursor: grab; }
+.chain-item.dragging, .model-row.dragging { opacity: 0.4; }
+.chain-item code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chain-rank { min-width: 20px; text-align: center; font-weight: 700; color: var(--accent); }
+.chain-tools { display: flex; gap: 4px; }
+.chain-tools button { min-height: 28px; padding: 0 8px; }
+.model-list { border: 2px dashed transparent; border-radius: 8px; }
+.model-row { display: flex; align-items: flex-start; gap: 8px; cursor: grab; }
+.model-row .check-row { min-height: 0; padding-top: 2px; }
+.model-body { flex: 1; min-width: 0; }
+.model-title code { word-break: break-all; }
+.score-line { margin-top: 2px; }
+.fail-lines { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
+.badge.warn { border-color: var(--error); color: var(--error); }
+.legend summary { cursor: pointer; font-weight: 600; }
+.legend ul { margin: 8px 0 0; padding-left: 18px; font-size: 13px; }
+.bench-bar { width: 100%; height: 10px; margin: 4px 0 8px; }
+.bench-model { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0; }
+.bench-model code { min-width: 0; word-break: break-all; }
+.bench-cells { display: inline-flex; gap: 4px; }
+.cell { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 26px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--line); font-size: 12px; background: var(--panel); color: var(--muted); }
+.cell-ok { background: #d9f2e1; border-color: #2e9d57; color: #14532d; }
+.cell-failed { background: #fde2e2; border-color: var(--error); color: var(--error); }
+.cell-running { border-color: var(--accent); color: var(--accent); animation: cell-pulse 1s ease-in-out infinite; }
+.cell-skipped { border-style: dashed; text-decoration: line-through; opacity: 0.7; }
+@keyframes cell-pulse { 50% { opacity: 0.4; } }
+@media (prefers-reduced-motion: reduce) { .cell-running { animation: none; } }
+:root[data-theme="dark"] .cell-ok { background: #123a24; color: #9be0b5; }
+:root[data-theme="dark"] .cell-failed { background: #4a1d1d; }

@@ -1,6 +1,8 @@
 {% extends "base.html" %}
+{% from "_ui.html" import back_link %}
 {% block title %}피드 가져오기 · RSS Hub{% endblock %}
 {% block content %}
+{{ back_link('/feeds', '피드 관리로') }}
 <h1>피드 가져오기</h1>
 
 {% if notice %}<div class="banner" role="status">{{ notice }}</div>{% endif %}

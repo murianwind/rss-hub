@@ -216,7 +216,6 @@ def create_app(
             usage=LlmUsageRepository(database, app_clock),
             clock=app_clock,
             sender=sender,
-            llm_client=client,
         )
     )
     app.include_router(build_article_router(articles))
@@ -244,6 +243,7 @@ def create_app(
             chain=ModelChainService(settings=service, models=models, alerts=llm.alerts),
             settings=service,
             templates=templates,
+            llm_client=client,
         )
     )
     app.include_router(build_feedback_router(topics=topics, articles=articles, templates=templates))

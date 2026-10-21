@@ -136,14 +136,16 @@ def _saved_secrets(env, caplog):
 
 @when("설정 화면과 설정 API 응답을 확인한다")
 def _view_everything(env):
-    env.pages = {path: env.client.get(path).text for path in ("/", "/settings", "/healthz")}
+    env.pages = {
+        path: env.client.get(path).text
+        for path in ("/", "/settings", "/discord", "/models", "/healthz")
+    }
 
 
 @then('각 항목은 "설정됨"으로만 표시된다')
 def _shown_as_set(env):
-    settings = env.pages["/settings"]
-    assert "설정됨" in settings
-    assert "dev" in settings  # 웹훅은 이름만 보인다
+    assert "설정됨" in env.pages["/models"]
+    assert "dev" in env.pages["/discord"]  # 웹훅은 이름만 보인다
 
 
 @then("키와 웹훅 주소의 값은 어디에도 없다")
@@ -241,7 +243,7 @@ def _history(env):
     assert any(s.startswith("서비스 주소 변경") for s in summaries)
     assert "OpenRouter 키 변경됨" in summaries
     assert all(e.changed_at is not None for e in env.service.audit_log())
-    assert "서비스 주소 변경" in env.pages["settings"]
+    assert "서비스 주소 변경" in env.client.get("/status").text
 
 
 @then("이력에는 이전 키 값도 새 키 값도 없다")

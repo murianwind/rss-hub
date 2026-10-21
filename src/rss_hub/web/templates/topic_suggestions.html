@@ -1,13 +1,15 @@
 {% extends "base.html" %}
+{% from "_ui.html" import back_link %}
 {% block title %}{{ topic.name }} 키워드 개선 · RSS Hub{% endblock %}
 {% block content %}
+{{ back_link('/topics', '주제 관리로') }}
 <h1>{{ topic.name }}: 키워드 개선 제안</h1>
 {% if notice %}<div class="banner" role="status">{{ notice }}</div>{% endif %}
 {% if error %}<div class="banner error" role="alert">{{ error }}</div>{% endif %}
 
 <p class="note">글 페이지에서 누른 "주제로"와 "싫어요"를 근거로 한 제안입니다. 제안은 참고용이고, 아래 버튼을 눌러 승인할 때만 키워드가 바뀝니다.</p>
 <p><strong>지금 키워드:</strong> {{ topic.keywords | join(', ') if topic.keywords else '없음(LLM만으로 판단)' }}</p>
-<p class="hint">직접 넣은 글 {{ manual | length }}개 · 싫어요로 뺀 글 {{ rejected | length }}개 · <a href="/topics">주제 화면으로</a></p>
+<p class="hint">직접 넣은 글 {{ manual | length }}개 · 싫어요로 뺀 글 {{ rejected | length }}개</p>
 
 <h2>키워드에 추가하면 좋을 단어</h2>
 {% if additions %}

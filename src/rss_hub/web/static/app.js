@@ -737,3 +737,244 @@
     }
   }
 })();
+
+/* ---------- 모델 화면: 체인 편집(끌어다 놓기)과 벤치마크 진행 ---------- */
+(function () {
+  "use strict";
+
+  function make(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  // ---- 체인 편집 ----
+  var editor = document.querySelector("[data-chain-editor]");
+  if (editor) {
+    var list = editor.querySelector("[data-chain-list]");
+    var max = parseInt(editor.getAttribute("data-max"), 10) || 5;
+    var original = (list.getAttribute("data-original") || "").split(",").filter(Boolean);
+    var empty = editor.querySelector("[data-chain-empty]");
+    var state = editor.querySelector("[data-chain-state]");
+    var save = editor.querySelector("[data-chain-save]");
+    var reset = editor.querySelector("[data-chain-reset]");
+    var dragging = null;
+    var warning = "";
+
+    var names = function () {
+      return Array.prototype.map.call(list.children, function (item) {
+        return item.getAttribute("data-model");
+      });
+    };
+
+    var makeItem = function (model) {
+      var item = make("li", "chain-item");
+      item.setAttribute("draggable", "true");
+      item.setAttribute("data-model", model);
+      item.appendChild(make("span", "grip", "⋮⋮"));
+      item.appendChild(make("span", "chain-rank"));
+      item.appendChild(make("code", "", model));
+      var tools = make("span", "chain-tools");
+      [
+        ["data-chain-up", "▲", "앞으로", ""],
+        ["data-chain-down", "▼", "뒤로", ""],
+        ["data-chain-remove", "×", "체인에서 빼기", "danger"],
+      ].forEach(function (spec) {
+        var button = make("button", spec[3], spec[1]);
+        button.type = "button";
+        button.setAttribute(spec[0], "");
+        button.title = spec[2];
+        tools.appendChild(button);
+      });
+      item.appendChild(tools);
+      var field = document.createElement("input");
+      field.type = "hidden";
+      field.name = "chain";
+      field.value = model;
+      item.appendChild(field);
+      return item;
+    };
+
+    var refresh = function () {
+      var now = names();
+      Array.prototype.forEach.call(list.children, function (item, index) {
+        item.querySelector(".chain-rank").textContent = String(index + 1);
+      });
+      empty.hidden = now.length > 0;
+      var changed = now.join(",") !== original.join(",");
+      save.disabled = !changed || now.length < 1 || now.length > max;
+      reset.disabled = !changed;
+      state.textContent =
+        warning ||
+        (!changed ? "저장된 체인과 같습니다" : "변경됨: 저장해야 적용됩니다") +
+          " · " + now.length + "/" + max;
+      warning = "";
+      document.querySelectorAll(".model-row").forEach(function (row) {
+        var rank = now.indexOf(row.getAttribute("data-model"));
+        var badge = row.querySelector(".badge.chain-badge");
+        if (rank < 0 && badge) badge.remove();
+        if (rank >= 0) {
+          if (!badge) {
+            badge = make("span", "badge chain-badge");
+            row.querySelector(".model-title code").after(document.createTextNode(" "), badge);
+          }
+          badge.textContent = "체인 " + (rank + 1);
+        }
+      });
+    };
+
+    var place = function (model, index) {
+      var existing = Array.prototype.find.call(list.children, function (item) {
+        return item.getAttribute("data-model") === model;
+      });
+      if (!existing && list.children.length >= max) {
+        warning = "체인은 " + max + "개까지입니다";
+        return refresh();
+      }
+      var item = existing || makeItem(model);
+      var anchor = list.children[index] || null;
+      if (anchor !== item) list.insertBefore(item, anchor);
+      refresh();
+    };
+
+    var indexAt = function (clientY, skip) {
+      var items = Array.prototype.filter.call(list.children, function (item) {
+        return item !== skip;
+      });
+      var position = items.findIndex(function (item) {
+        var box = item.getBoundingClientRect();
+        return clientY < box.top + box.height / 2;
+      });
+      return position < 0 ? items.length : position;
+    };
+
+    var clearMarks = function () {
+      list.classList.remove("drop-over");
+      document.querySelectorAll(".model-list.drop-over").forEach(function (el) {
+        el.classList.remove("drop-over");
+      });
+    };
+
+    document.addEventListener("dragstart", function (event) {
+      var item = event.target.closest ? event.target.closest(".chain-item, .model-row") : null;
+      if (!item) return;
+      dragging = { model: item.getAttribute("data-model"), fromChain: item.classList.contains("chain-item"), el: item };
+      event.dataTransfer.effectAllowed = "copyMove";
+      event.dataTransfer.setData("text/plain", dragging.model);
+      window.setTimeout(function () { item.classList.add("dragging"); }, 0);
+    });
+
+    document.addEventListener("dragover", function (event) {
+      if (!dragging) return;
+      clearMarks();
+      if (event.target.closest("[data-chain-list]") || event.target.closest("[data-chain-editor]")) {
+        event.preventDefault();
+        list.classList.add("drop-over");
+      } else if (dragging.fromChain && event.target.closest(".model-list")) {
+        event.preventDefault();
+        event.target.closest(".model-list").classList.add("drop-over");
+      }
+    });
+
+    document.addEventListener("drop", function (event) {
+      if (!dragging) return;
+      clearMarks();
+      var inEditor = event.target.closest("[data-chain-editor]");
+      if (inEditor) {
+        event.preventDefault();
+        place(dragging.model, indexAt(event.clientY, dragging.fromChain ? dragging.el : null));
+      } else if (dragging.fromChain && event.target.closest(".model-list")) {
+        event.preventDefault();
+        dragging.el.remove();
+        refresh();
+      }
+    });
+
+    document.addEventListener("dragend", function () {
+      if (dragging) dragging.el.classList.remove("dragging");
+      dragging = null;
+      clearMarks();
+    });
+
+    document.addEventListener("click", function (event) {
+      var add = event.target.closest ? event.target.closest("[data-chain-add]") : null;
+      if (add) {
+        place(add.closest("[data-model]").getAttribute("data-model"), list.children.length);
+        return;
+      }
+      var item = event.target.closest ? event.target.closest(".chain-item") : null;
+      if (!item || !editor.contains(item)) return;
+      if (event.target.closest("[data-chain-remove]")) {
+        item.remove();
+      } else if (event.target.closest("[data-chain-up]") && item.previousElementSibling) {
+        list.insertBefore(item, item.previousElementSibling);
+      } else if (event.target.closest("[data-chain-down]") && item.nextElementSibling) {
+        list.insertBefore(item.nextElementSibling, item);
+      } else {
+        return;
+      }
+      refresh();
+    });
+
+    reset.addEventListener("click", function () {
+      while (list.firstChild) list.removeChild(list.firstChild);
+      original.forEach(function (model) { list.appendChild(makeItem(model)); });
+      refresh();
+    });
+
+    refresh();
+  }
+
+  // ---- 벤치마크 진행 ----
+  var panel = document.querySelector("[data-bench-progress]");
+  if (panel) {
+    var url = panel.getAttribute("data-url");
+    var wasRunning = panel.getAttribute("data-running") === "1";
+    var STATUS = { running: "실행 중", done: "완료", failed: "멈춤", interrupted: "중단됨" };
+
+    var render = function (data) {
+      panel.hidden = !data.models.length;
+      panel.querySelector("[data-bench-status]").textContent = STATUS[data.status] || "";
+      panel.querySelector("[data-bench-count]").textContent = data.done + "/" + data.total;
+      panel.querySelector("[data-bench-note]").textContent = data.note ? "· " + data.note : "";
+      var bar = panel.querySelector("[data-bench-bar]");
+      bar.max = data.total || 1;
+      bar.value = data.done;
+      var holder = panel.querySelector("[data-bench-models]");
+      while (holder.firstChild) holder.removeChild(holder.firstChild);
+      data.models.forEach(function (model) {
+        var row = make("div", "bench-model");
+        row.appendChild(make("code", "", model.model));
+        var cells = make("span", "bench-cells");
+        model.cells.forEach(function (cell) {
+          var node = make("span", "cell cell-" + cell.state, String(cell.n));
+          var tip = cell.n + ". " + cell.title;
+          if (cell.latency_ms) tip += " · " + (cell.latency_ms / 1000).toFixed(1) + "초";
+          if (cell.reason) tip += " · " + cell.reason + ": " + cell.detail;
+          node.title = tip;
+          cells.appendChild(node);
+        });
+        row.appendChild(cells);
+        holder.appendChild(row);
+      });
+    };
+
+    var poll = function () {
+      fetch(url, { headers: { Accept: "application/json" }, cache: "no-store" })
+        .then(function (response) { return response.json(); })
+        .then(function (data) {
+          render(data);
+          if (data.running) {
+            wasRunning = true;
+            window.setTimeout(poll, 1500);
+          } else if (wasRunning) {
+            window.setTimeout(function () { window.location.reload(); }, 800);
+          }
+        })
+        .catch(function () { window.setTimeout(poll, 4000); });
+    };
+
+    if (wasRunning) poll();
+  }
+})();

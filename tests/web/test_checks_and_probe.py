@@ -91,7 +91,7 @@ def test_an_unknown_webhook_sends_nothing(parts):
 
 def test_the_test_button_is_shown_next_to_every_webhook(parts):
     first, second = add_webhook(parts, "a"), add_webhook(parts, "b")
-    html = parts.client.get("/settings").text
+    html = parts.client.get("/discord").text
     assert (
         f'action="/settings/webhooks/{first}/test"' in html
         and f'action="/settings/webhooks/{second}/test"' in html
@@ -133,7 +133,7 @@ def test_an_unknown_result_is_a_neutral_banner_not_an_error(parts):
 
 def test_the_key_is_never_shown_and_the_check_button_needs_a_saved_key(parts):
     parts.settings.set_openrouter_key(KEY)
-    html = parts.client.get("/settings").text
+    html = parts.client.get("/models").text
     assert "openrouter-key/check" in html and KEY not in html
     assert KEY not in parts.client.post("/settings/openrouter-key/check").text
 
