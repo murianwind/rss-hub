@@ -3,6 +3,7 @@ import json
 import pytest
 
 from rss_hub.domain.backup import BackupError
+from rss_hub.domain.sanitize import sanitize_html
 from rss_hub.services.backup import BackupService
 from rss_hub.storage.backup import BackupRepository
 from tests.fakes.delivery_env import DeliveryEnv, webhook_url
@@ -184,3 +185,25 @@ def test_delivery_records_for_a_missing_webhook_are_skipped_not_fatal(env, servi
     result = service.restore(data)
     assert "ott" in result.unlinked_webhooks
     assert env.statuses(article_id) == {"rss:primary": "sent"}
+
+
+def test_a_stored_full_text_is_sanitized_again_so_a_tampered_file_cannot_inject_html(env, service):
+    article_id = env.add_ready_article()
+    saved = sanitize_html(
+        '<p>본문 <a href="https://example.com/x">링크</a></p><img src="https://e.com/a.png">'
+    )
+    env.articles.save_full_text(article_id, saved)
+    data = exported(service)
+    kept = env.articles.get(article_id).full_html
+
+    def tamper(document):
+        row = document["tables"]["articles"][0]
+        row["full_html"] = (
+            row["full_html"] + '<script>alert(1)</script><img src=x onerror="alert(2)">'
+        )
+
+    service.restore(edited(data, tamper))
+    restored = env.articles.get(article_id).full_html
+    assert "<script" not in restored and "onerror" not in restored
+    service.restore(data)
+    assert env.articles.get(article_id).full_html == kept  # 정상 파일은 그대로 돌아온다

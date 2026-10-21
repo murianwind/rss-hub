@@ -3,6 +3,7 @@
 from collections.abc import Iterator
 
 from rss_hub.domain.backup import BackupError, parse_backup
+from rss_hub.domain.sanitize import sanitize_html
 from rss_hub.domain.settings_rules import SettingError
 from rss_hub.services.clock import Clock
 from rss_hub.services.settings import ROLE_KEYS, SETTING_BY_KEY
@@ -31,6 +32,7 @@ class BackupService:
         """파일을 검사하고 현재 데이터를 그 내용으로 바꾼다. 올바르지 않으면 BackupError."""
         document = parse_backup(raw, max_schema_version=SCHEMA_VERSION)
         document["tables"]["settings"] = self._valid_settings(document["tables"]["settings"])
+        self._sanitize_full_texts(document["tables"]["articles"])
         return self._repository.restore(document, role_keys=ROLE_KEYS)
 
     @staticmethod
@@ -49,3 +51,12 @@ class BackupService:
                     raise BackupError("백업 파일의 설정 값이 올바르지 않습니다") from error
             kept.append({**row, "value": value})
         return kept
+
+    @staticmethod
+    def _sanitize_full_texts(rows: list[dict[str, object]]) -> None:
+        """전문은 화면에 그대로 싣는 HTML이라, 고쳐 쓴 파일이 섞이지 못하게 다시 정제한다."""
+        for row in rows:
+            html = row.get("full_html")
+            if isinstance(html, str):
+                link = row.get("link")
+                row["full_html"] = sanitize_html(html, link if isinstance(link, str) else "")
