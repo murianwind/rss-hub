@@ -36,11 +36,30 @@ curl http://localhost:8000/healthz
 
 `{"status":"ok", ...}`가 나오면 브라우저에서 <http://localhost:8000> 을 엽니다.
 
-미리 빌드된 이미지를 쓰려면 `compose.yaml`만으로 실행합니다(이미지는 GitHub Actions가 `ghcr.io/murianwind/rss-hub`에 게시합니다. 패키지가 비공개이면 로그인이 필요하므로 위의 직접 빌드를 쓰세요).
+### 스택으로 설치(Portainer, Docker Desktop)
 
+저장소를 받지 않고 스택 파일만으로 설치할 수 있습니다. 환경 변수는 필요 없습니다.
+
+```yaml
+name: rss-hub
+services:
+  rss-hub:
+    image: ghcr.io/murianwind/rss-hub:latest
+    pull_policy: always
+    container_name: rss-hub
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - rss-hub-data:/data
+volumes:
+  rss-hub-data:
 ```
-docker compose up -d
-```
+
+- **Portainer**: Stacks > Add stack > 이름 `rss-hub` > Web editor에 위 내용을 붙여넣고 Deploy the stack.
+- **Docker Desktop / 서버**: 위 내용을 `compose.yaml`로 저장하고 `docker compose up -d`.
+- 이미지는 GitHub Actions가 `ghcr.io/murianwind/rss-hub`에 게시합니다. 패키지가 비공개이면 먼저 로그인(Portainer는 Registries에 `ghcr.io` 추가)해야 하며, 로그인할 수 없으면 위의 직접 빌드를 쓰세요. 포크해서 쓴다면 소유자 이름을 바꾸세요.
+- 운영 중에는 `latest` 대신 `sha-xxxxxxx`나 버전 태그로 고정하는 것을 권장합니다.
 
 데이터(SQLite 데이터베이스와 설정)는 이름 있는 볼륨 `rss-hub-data`(컨테이너의 `/data`)에 저장되므로 컨테이너를 다시 만들어도 남습니다.
 
@@ -48,13 +67,22 @@ docker compose up -d
 
 **기본 웹훅과 서비스 주소를 설정하기 전에는 요약과 발송이 기다리기만 하고 아무것도 보내지 않습니다.** OpenRouter 키는 선택입니다.
 
-1. **환경 설정 > 설정**에서 *서비스 주소*를 입력합니다(접속하는 주소를 그대로 입력하면 후보로 제안됩니다).
+1. **환경 설정 > 설정**에서 *서비스 주소*를 입력합니다(접속하는 주소를 그대로 입력하면 후보로 제안됩니다). 아래 [서비스 주소](#서비스-주소-discord-링크가-열리려면)를 꼭 읽어 보세요.
 2. (선택) *OpenRouter 키*를 저장하고 **키 확인**을 눌러 확인합니다. 키는 저장한 뒤에는 다시 보이지 않습니다. 키가 없으면 아래 [키 없이 쓰기](#openrouter-키-없이-쓰기)대로 동작합니다.
 3. *웹훅*을 추가하고 **시험 전송**으로 채널에 메시지가 오는지 확인한 뒤, 기본 웹훅으로 지정합니다.
 4. 읽기 화면 사이드바의 **RSS 피드 옆 `+`**에 사이트 주소를 넣어 피드를 추가하거나(RSS가 없으면 웹페이지 구독 후보가 나옵니다), **환경 설정 > 피드 관리**에서 기존 구독 목록을 OPML 파일로 가져옵니다.
 5. (선택) **주제**를 만들어 키워드와 설명을 넣으면, 그 주제에 해당하는 글만 지정한 웹훅으로 따로 보냅니다.
 
 새로 구독한 피드의 첫 점검은 현재 글을 알림 없이 "이미 본 글"로만 기록합니다. 이후에 올라오는 글부터 알림이 갑니다. 서비스를 5분 슬롯(0, 5, 10분…)이 아닌 시각에 시작하면 첫 수집은 다음 슬롯까지 최대 5분 걸립니다.
+
+## 서비스 주소: Discord 링크가 열리려면
+
+Discord 알림의 링크는 설정한 *서비스 주소*로 만들어집니다. `http://192.168.0.10:8000`, `http://localhost:8000` 같은 **내부 주소로 설정하면 같은 네트워크 안에서만 열립니다.** 밖에서(모바일 데이터 등) 알림의 링크를 열려면 외부에서 접속할 수 있는 주소를 따로 마련하고 그 주소를 서비스 주소로 설정해야 합니다.
+
+- 도메인과 HTTPS를 쓰는 리버스 프록시(Nginx Proxy Manager 등)를 두고 서비스(8000번 포트)로 전달하게 한 뒤, `https://rss.example.com` 같은 주소를 서비스 주소로 설정합니다. 설정 방법은 [docs/deployment.md](docs/deployment.md#리버스-프록시nginx-proxy-manager)에 있습니다.
+- 또는 VPN(Tailscale 등)으로 밖에서도 내부 네트워크에 접속하게 하고, VPN 안에서 열리는 주소를 설정합니다.
+- 서비스 주소를 바꾸면 그 뒤에 보내는 알림부터 새 주소로 만들어집니다. 이미 보낸 알림의 링크는 바뀌지 않습니다.
+- 서비스 주소가 비어 있으면 발송이 보류됩니다.
 
 ## OpenRouter 키 없이 쓰기
 
@@ -98,52 +126,6 @@ docker compose -f compose.yaml -f compose.build.yaml up -d --build    # 직접 �
 |---|---|
 | [docs/deployment.md](docs/deployment.md) | 배포: 이미지 게시, 리버스 프록시(NPM), 업데이트와 백업, 문제 해결, 확인 목록 |
 | [docs/architecture.md](docs/architecture.md) | 구조: 계층, 잡, 데이터 흐름, 저장소, 보안 장치 |
-| [docs/testing.md](docs/testing.md) | 테스트: BDD 시나리오와 키워드 계층, 품질 게이트 |
-
-## 개발
-
-Python 3.12 이상이 필요합니다.
-
-```
-python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
-make check          # 린트 + 타입 + 데드코드 + 테스트
-make coverage       # 커버리지 보고
-```
-
-`make`가 없는 환경(Windows)에서는 Makefile의 명령을 그대로 실행하세요.
-
-내 PC에서 직접 실행해 보려면(데이터는 `./data`에 저장됩니다. 서비스는 환경 변수를 쓰지 않으므로 Docker 밖에서는 경로를 코드로 지정합니다):
-
-```
-python - <<'EOF'
-from pathlib import Path
-import uvicorn
-from rss_hub.runtime import build_runner
-from rss_hub.web.app import create_app
-
-uvicorn.run(create_app(data_dir=Path("data"), runner_factory=build_runner), port=8000)
-EOF
-```
-
-### 기여
-
-이슈와 풀 리퀘스트를 환영합니다. 변경은 [BDD 시나리오](features/)를 먼저 추가하거나 고치고, 시험이 통과하는 최소 구현을 더하는 순서로 해 주세요. `make check`가 통과해야 합니다(CI도 같은 검사를 하며 커버리지 95% 미만이면 실패합니다). 자세한 방법은 [docs/testing.md](docs/testing.md)에 있습니다.
-
-## 저장소 구성
-
-```
-src/rss_hub/
-  domain/      순수 규칙(스케줄, 키워드, 요약 검증, 본문 정제, URL 규칙 등)
-  storage/     SQLite 저장소와 마이그레이션
-  services/    수집, 요약, 발송, 설정, 모델 관리 같은 동작과 외부 연결 인터페이스(ports)
-  adapters/    HTTP 피드 수집기, OpenRouter 클라이언트, Discord 웹훅 전송기
-  jobs/        수집/요약/발송 잡을 주기에 맞춰 실행하는 스케줄러
-  web/         FastAPI 앱, 템플릿, 정적 파일
-features/      Gherkin 시나리오(행동 명세, 한국어)
-tests/         시험(키워드 계층 tests/keywords 포함)
-Dockerfile  compose.yaml  compose.build.yaml
-```
 
 ## 라이선스
 
