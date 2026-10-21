@@ -42,6 +42,7 @@ class SettingDef:
     default: str
     validate: Callable[[str], str]
     choices: tuple[tuple[str, str], ...] = ()  # (값, 이름). 있으면 선택 상자로 그린다
+    help: str = ""  # 입력 칸 아래에 보여 주는 한 줄 설명
 
 
 def _bounded(maximum: int) -> Callable[[str], str]:
@@ -74,70 +75,156 @@ def _base_url(raw: str) -> str:
 
 
 SETTING_DEFS: tuple[SettingDef, ...] = (
-    SettingDef("service_base_url", "서비스 주소", "", _base_url),
-    SettingDef("service_timezone", "서비스 시간대", "Asia/Seoul", validate_timezone),
     SettingDef(
-        "collect_interval_minutes", "수집 주기(분)", "5", lambda r: str(parse_collect_interval(r))
+        "service_base_url",
+        "서비스 주소",
+        "",
+        _base_url,
+        help="Discord 알림 속 링크가 열리는 주소. 밖에서도 열려면 외부 주소(도메인)를 넣으세요",
+    ),
+    SettingDef(
+        "service_timezone",
+        "서비스 시간대",
+        "Asia/Seoul",
+        validate_timezone,
+        help="알림 시각과 날짜를 계산하는 시간대(예: Asia/Seoul)",
+    ),
+    SettingDef(
+        "collect_interval_minutes",
+        "수집 주기(분)",
+        "5",
+        lambda r: str(parse_collect_interval(r)),
+        help="피드를 나눠 점검하는 간격(분). 60의 약수만 가능",
     ),
     SettingDef(
         "summarize_interval_seconds",
         "요약 주기(초)",
         "60",
         lambda r: str(parse_job_interval_seconds(r)),
+        help="새 글을 요약하러 가는 간격(10~3600초)",
     ),
     SettingDef(
         "deliver_interval_seconds",
         "발송 주기(초)",
         "60",
         lambda r: str(parse_job_interval_seconds(r)),
+        help="요약된 글을 Discord로 보내러 가는 간격(10~3600초)",
     ),
-    SettingDef("slot_batch_size", "슬롯 기본 배치 크기", "15", _bounded(1000)),
-    SettingDef("default_max_entries", "피드 기본 최대 검사 항목", "50", _bounded(500)),
+    SettingDef(
+        "slot_batch_size",
+        "슬롯 기본 배치 크기",
+        "15",
+        _bounded(1000),
+        help="한 번에 점검하는 피드 수의 기본값(1~1000)",
+    ),
+    SettingDef(
+        "default_max_entries",
+        "피드 기본 최대 검사 항목",
+        "50",
+        _bounded(500),
+        help="피드마다 한 번에 읽는 글 수의 기본값(1~500)",
+    ),
     SettingDef(
         "baseline_archive_count",
-        "첫 점검 때 보관할 최근 글 수(0이면 보관하지 않음)",
+        "첫 점검 때 보관할 최근 글 수",
         "5",
         _bounded_from_zero(20),
+        help="새 피드의 첫 점검 때 읽기 화면에만 남길 최근 글 수(0~20)",
     ),
     SettingDef(
         "topic_feedback_examples",
-        "요약 요청에 넣을 사용자 확인 예시 수(주제마다, 종류별, 0이면 넣지 않음)",
+        "요약 요청에 넣을 확인 예시 수",
         "0",
         _bounded_from_zero(5),
+        help="요약 요청에 참고로 넣을 확인된 예시 수(주제별, 0~5). 0이면 안 넣음",
     ),
-    SettingDef("ui_theme", "화면 테마", "system", _choice(THEME_CHOICES), THEME_CHOICES),
-    SettingDef("ui_font_size", "글자 크기", "normal", _choice(FONT_CHOICES), FONT_CHOICES),
+    SettingDef(
+        "ui_theme",
+        "화면 테마",
+        "system",
+        _choice(THEME_CHOICES),
+        THEME_CHOICES,
+        help="화면 밝기. 기기 설정을 따르거나 밝게, 어둡게로 고정",
+    ),
+    SettingDef(
+        "ui_font_size",
+        "글자 크기",
+        "normal",
+        _choice(FONT_CHOICES),
+        FONT_CHOICES,
+        help="읽기 화면의 글자 크기",
+    ),
     SettingDef(
         "ui_auto_read",
         "스크롤하면 자동으로 읽음 처리",
         "on",
         _choice(AUTO_READ_CHOICES),
         AUTO_READ_CHOICES,
+        help="글 목록에서 스크롤로 지나간 글을 읽음으로 표시",
     ),
     SettingDef(
         "article_retention_days",
-        "글 보관 기간(일, 0이면 계속 보관)",
+        "글 보관 기간(일)",
         "90",
         _bounded_from_zero(3650),
+        help="이 기간이 지난 글을 지움(0~3650일, 0이면 계속 보관). 북마크는 남김",
     ),
     SettingDef(
         "model_chain",
         "모델 체인",
         DEFAULT_MODEL_CHAIN,
         lambda r: ",".join(normalize_model_chain(r)),
+        help="요약에 쓸 모델을 쉼표로 구분. 앞에서부터 시도하고 실패하면 다음으로",
     ),
-    SettingDef("llm_daily_cap", "LLM 하루 상한", "700", _bounded(100_000)),
-    SettingDef("llm_warn_percent", "LLM 경고 비율(%)", "80", lambda r: str(parse_percent(r))),
-    SettingDef("llm_rpm_cap", "LLM 분당 상한", "15", _bounded(1000)),
+    SettingDef(
+        "llm_daily_cap",
+        "LLM 하루 상한",
+        "700",
+        _bounded(100_000),
+        help="하루에 부를 최대 LLM 호출 수. 넘으면 다음 날까지 요약을 멈춤",
+    ),
+    SettingDef(
+        "llm_warn_percent",
+        "LLM 경고 비율(%)",
+        "80",
+        lambda r: str(parse_percent(r)),
+        help="하루 상한의 이 비율(1~100%)에 닿으면 시스템 알림을 보냄",
+    ),
+    SettingDef(
+        "llm_rpm_cap",
+        "LLM 분당 상한",
+        "15",
+        _bounded(1000),
+        help="1분에 부를 최대 호출 수(OpenRouter 무료 한도에 맞춤)",
+    ),
     SettingDef(
         "llm_reserve_calls",
         "서버 남은 호출 예비분",
         "20",
         lambda r: str(parse_positive_int(r, minimum=0, maximum=1000)),
+        help="서버가 알려 준 남은 호출 수가 이 값 이하이면 요약을 멈춤",
     ),
-    SettingDef("llm_wait_limit_minutes", "장애 대기 허용(분)", "60", _bounded(1440)),
-    SettingDef("summarize_batch", "요약 묶음(글 수)", "5", _bounded(50)),
-    SettingDef("alert_cooldown_hours", "알림 쿨다운(시간)", "6", _bounded(168)),
+    SettingDef(
+        "llm_wait_limit_minutes",
+        "장애 대기 허용(분)",
+        "60",
+        _bounded(1440),
+        help="모델 장애가 이 시간(분) 넘게 이어지면 원문 발췌로 대신 보냄",
+    ),
+    SettingDef(
+        "summarize_batch",
+        "요약 묶음(글 수)",
+        "5",
+        _bounded(50),
+        help="요약 잡이 한 번에 처리하는 글 수(1~50)",
+    ),
+    SettingDef(
+        "alert_cooldown_hours",
+        "알림 쿨다운(시간)",
+        "6",
+        _bounded(168),
+        help="같은 시스템 알림을 다시 보내기까지 기다리는 시간(1~168시간)",
+    ),
 )
 SETTING_BY_KEY = {d.key: d for d in SETTING_DEFS}
 

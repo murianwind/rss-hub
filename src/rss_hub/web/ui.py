@@ -77,11 +77,18 @@ SETTINGS_ITEMS = (
     ("/settings", "설정"),
     ("/feeds", "피드 관리"),
     ("/topics", "주제 관리"),
+    ("/discord", "Discord"),
     ("/models", "모델"),
+    ("/backup", "백업·복원"),
     ("/status", "상태"),
 )
 # 같은 메뉴 항목으로 묶이는 화면들
-SETTINGS_ALIASES = {"/": "/status", "/import": "/feeds", "/categories": "/feeds"}
+SETTINGS_ALIASES = {
+    "/": "/status",
+    "/import": "/feeds",
+    "/categories": "/feeds",
+    "/backup/restore": "/backup",
+}
 
 _SAFE_PATH = re.compile(
     r"^/(?:reader(?:/(?:feed|category|topic)/\d+|/bookmarks)?|a/\d+|topics/\d+/suggestions)"
@@ -91,7 +98,8 @@ _SAFE_PATH = re.compile(
 
 _SAFE_RETURN = re.compile(
     r"^/(?:reader(?:/(?:feed|category|topic)/\d+|/bookmarks)?|a/\d+|topics/\d+/suggestions"
-    r"|settings(?:/(?:general|notifications|llm|display))?|feeds|topics|categories|models|status|import)"
+    r"|settings(?:/(?:general|notifications|llm|display))?|feeds|topics|categories|models"
+    r"|discord|backup|status|import)"
     r"(?:\?[0-9A-Za-z_=&%+.\-]{0,300})?$"
 )
 

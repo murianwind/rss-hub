@@ -449,3 +449,32 @@ input[readonly] { background: var(--panel); color: var(--muted); cursor: default
 .cand-title { display: block; font-weight: 700; overflow-wrap: anywhere; }
 .cand-url { display: block; margin-top: 2px; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 .candidate .cand-head { margin: 0 0 4px; }
+
+/* ---------- 설정 계열 화면(설정, Discord, 모델, 백업·복원) ---------- */
+.settings-page button, .settings-page .button { min-height: 34px; padding: 3px 12px; font-size: 13px; }
+.settings-page .field { margin-bottom: 10px; }
+.settings-page .field > .hint { margin: 0 0 4px; }
+.settings-page .field label { font-weight: 600; font-size: 14px; }
+.settings-page .panel { padding: 10px 12px; }
+.fields-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0 18px; }
+.fields-grid .field { display: flex; flex-direction: column; }
+.fields-grid .field > :is(input, select) { margin-top: auto; }
+.fields-grid .field.wide { grid-column: 1 / -1; }
+.form-actions { display: flex; justify-content: flex-end; gap: 8px; margin: 2px 0 10px; }
+.inline-fields { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: flex-end; }
+.inline-fields .field { flex: 1 1 200px; margin-bottom: 0; display: flex; flex-direction: column; }
+.inline-fields .field.grow { flex-grow: 2; flex-basis: 280px; }
+.inline-fields .field > :is(input, select) { margin-top: auto; }
+.inline-fields .btn-cell { display: flex; gap: 6px; }
+.wh-list { list-style: none; margin: 0 0 10px; padding: 0; border: 1px solid var(--line); border-radius: 8px; }
+.wh-row { display: flex; align-items: center; gap: 8px; padding: 4px 10px; min-height: 40px; border-bottom: 1px solid var(--line-soft); }
+.wh-row:last-child { border-bottom: 0; }
+.wh-row .wh-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.wh-row form { margin: 0; }
+.key-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.key-row .field { flex: 1 1 220px; margin: 0; }
+.key-row form { margin: 0; display: contents; }
+.back-row { margin: 0 0 8px; }
+.back-link { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--accent); text-decoration: none; }
+.back-link:hover { text-decoration: underline; }
+@media (max-width: 560px) { .inline-fields .btn-cell { width: 100%; } .inline-fields .btn-cell button { flex: 1; } .form-actions { justify-content: stretch; } .form-actions button { flex: 1; } }

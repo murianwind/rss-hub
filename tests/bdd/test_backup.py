@@ -147,9 +147,9 @@ def _restore_huge(world, ctx):
     )
 
 
-@when("설정 화면을 연다")
-def _settings_page(world, ctx):
-    ctx.response = world.get("/settings")
+@when("백업·복원 화면을 연다")
+def _backup_page(world, ctx):
+    ctx.response = world.get("/backup")
 
 
 @then("파일에 웹훅 주소와 OpenRouter 키는 없다")
@@ -237,9 +237,8 @@ def _too_large(ctx):
     assert ctx.response.status_code == 413
 
 
-@then('"백업과 복원" 항목에 내려받기 링크와 파일 올리기 양식이 있다')
-def _settings_section(ctx):
+@then("내려받기 링크와 파일 올리기 양식이 있다")
+def _backup_screen(ctx):
     html = ctx.response.text
-    assert "백업과 복원" in html
     assert 'href="/backup/export"' in html
     assert 'action="/backup/restore"' in html and 'type="file"' in html

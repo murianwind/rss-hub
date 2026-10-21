@@ -290,11 +290,10 @@ def section(html, acc_id):
 def test_the_settings_are_one_page_of_accordions_in_a_logical_order(world):
     html = world.get("/settings").text
     ids = re.findall(r'<details class="acc" id="acc-(\w+)"', html)
-    assert ids == ["general", "collect", "llm", "alerts", "display", "audit", "backup"]
+    assert ids == ["general", "collect", "display"]
     titles = re.findall(r"<summary><span>(\d)\. ([^<]+)</span>", html)
-    assert [n for n, _ in titles] == ["1", "2", "3", "4", "5", "6", "7"]
-    assert "서비스 주소" in titles[0][1] and "변경 이력" in titles[-2][1]
-    assert "백업과 복원" in titles[-1][1]
+    assert [n for n, _ in titles] == ["1", "2", "3"]
+    assert "서비스 주소" in titles[0][1] and "화면" in titles[-1][1]
 
 
 def test_only_the_first_section_starts_open(world):
@@ -313,23 +312,10 @@ def test_each_section_holds_its_own_settings(world):
         and "article_retention_days" in collect
         and "자동으로 정해집니다" in collect
     )
-    llm = section(html, "llm")
-    assert (
-        "OpenRouter 키" in llm
-        and "model_chain" in llm
-        and "llm_daily_cap" in llm
-        and 'href="/models"' in llm
-    )
-    alerts = section(html, "alerts")
-    assert (
-        "Discord 웹훅" in alerts
-        and "alert_cooldown_hours" in alerts
-        and 'action="/settings/webhooks"' in alerts
-    )
     display = section(html, "display")
     for key in ("ui_theme", "ui_font_size", "ui_auto_read"):
         assert f'id="{key}"' in display
-    assert "service_timezone" not in llm and "ui_theme" not in alerts
+    assert "service_timezone" not in display and "ui_theme" not in collect
 
 
 def test_every_form_on_the_page_returns_to_the_settings_page(world):
@@ -349,25 +335,31 @@ def test_saving_a_section_returns_with_a_toast(world):
     for data in (
         {"service_timezone": "Asia/Seoul"},
         {"ui_theme": "dark"},
-        {"llm_daily_cap": "900"},
-        {"alert_cooldown_hours": "3"},
         {"ui_auto_read": "off"},
     ):
         response = post(world, "/settings", next="/settings", **data)
         assert response.headers["location"] == "/settings?toast=saved", data
     assert "저장했습니다." in world.get("/settings?toast=saved").text
+    for path, data in (
+        ("/models/settings", {"llm_daily_cap": "900"}),
+        ("/discord/settings", {"alert_cooldown_hours": "3"}),
+    ):
+        page = path.removesuffix("/settings")
+        response = post(world, path, next=page, **data)
+        assert response.headers["location"] == f"{page}?toast=saved", path
+        assert "저장했습니다." in world.get(f"{page}?toast=saved").text
 
 
-def test_webhook_and_key_forms_return_to_the_settings_page(world):
-    added = post(world, "/settings/webhooks", name="새 웹훅", url=WEBHOOK, next="/settings")
-    assert added.headers["location"] == "/settings?toast=saved"
+def test_webhook_and_key_forms_return_to_their_own_screens(world):
+    added = post(world, "/settings/webhooks", name="새 웹훅", url=WEBHOOK, next="/discord")
+    assert added.headers["location"] == "/discord?toast=saved"
     saved = post(
         world,
         "/settings/openrouter-key",
         openrouter_key="sk-or-v1-abcdefghijklmnop",
-        next="/settings",
+        next="/models",
     )
-    assert saved.headers["location"] == "/settings?toast=saved"
+    assert saved.headers["location"] == "/models?toast=saved"
 
 
 def test_an_error_opens_the_section_it_belongs_to(world):
@@ -382,10 +374,9 @@ def test_an_error_opens_the_section_it_belongs_to(world):
         "/settings/webhooks",
         name="x",
         url="https://not-discord.example.com/",
-        next="/settings",
+        next="/discord",
     )
-    assert bad_url.status_code == 400
-    assert "alerts" in re.findall(r'<details class="acc" id="acc-(\w+)" open>', bad_url.text)
+    assert bad_url.status_code == 400 and "Discord 웹훅 주소가 아님" in bad_url.text
 
 
 def test_the_old_tab_addresses_are_gone(world):
@@ -394,12 +385,12 @@ def test_the_old_tab_addresses_are_gone(world):
     assert world.get("/settings/webhooks").status_code == 405
 
 
-def test_there_is_no_top_navigation_only_the_sidebar_menu_with_five_items(world):
+def test_there_is_no_top_navigation_only_the_sidebar_menu_with_seven_items(world):
     for path in ("/settings", "/feeds", "/topics", "/status", "/models"):
         assert 'class="tabs"' not in world.get(path).text
     menu = world.get("/settings").text.split('id="sec-settings"')[1].split("</details>")[0]
     links = [h for h in re.findall(r'href="([^"]+)"', menu) if h.startswith("/")]
-    assert links == ["/settings", "/feeds", "/topics", "/models", "/status"]
+    assert links == ["/settings", "/feeds", "/topics", "/discord", "/models", "/backup", "/status"]
     assert "피드 관리" in menu
 
 

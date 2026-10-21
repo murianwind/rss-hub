@@ -42,6 +42,15 @@
 <p class="note">아래 항목은 <a href="/settings">설정 화면</a>에서 채워 주세요.</p>
 {% endif %}
 
+<h2>변경 이력</h2>
+{% if audit %}
+<ul class="history">
+  {% for e in audit %}<li><time>{{ e.time }}</time>{{ e.summary }}</li>{% endfor %}
+</ul>
+{% else %}
+<p class="note">아직 변경한 내용이 없습니다.</p>
+{% endif %}
+
 <div class="panel">
   <p class="note">버전 {{ version }}</p>
 </div>

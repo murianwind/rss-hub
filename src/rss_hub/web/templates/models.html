@@ -1,10 +1,44 @@
 {% extends "base.html" %}
+{% from "_ui.html" import settings_form %}
 {% block title %}모델 · RSS Hub{% endblock %}
 {% block content %}
+<div class="settings-page">
 {% if running %}<meta http-equiv="refresh" content="5">{% endif %}
 <h1>모델</h1>
 {% if notice %}<div class="banner" role="status">{{ notice }}</div>{% endif %}
+{% if test_result %}<div class="banner {{ 'error' if test_result[0] == 'error' else '' }}" role="status">{{ test_result[1] }}</div>{% endif %}
 {% if error %}<div class="banner error" role="alert">{{ error }}</div>{% endif %}
+
+<h2>OpenRouter 키</h2>
+<div class="panel">
+  <p class="note">요약과 주제 판별에 쓰는 OpenRouter 무료 모델을 부르는 키입니다. 없어도 동작하지만 번역과 요약 없이 원문 제목과 링크만 알립니다. 상태: <strong>{{ '설정됨' if has_key else '미설정' }}</strong> <span class="hint">(저장한 뒤에는 값을 다시 보여 주지 않습니다)</span></p>
+  <div class="key-row">
+    <form method="post" action="/settings/openrouter-key" class="key-row">
+      <input type="hidden" name="next" value="/models">
+      <div class="field">
+        <label for="openrouter_key">새 키</label>
+        <input type="password" id="openrouter_key" name="openrouter_key" autocomplete="off" placeholder="sk-or-...">
+      </div>
+      <button type="submit" class="primary">저장</button>
+    </form>
+    {% if has_key %}
+    <form method="post" action="/settings/openrouter-key/check">
+      <input type="hidden" name="next" value="/models">
+      <button type="submit">확인</button>
+    </form>
+    <form method="post" action="/settings/openrouter-key/delete" data-confirm="OpenRouter 키를 삭제합니다. 키를 다시 넣기 전까지 요약과 주제 판정이 멈춥니다. 삭제할까요?">
+      <input type="hidden" name="next" value="/models">
+      <input type="hidden" name="confirm" value="yes">
+      <button type="submit" class="danger">삭제</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<h2>모델 체인과 호출 한도</h2>
+<div class="panel">
+{{ settings_form('/models/settings', '/models', sections, values, errors) }}
+</div>
 
 <h2>지금 쓰는 모델 체인</h2>
 <p class="note">앞에서부터 차례로 시도하고, 실패하면 다음 모델로 넘어갑니다.</p>
@@ -61,4 +95,5 @@
   {% else %}<p class="hint">{{ recommendation.reason }}</p>{% endif %}
 </div>
 {% endif %}
+</div>
 {% endblock %}

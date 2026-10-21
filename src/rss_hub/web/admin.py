@@ -1,4 +1,4 @@
-"""관리 화면: 상태, 설정. 서버에서 HTML을 만든다(스크립트 없음)."""
+"""관리 화면: 상태, 설정, Discord. 서버에서 HTML을 만든다(스크립트 없음)."""
 
 import re
 from datetime import datetime, tzinfo
@@ -11,60 +11,18 @@ from fastapi.templating import Jinja2Templates
 from rss_hub.domain.delivery import describe_send_failure
 from rss_hub.domain.settings_rules import SettingError, normalize_base_url
 from rss_hub.services.clock import Clock
-from rss_hub.services.ports import LlmClient, WebhookSender
-from rss_hub.services.settings import SETTING_BY_KEY, SETTING_DEFS, SettingsService
+from rss_hub.services.ports import WebhookSender
+from rss_hub.services.settings import SettingsService
 from rss_hub.storage.articles import STATUS_COLLECTED, STATUS_READY, ArticleRepository
 from rss_hub.storage.feeds import FeedRepository
 from rss_hub.storage.job_runs import JobRunRepository
 from rss_hub.storage.llm_usage import LlmUsageRepository
 from rss_hub.version import get_version
+from rss_hub.web.setting_groups import SETTINGS_ACCORDIONS, keys_of, sections
 from rss_hub.web.ui import done
 
 CONFIRM_MESSAGE = "삭제 확인이 필요합니다"
 _HOST = re.compile(r"^(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)(:\d{1,5})?$")
-
-SETTING_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("일반", ("service_base_url", "service_timezone")),
-    (
-        "주기",
-        ("collect_interval_minutes", "summarize_interval_seconds", "deliver_interval_seconds"),
-    ),
-    (
-        "수집과 보관",
-        (
-            "slot_batch_size",
-            "default_max_entries",
-            "baseline_archive_count",
-            "article_retention_days",
-        ),
-    ),
-    (
-        "LLM",
-        (
-            "model_chain",
-            "llm_daily_cap",
-            "llm_warn_percent",
-            "llm_rpm_cap",
-            "llm_reserve_calls",
-            "llm_wait_limit_minutes",
-            "summarize_batch",
-            "topic_feedback_examples",
-        ),
-    ),
-    ("알림", ("alert_cooldown_hours",)),
-    ("디스플레이", ("ui_theme", "ui_font_size", "ui_auto_read")),
-)
-
-
-# 설정 화면의 아코디언 구역: (id, 제목, 이 구역에 들어가는 설정 그룹). 위에서 아래로 쓰는 순서다
-ACCORDIONS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
-    ("general", "서비스 주소와 시간대", ("일반",)),
-    ("collect", "수집과 보관", ("주기", "수집과 보관")),
-    ("llm", "LLM: 키, 모델, 호출 한도", ("LLM",)),
-    ("alerts", "알림: 웹훅과 시스템 알림", ("알림",)),
-    ("display", "화면: 테마, 글자 크기, 읽음 처리", ("디스플레이",)),
-)
-SECTION_ACCORDION = {"openrouter_key": "llm", "webhook": "alerts", "roles": "alerts"}
 
 
 def _suggest_base_url(request: Request) -> str | None:
@@ -115,11 +73,43 @@ def build_admin_router(
     usage: LlmUsageRepository,
     clock: Clock,
     sender: WebhookSender,
-    llm_client: LlmClient,
 ) -> APIRouter:
     router = APIRouter()
+    settings_keys = keys_of(*(group for _, _, groups in SETTINGS_ACCORDIONS for group in groups))
+    alert_keys = keys_of("알림")
 
     def render_settings(
+        request: Request,
+        *,
+        status_code: int = 200,
+        form_values: dict[str, str] | None = None,
+        errors: dict[str, str] | None = None,
+        notice: str = "",
+    ) -> HTMLResponse:
+        snapshot = service.snapshot()
+        accordions = [
+            (acc_id, title, sections(*groups, titled=len(groups) > 1))
+            for acc_id, title, groups in SETTINGS_ACCORDIONS
+        ]
+        opened = {"general"} | {
+            acc_id
+            for acc_id, _, groups in SETTINGS_ACCORDIONS
+            if any(key in (errors or {}) for key in keys_of(*groups))
+        }
+        context: dict[str, Any] = {
+            "values": {**service.raw_values(), **(form_values or {})},
+            "errors": errors or {},
+            "section_error": None,
+            "notice": notice,
+            "suggestion": None if snapshot.base_url else _suggest_base_url(request),
+            "accordions": accordions,
+            "opened": opened,
+        }
+        return templates.TemplateResponse(
+            request, "settings.html", context, status_code=status_code
+        )
+
+    def render_discord(
         request: Request,
         *,
         status_code: int = 200,
@@ -131,53 +121,26 @@ def build_admin_router(
         test_result: tuple[str, str] | None = None,
     ) -> HTMLResponse:
         snapshot = service.snapshot()
-        values = {**service.raw_values(), **(form_values or {})}
-        by_key = {d.key: d for d in SETTING_DEFS}
-        groups = [(title, [by_key[key] for key in keys]) for title, keys in SETTING_GROUPS]
-        group_accordion = {title: acc for acc, _, titles in ACCORDIONS for title in titles}
-        opened = {"general"}
-        for title, keys in SETTING_GROUPS:
-            if any(key in (errors or {}) for key in keys):
-                opened.add(group_accordion[title])
-        if section_error is not None:
-            opened.add(SECTION_ACCORDION.get(section_error[0], "general"))
-        if test_result is not None:
-            opened.add("llm" if "키" in test_result[1] else "alerts")
-        audit = [
-            {
-                "time": e.changed_at.astimezone(snapshot.timezone).strftime("%Y-%m-%d %H:%M"),
-                "summary": e.summary,
-            }
-            for e in service.audit_log()
-        ]
-        suggestion = None if snapshot.base_url else _suggest_base_url(request)
         context: dict[str, Any] = {
-            "groups": groups,
-            "values": values,
+            "values": {**service.raw_values(), **(form_values or {})},
             "errors": errors or {},
+            "sections": sections("알림"),
             "section_error": section_error,
             "notice": notice,
-            "has_key": service.has_openrouter_key(),
             "webhooks": service.list_webhooks(),
             "roles": {
                 "default_id": snapshot.webhook_default_id,
                 "system_id": snapshot.webhook_system_id,
             },
-            "suggestion": suggestion,
-            "audit": audit,
             "webhook_name": webhook_name,
             "test_result": test_result,
-            "accordions": ACCORDIONS,
-            "opened": opened,
         }
-        return templates.TemplateResponse(
-            request, "settings.html", context, status_code=status_code
-        )
+        return templates.TemplateResponse(request, "discord.html", context, status_code=status_code)
 
     def error_page(
         request: Request, section: str, message: str, webhook_name: str = ""
     ) -> HTMLResponse:
-        return render_settings(
+        return render_discord(
             request,
             status_code=400,
             section_error=(section, message),
@@ -196,6 +159,13 @@ def build_admin_router(
         failing = sorted(
             (f for f in feeds.list_all() if f.fail_count > 0), key=lambda f: -f.fail_count
         )
+        audit = [
+            {
+                "time": e.changed_at.astimezone(config.timezone).strftime("%Y-%m-%d %H:%M"),
+                "summary": e.summary,
+            }
+            for e in service.audit_log()
+        ]
         context: dict[str, Any] = {
             "ready_count": counts.get(STATUS_READY, 0),
             "collected_count": counts.get(STATUS_COLLECTED, 0),
@@ -215,6 +185,7 @@ def build_admin_router(
             "waiting_for_address": waiting,
             "checklist": checklist,
             "all_ready": all(item.ready for item in checklist if item.required),
+            "audit": audit,
             "version": get_version(),
         }
         return templates.TemplateResponse(request, "status.html", context)
@@ -226,7 +197,7 @@ def build_admin_router(
     @router.post("/settings", response_class=HTMLResponse)
     async def save_settings(request: Request) -> Response:
         form = await request.form()
-        submitted = {k: str(v) for k, v in form.items() if k in SETTING_BY_KEY}
+        submitted = {k: str(v) for k, v in form.items() if k in settings_keys}
         result = service.update(submitted)
         if result.errors:
             return render_settings(
@@ -234,22 +205,20 @@ def build_admin_router(
             )
         return done(form, "/settings?saved=1", "saved")
 
-    @router.post("/settings/openrouter-key", response_class=HTMLResponse)
-    async def save_key(request: Request) -> Response:
-        form = await request.form()
-        try:
-            service.set_openrouter_key(str(form.get("openrouter_key", "")))
-        except SettingError as error:
-            return error_page(request, "openrouter_key", error.message)
-        return done(form, "/settings?saved=1", "saved")
+    @router.get("/discord", response_class=HTMLResponse)
+    def discord_page(request: Request, saved: str = "") -> HTMLResponse:
+        return render_discord(request, notice="저장했습니다" if saved else "")
 
-    @router.post("/settings/openrouter-key/delete", response_class=HTMLResponse)
-    async def delete_key(request: Request) -> Response:
+    @router.post("/discord/settings", response_class=HTMLResponse)
+    async def save_alert_settings(request: Request) -> Response:
         form = await request.form()
-        if form.get("confirm") != "yes":
-            return error_page(request, "openrouter_key", CONFIRM_MESSAGE)
-        service.delete_openrouter_key()
-        return done(form, "/settings?saved=1", "saved")
+        submitted = {k: str(v) for k, v in form.items() if k in alert_keys}
+        result = service.update(submitted)
+        if result.errors:
+            return render_discord(
+                request, status_code=400, form_values=submitted, errors=result.errors
+            )
+        return done(form, "/discord?saved=1", "saved")
 
     @router.post("/settings/webhooks", response_class=HTMLResponse)
     async def add_webhook(request: Request) -> Response:
@@ -259,7 +228,7 @@ def build_admin_router(
             service.add_webhook(name, str(form.get("url", "")))
         except SettingError as error:
             return error_page(request, "webhook", error.message, webhook_name=name)
-        return done(form, "/settings?saved=1", "saved")
+        return done(form, "/discord?saved=1", "saved")
 
     @router.post("/settings/webhooks/{webhook_id}/delete", response_class=HTMLResponse)
     async def delete_webhook(request: Request, webhook_id: int) -> Response:
@@ -267,7 +236,7 @@ def build_admin_router(
         if form.get("confirm") != "yes":
             return error_page(request, "webhook", CONFIRM_MESSAGE)
         service.delete_webhook(webhook_id)
-        return done(form, "/settings?saved=1", "saved")
+        return done(form, "/discord?saved=1", "saved")
 
     @router.post("/settings/webhooks/{webhook_id}/test", response_class=HTMLResponse)
     async def test_webhook(request: Request, webhook_id: int) -> Response:
@@ -275,32 +244,18 @@ def build_admin_router(
         url = service.get_webhook_url(webhook_id)
         name = next((w.name for w in service.list_webhooks() if w.id == webhook_id), "")
         if url is None:
-            return render_settings(
+            return render_discord(
                 request, status_code=404, test_result=("error", "웹훅을 찾을 수 없습니다")
             )
         result = sender.send(
             url, f"✅ RSS Hub 시험 메시지입니다. 웹훅 '{name}'이 정상으로 연결되었습니다."
         )
         if 200 <= result.status < 300:
-            return render_settings(
+            return render_discord(
                 request, test_result=("ok", f"성공: '{name}'으로 시험 메시지를 보냈습니다")
             )
         reason = describe_send_failure(result.status, result.error)
-        return render_settings(request, test_result=("error", f"실패: '{name}' {reason}"))
-
-    @router.post("/settings/openrouter-key/check", response_class=HTMLResponse)
-    async def check_key(request: Request) -> Response:
-        """키 정보만 조회한다(채팅 호출이 아니라서 호출 한도와 오늘 호출 수를 쓰지 않는다)."""
-        check = llm_client.check_key()
-        if check.valid:
-            usage_text = (
-                f" · 오늘 무료 모델 호출 {check.used}/{check.limit}"
-                if check.used is not None and check.limit is not None
-                else ""
-            )
-            return render_settings(request, test_result=("ok", f"키가 유효합니다{usage_text}"))
-        kind = "error" if check.valid is False else "warn"
-        return render_settings(request, test_result=(kind, check.reason))
+        return render_discord(request, test_result=("error", f"실패: '{name}' {reason}"))
 
     @router.post("/settings/webhook-roles", response_class=HTMLResponse)
     async def save_roles(request: Request) -> Response:
@@ -312,6 +267,6 @@ def build_admin_router(
             )
         except SettingError as error:
             return error_page(request, "roles", error.message)
-        return done(form, "/settings?saved=1", "saved")
+        return done(form, "/discord?saved=1", "saved")
 
     return router

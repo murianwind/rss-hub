@@ -5,13 +5,18 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from rss_hub.domain.benchmark import SAMPLES, recommend
+from rss_hub.domain.settings_rules import SettingError
 from rss_hub.services.model_benchmark import MAX_MODELS, BenchmarkRunner
 from rss_hub.services.model_chain import ModelChainService
 from rss_hub.services.model_scan import ModelScanService
+from rss_hub.services.ports import LlmClient
 from rss_hub.services.settings import SettingsService
 from rss_hub.storage.models import RUN_RUNNING, ModelRepository
+from rss_hub.web.setting_groups import keys_of, sections
+from rss_hub.web.ui import done
 
 CONFIRM_MESSAGE = "교체하려면 확인란을 선택해 주세요"
+DELETE_CONFIRM_MESSAGE = "삭제 확인이 필요합니다"
 
 
 def build_model_router(
@@ -22,11 +27,20 @@ def build_model_router(
     chain: ModelChainService,
     settings: SettingsService,
     templates: Jinja2Templates,
+    llm_client: LlmClient,
 ) -> APIRouter:
     router = APIRouter()
+    limit_keys = keys_of("모델 체인과 호출 한도")
 
     def page(
-        request: Request, *, notice: str = "", error: str = "", status_code: int = 200
+        request: Request,
+        *,
+        notice: str = "",
+        error: str = "",
+        status_code: int = 200,
+        form_values: dict[str, str] | None = None,
+        errors: dict[str, str] | None = None,
+        test_result: tuple[str, str] | None = None,
     ) -> HTMLResponse:
         config = settings.snapshot()
         catalog = models.catalog()
@@ -48,19 +62,68 @@ def build_model_router(
             "calls_per_model": len(SAMPLES),
             "notice": notice,
             "error": error,
+            "test_result": test_result,
+            "has_key": settings.has_openrouter_key(),
+            "sections": sections("모델 체인과 호출 한도"),
+            "values": {**settings.raw_values(), **(form_values or {})},
+            "errors": errors or {},
         }
         return templates.TemplateResponse(request, "models.html", context, status_code=status_code)
 
     @router.get("/models", response_class=HTMLResponse)
-    def model_page(request: Request, started: str = "", applied: str = "") -> HTMLResponse:
+    def model_page(
+        request: Request, started: str = "", applied: str = "", saved: str = ""
+    ) -> HTMLResponse:
         notice = (
             "벤치마크를 시작했습니다. 이 화면은 5초마다 새로고침됩니다."
             if started
             else "모델 체인을 바꿨습니다."
             if applied
+            else "저장했습니다"
+            if saved
             else ""
         )
         return page(request, notice=notice)
+
+    @router.post("/models/settings", response_class=HTMLResponse)
+    async def save_limits(request: Request) -> Response:
+        form = await request.form()
+        submitted = {k: str(v) for k, v in form.items() if k in limit_keys}
+        result = settings.update(submitted)
+        if result.errors:
+            return page(request, status_code=400, form_values=submitted, errors=result.errors)
+        return done(form, "/models?saved=1", "saved")
+
+    @router.post("/settings/openrouter-key", response_class=HTMLResponse)
+    async def save_key(request: Request) -> Response:
+        form = await request.form()
+        try:
+            settings.set_openrouter_key(str(form.get("openrouter_key", "")))
+        except SettingError as error:
+            return page(request, error=error.message, status_code=400)
+        return done(form, "/models?saved=1", "saved")
+
+    @router.post("/settings/openrouter-key/delete", response_class=HTMLResponse)
+    async def delete_key(request: Request) -> Response:
+        form = await request.form()
+        if form.get("confirm") != "yes":
+            return page(request, error=DELETE_CONFIRM_MESSAGE, status_code=400)
+        settings.delete_openrouter_key()
+        return done(form, "/models?saved=1", "saved")
+
+    @router.post("/settings/openrouter-key/check", response_class=HTMLResponse)
+    async def check_key(request: Request) -> Response:
+        """키 정보만 조회한다(채팅 호출이 아니라서 호출 한도와 오늘 호출 수를 쓰지 않는다)."""
+        check = llm_client.check_key()
+        if check.valid:
+            usage_text = (
+                f" · 오늘 무료 모델 호출 {check.used}/{check.limit}"
+                if check.used is not None and check.limit is not None
+                else ""
+            )
+            return page(request, test_result=("ok", f"키가 유효합니다{usage_text}"))
+        kind = "error" if check.valid is False else "warn"
+        return page(request, test_result=(kind, check.reason))
 
     @router.post("/models/scan", response_class=HTMLResponse)
     async def scan(request: Request) -> Response:

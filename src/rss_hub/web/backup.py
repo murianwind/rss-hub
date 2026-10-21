@@ -33,6 +33,10 @@ def build_backup_router(service: BackupService, templates: Jinja2Templates) -> A
             status_code=status_code,
         )
 
+    @router.get("/backup", response_class=HTMLResponse)
+    def backup_page(request: Request) -> HTMLResponse:
+        return templates.TemplateResponse(request, "backup.html", {})
+
     @router.get("/backup/export")
     def export() -> Response:
         filename, chunks = service.export()

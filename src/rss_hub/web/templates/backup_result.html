@@ -1,6 +1,8 @@
 {% extends "base.html" %}
+{% from "_ui.html" import back_link %}
 {% block title %}복원 결과 · RSS Hub{% endblock %}
 {% block content %}
+{{ back_link('/backup', '백업·복원으로') }}
 <h1>복원 결과</h1>
 
 {% if error %}
@@ -13,5 +15,5 @@
 {% endif %}
 <p class="note">웹훅 주소와 OpenRouter 키는 백업에 들어 있지 않아서 현재 설정을 그대로 씁니다.</p>
 {% endif %}
-<p><a href="/settings">설정 화면으로</a> · <a href="/reader">읽기 화면으로</a></p>
+<p><a href="/reader">읽기 화면으로</a></p>
 {% endblock %}

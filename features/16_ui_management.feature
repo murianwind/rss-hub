@@ -95,12 +95,10 @@ Feature: 읽기 화면의 관리: 슬라이드 패널, 순서와 이동, 설정 
     Then 설정 화면으로 돌아와 "저장했습니다." 알림이 보인다
 
     Examples:
-      | section | shown                | hidden           | key                  | value      |
-      | general | service_timezone     | OpenRouter 키    | service_timezone     | Asia/Seoul |
-      | collect | collect_interval_minutes | ui_theme     | llm_daily_cap        | 900        |
-      | llm     | OpenRouter 키        | alert_cooldown_hours | llm_daily_cap    | 900        |
-      | alerts  | alert_cooldown_hours | OpenRouter 키    | alert_cooldown_hours | 3          |
-      | display | ui_auto_read         | service_timezone | ui_font_size         | large      |
+      | section | shown                    | hidden           | key                | value      |
+      | general | service_timezone         | ui_theme         | service_timezone   | Asia/Seoul |
+      | collect | collect_interval_minutes | ui_theme         | slot_batch_size    | 20         |
+      | display | ui_auto_read             | service_timezone | ui_font_size       | large      |
 
   @PNL-10
   Scenario: 화면 테마와 글자 크기는 모든 화면에 적용된다
