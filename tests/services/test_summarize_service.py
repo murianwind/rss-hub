@@ -7,7 +7,7 @@ from rss_hub.domain.topics import TopicFields
 from rss_hub.services.ports import LlmErrorKind
 from rss_hub.storage.articles import MODEL_FALLBACK, STATUS_COLLECTED, STATUS_READY
 from tests.fakes.llm_client import failure, good, reply
-from tests.fakes.llm_env import LlmEnv
+from tests.fakes.llm_env import KEY, LlmEnv
 from tests.keywords.store import topic_matches
 
 
@@ -420,14 +420,13 @@ def test_the_wait_limit_boundary_is_inclusive(env, minutes, finalized):
     assert (article(env, article_id).status == STATUS_READY) is finalized
 
 
-@pytest.mark.parametrize("missing", ["openrouter_key", "default_webhook", "service_base_url"])
+@pytest.mark.parametrize("missing", ["default_webhook", "service_base_url"])
 def test_every_required_setting_is_needed_before_summarizing(tmp_path, missing):
     from tests.fakes.llm_env import DEFAULT_WEBHOOK, KEY
 
     env = LlmEnv(tmp_path, configured=False)
     article_id = env.add_article()
-    if missing != "openrouter_key":
-        env.settings.set_openrouter_key(KEY)
+    env.settings.set_openrouter_key(KEY)
     if missing != "default_webhook":
         webhook_id = env.settings.add_webhook("기본", DEFAULT_WEBHOOK)
         env.settings.set_webhook_roles(default_id=webhook_id, system_id=None)
@@ -539,3 +538,58 @@ def test_the_example_count_is_per_topic_and_per_kind(env):
     lines = env.client.calls[-1].prompt.splitlines()
     line = next(x for x in lines if "belongs:" in x and "OTT" not in x and "NOT" not in x)
     assert line.count('"') == 4  # 두 개
+
+
+# ---------- OpenRouter 키 없이(원문 제목으로 확정) ----------
+
+
+def plain_env(tmp_path):
+    env = LlmEnv(tmp_path, configured=False)
+    env.configure(key=False)
+    return env
+
+
+def test_without_a_key_the_article_is_finalized_with_its_original_title_and_no_llm_call(tmp_path):
+    env = plain_env(tmp_path)
+    article_id = env.add_article(title="Apple unveils new phone")
+    report = env.summarizer.run()
+    stored = article(env, article_id)
+    assert (stored.status, stored.llm_model) == (STATUS_READY, "plain")
+    assert (stored.title_ko, stored.summary_ko, stored.llm_topics) == (
+        "Apple unveils new phone",
+        "",
+        (),
+    )
+    assert env.client.calls == []
+    assert (report.plain, report.waiting_for_setup) == (1, False)
+
+
+def test_without_a_key_only_topics_with_matching_keywords_apply(tmp_path):
+    env = plain_env(tmp_path)
+    steam = env.topics.add(TopicFields("게임", "", ("steam",)))
+    env.topics.add(TopicFields("영화", "", ("netflix",)))
+    env.topics.add(TopicFields("키워드 없음", "", ()))  # LLM만으로 정하는 주제는 키가 있어야 한다
+    article_id = env.add_article(title="Steam sale starts")
+    env.summarizer.run()
+    assert article(env, article_id).llm_topics == (steam,)
+    assert set(topic_matches(env.db, article_id)) == {steam}  # 뷰어의 주제별 목록에도 들어간다
+
+
+def test_without_a_key_a_run_finalizes_more_than_one_llm_batch(tmp_path):
+    env = plain_env(tmp_path)
+    ids = [env.add_article() for _ in range(12)]
+    report = env.summarizer.run()
+    assert report.plain == 12
+    assert {article(env, i).status for i in ids} == {STATUS_READY}
+
+
+def test_the_key_added_later_applies_from_the_next_collected_article(tmp_path):
+    env = plain_env(tmp_path)
+    first = env.add_article()
+    env.summarizer.run()
+    env.settings.set_openrouter_key(KEY)
+    second = env.add_article()
+    env.summarizer.run()
+    assert article(env, first).llm_model == "plain"
+    assert article(env, second).llm_model == "model-a"
+    assert len(env.client.calls) == 1

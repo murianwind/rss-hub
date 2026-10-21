@@ -30,7 +30,7 @@ jobs ──▶ services
 | 잡 | 주기 | 하는 일 |
 |---|---|---|
 | collect | 수집 주기(분, 60의 약수, 기본 5)의 슬롯 | 이번 슬롯에 배정된 피드를 가져와 새 글 저장. 피드 활동량에 따라 시간당 1~3회로 배정하고, 첫 점검은 기존 글을 "이미 본 글"로만 기록 |
-| summarize | 기본 60초 | 수집된 글을 LLM으로 제목 번역, 요약, 주제 판별. 한도와 장애를 처리하고, 끝까지 실패하면 원문 발췌로 대신 |
+| summarize | 기본 60초 | 수집된 글을 LLM으로 제목 번역, 요약, 주제 판별. 한도와 장애를 처리하고, 끝까지 실패하면 원문 발췌로 대신. OpenRouter 키가 없으면 LLM 없이 원문 제목으로 확정한다(한 번에 50건까지, 주제는 키워드가 맞는 것만) |
 | deliver | 기본 60초 | 요약이 끝난 글을 기본/카테고리/피드/주제 웹훅으로 발송 |
 | retention | 6시간 | 보관 기간(기본 90일)이 지난 글 삭제. 북마크한 글과 "이미 본 글" 기록은 남김 |
 | model_scan | 24시간 | OpenRouter 무료 모델 목록을 확인하고 체인 모델이 사라지면 알림 |
@@ -49,6 +49,10 @@ jobs ──▶ services
 3. **deliver**: 글이 해당하는 목적지 각각에 한 번씩 보냅니다. 보낼 곳은 `피드 > 카테고리 > 기본` 순으로 첫 지정값 하나이고, 주제에 해당하면 그 주제의 웹훅으로 한 번 더 보냅니다.
 
 읽기 화면은 같은 데이터를 읽고, 글을 처음 열 때 원문 페이지에서 본문을 추출해(`domain/fulltext.py`) 저장합니다. 이미지는 `https`만 표시하고 영상은 링크로 바꿉니다.
+
+## 백업과 복원
+
+`domain/backup.py`가 파일 모양을 검사하고, `storage/backup.py`가 읽고 쓰고, `services/backup.py`가 설정 값을 검증한다. 파일은 JSON 하나이며 `webhooks`(id와 이름만), `roles`(기본·시스템 웹훅의 이름), `tables`(categories, topics, feeds, feed_stats, articles, article_topics, deliveries, seen_guids, settings)로 이루어진다. 내보내기는 한 시점의 내용을 조각으로 흘려 보낸다. 복원은 `BEGIN IMMEDIATE` 트랜잭션 안에서 표를 비우고 파일의 행을 넣으며, 웹훅 번호는 이름으로 현재 웹훅에 다시 연결한다(없으면 해제하고 결과에 알림). `secrets`, `settings_audit`, `llm_usage`, `alert_log`, `job_runs`, 모델 목록과 벤치마크는 대상이 아니다.
 
 ## 저장소
 

@@ -37,7 +37,7 @@ def test_status_page_lists_missing_settings(client):
     html = client.get("/status").text
     for label in ("OpenRouter 키", "기본 웹훅", "서비스 주소"):
         assert label in html
-    assert html.count("미설정") == 3
+    assert html.count("미설정") == 2  # OpenRouter 키는 선택 항목이다
 
 
 def test_status_page_has_no_missing_marker_once_everything_is_set(client, service):

@@ -153,5 +153,24 @@
     {% endif %}
   </div>
 </details>
+
+<details class="acc" id="acc-backup">
+  <summary><span>{{ accordions | length + 2 }}. 백업과 복원</span>{{ icon('chevron-down', 'chev') }}</summary>
+  <div class="acc-body">
+    <h3 class="acc-sub">백업</h3>
+    <p>구독, 카테고리, 주제, 글, 읽음과 북마크, 설정을 JSON 파일 하나로 내려받습니다. <strong>웹훅 주소와 OpenRouter 키는 들어 있지 않습니다.</strong> 웹훅은 이름만 적습니다.</p>
+    <p><a class="primary" href="/backup/export">백업 파일 내려받기</a></p>
+    <h3 class="acc-sub">복원</h3>
+    <p class="note">현재 구독, 글, 읽음 상태, 설정이 파일의 내용으로 <strong>모두 바뀝니다</strong>. 파일에 적힌 웹훅 이름과 같은 이름의 웹훅이 지금 있으면 다시 연결하고, 없으면 지정을 해제합니다. 웹훅 주소와 키는 지금 것을 그대로 씁니다.</p>
+    <form method="post" action="/backup/restore" enctype="multipart/form-data" data-confirm="현재 구독, 글, 읽음 상태, 설정이 파일의 내용으로 모두 바뀝니다. 복원할까요?">
+      <div class="field">
+        <label for="backup-file">백업 파일</label>
+        <input type="file" id="backup-file" name="file" accept=".json,application/json">
+      </div>
+      <input type="hidden" name="confirm" value="yes">
+      <button type="submit" class="primary">복원</button>
+    </form>
+  </div>
+</details>
 </div>
 {% endblock %}

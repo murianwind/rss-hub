@@ -214,7 +214,7 @@ def build_admin_router(
             ],
             "waiting_for_address": waiting,
             "checklist": checklist,
-            "all_ready": all(item.ready for item in checklist),
+            "all_ready": all(item.ready for item in checklist if item.required),
             "version": get_version(),
         }
         return templates.TemplateResponse(request, "status.html", context)

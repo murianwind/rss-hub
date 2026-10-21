@@ -21,6 +21,7 @@ from rss_hub.adapters.http_feed_fetcher import RequestsFeedFetcher
 from rss_hub.adapters.openrouter_client import OpenRouterClient
 from rss_hub.jobs.runner import JobRunner, start_thread
 from rss_hub.runtime import build_llm_services
+from rss_hub.services.backup import BackupService
 from rss_hub.services.clock import Clock, SystemClock
 from rss_hub.services.collect import CollectService
 from rss_hub.services.feed_registration import FeedRegistrationService
@@ -34,6 +35,7 @@ from rss_hub.services.ports import DiscoveryFetcher, LlmClient, PageFetcher, Web
 from rss_hub.services.settings import SettingsService
 from rss_hub.services.topic_probe import TopicProbe
 from rss_hub.storage.articles import ArticleRepository
+from rss_hub.storage.backup import BackupRepository
 from rss_hub.storage.database import Database
 from rss_hub.storage.feeds import FeedRepository
 from rss_hub.storage.import_staging import ImportStagingRepository
@@ -47,6 +49,7 @@ from rss_hub.storage.topics import TopicRepository
 from rss_hub.version import get_version
 from rss_hub.web.admin import build_admin_router
 from rss_hub.web.articles import build_article_router
+from rss_hub.web.backup import build_backup_router
 from rss_hub.web.categories import build_category_router
 from rss_hub.web.feedback import build_feedback_router
 from rss_hub.web.feeds import build_feed_router
@@ -217,6 +220,12 @@ def create_app(
         )
     )
     app.include_router(build_article_router(articles))
+    app.include_router(
+        build_backup_router(
+            BackupService(BackupRepository(database, app_clock), app_clock, get_version()),
+            templates,
+        )
+    )
     models = ModelRepository(database, app_clock)
     benchmark_runner = BenchmarkRunner(
         service=BenchmarkService(

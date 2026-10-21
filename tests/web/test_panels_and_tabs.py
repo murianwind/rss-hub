@@ -290,10 +290,11 @@ def section(html, acc_id):
 def test_the_settings_are_one_page_of_accordions_in_a_logical_order(world):
     html = world.get("/settings").text
     ids = re.findall(r'<details class="acc" id="acc-(\w+)"', html)
-    assert ids == ["general", "collect", "llm", "alerts", "display", "audit"]
+    assert ids == ["general", "collect", "llm", "alerts", "display", "audit", "backup"]
     titles = re.findall(r"<summary><span>(\d)\. ([^<]+)</span>", html)
-    assert [n for n, _ in titles] == ["1", "2", "3", "4", "5", "6"]
-    assert "서비스 주소" in titles[0][1] and "변경 이력" in titles[-1][1]
+    assert [n for n, _ in titles] == ["1", "2", "3", "4", "5", "6", "7"]
+    assert "서비스 주소" in titles[0][1] and "변경 이력" in titles[-2][1]
+    assert "백업과 복원" in titles[-1][1]
 
 
 def test_only_the_first_section_starts_open(world):

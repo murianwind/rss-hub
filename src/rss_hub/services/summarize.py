@@ -1,6 +1,8 @@
 """요약 서비스: 수집된 글의 제목을 번역하고 요약해서 발송할 수 있는 상태(ready)로 만든다.
 
 - 불량 응답은 채택하지 않고 재시도 횟수를 올린다. 3번 쌓이면 원문 발췌로 확정한다.
+- OpenRouter 키가 없으면(웹훅과 서비스 주소는 있을 때) LLM을 부르지 않고 원문 제목으로
+  글을 확정한다. 요약은 없고, 주제는 키워드가 맞는 것만 해당한다.
 - 호출 자체의 실패(장애)와 예산 때문에 막힌 경우는 재시도 횟수를 올리지 않는다.
   장애가 대기 허용 시간을 넘기면 원문 발췌로 확정한다.
 """
@@ -22,12 +24,13 @@ from rss_hub.services.clock import Clock
 from rss_hub.services.llm_gateway import BudgetBlocked, LlmGateway, LlmNotConfigured, LlmOutage
 from rss_hub.services.settings import SettingsService
 from rss_hub.services.topic_examples import load_examples
-from rss_hub.storage.articles import STATUS_COLLECTED, Article, ArticleRepository
+from rss_hub.storage.articles import MODEL_PLAIN, STATUS_COLLECTED, Article, ArticleRepository
 from rss_hub.storage.topics import TopicRepository
 
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
+PLAIN_BATCH = 50  # LLM을 부르지 않는 실행은 한 번에 이만큼 확정한다(호출 한도와 상관없다)
 
 
 @dataclass(frozen=True)
@@ -39,6 +42,7 @@ class SummarizeReport:
     outage: bool = False
     blocked: BudgetBlock | None = None
     waiting_for_setup: bool = False
+    plain: int = 0  # LLM 없이 원문 제목으로 확정한 글
 
 
 class SummarizeService:
@@ -62,8 +66,11 @@ class SummarizeService:
         return summary_order(self._articles.list_by_status(STATUS_COLLECTED))[:limit]
 
     def run(self) -> SummarizeReport:
-        if not all(item.ready for item in self._settings.setup_checklist()):
+        checklist = self._settings.setup_checklist()
+        if not all(item.ready for item in checklist if item.required):
             return SummarizeReport(waiting_for_setup=True)  # 필요한 설정이 채워질 때까지 기다린다
+        if not all(item.ready for item in checklist):
+            return self._run_plain()  # 선택 항목(OpenRouter 키)이 비어 있다
 
         config = self._settings.snapshot()
         targets = self.pending(config.summarize_batch)
@@ -113,6 +120,21 @@ class SummarizeService:
             outage=outage,
             blocked=blocked,
         )
+
+    # ---------- 키 없이 ----------
+
+    def _run_plain(self) -> SummarizeReport:
+        """LLM 없이 원문 제목으로 글을 확정한다. 키워드가 있는 주제는 키워드가 맞아야 해당한다."""
+        targets = self.pending(PLAIN_BATCH)
+        topics = [t for t in self._topics.list_enabled() if t.keywords]
+        for article in targets:
+            matched = [t for t in topics if is_candidate(t, article.title, article.content_html)]
+            ids = [t.id for t in matched]
+            self._articles.mark_ready(
+                article.id, title_ko=article.title, summary_ko="", topics=ids, model=MODEL_PLAIN
+            )
+            self._record_topic_matches(article, matched, ids)
+        return SummarizeReport(considered=len(targets), plain=len(targets))
 
     # ---------- 글 하나 ----------
 
