@@ -16,6 +16,7 @@ STATUS_DELIVERED = "delivered"  # 모든 목적지로 보냈다
 STATUS_ARCHIVED = "archived"  # 첫 점검 때 뷰어에만 보이도록 보관한 글(요약도 알림도 하지 않는다)
 VIEWABLE_STATUSES = (STATUS_COLLECTED, STATUS_READY, STATUS_DELIVERED, STATUS_ARCHIVED)
 SEEN_DELIVERED = "delivered"
+MODEL_PLAIN = "plain"  # OpenRouter 키가 없어서 LLM 없이 원문 제목으로 확정한 글
 MODEL_FALLBACK = "fallback-final"  # 요약에 끝까지 실패해서 원문 발췌로 확정한 글
 SEEN_BASELINE = "baseline"
 SEEN_ARTICLE = "article"

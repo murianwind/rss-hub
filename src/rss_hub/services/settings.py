@@ -196,6 +196,7 @@ class SetupItem:
     key: str
     label: str
     ready: bool
+    required: bool = True  # False이면 비어 있어도 서비스가 동작한다(기능만 줄어든다)
 
 
 class SettingsService:
@@ -368,7 +369,7 @@ class SettingsService:
         snapshot = self.snapshot()
         webhook_ids = {w.id for w in self.list_webhooks()}
         return [
-            SetupItem("openrouter_key", "OpenRouter 키", self.has_openrouter_key()),
+            SetupItem("openrouter_key", "OpenRouter 키", self.has_openrouter_key(), required=False),
             SetupItem("default_webhook", "기본 웹훅", snapshot.webhook_default_id in webhook_ids),
             SetupItem("service_base_url", "서비스 주소", bool(snapshot.base_url)),
         ]

@@ -246,6 +246,11 @@ def test_webhook_events_are_audited_without_the_address(service):
 # ---------- 시작 점검표 ----------
 
 
+def test_only_the_openrouter_key_is_optional(service):
+    required = {i.key: i.required for i in service.setup_checklist()}
+    assert required == {"openrouter_key": False, "default_webhook": True, "service_base_url": True}
+
+
 def test_setup_checklist_lists_what_is_missing(service):
     items = {i.key: i.ready for i in service.setup_checklist()}
     assert items == {"openrouter_key": False, "default_webhook": False, "service_base_url": False}

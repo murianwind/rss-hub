@@ -95,10 +95,18 @@ def _missing_items(env, datatable):
     html = env.pages["status"].text
     items = re.findall(r"<li[^>]*class=\"check\"[^>]*>(.*?)</li>", html, re.DOTALL)
     labels = [row[0] for row in datatable[1:]]
-    assert len(labels) == 3
+    assert len(labels) == 2
     for label in labels:
         row = next(i for i in items if label in i)
         assert "미설정" in row
+
+
+@then('상태 화면에 "OpenRouter 키"는 선택 항목으로 표시된다')
+def _key_is_optional(env):
+    html = env.pages["status"].text
+    items = re.findall(r"<li[^>]*class=\"check\"[^>]*>(.*?)</li>", html, re.DOTALL)
+    row = next(i for i in items if "OpenRouter 키" in i)
+    assert "선택" in row and "미설정" not in row
 
 
 @when("OpenRouter 키, 기본 웹훅, 서비스 주소를 저장한다")

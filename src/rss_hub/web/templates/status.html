@@ -32,7 +32,7 @@
 <h2>설정 점검</h2>
 <ul class="checks">
 {% for item in checklist %}
-  <li class="check" data-item="{{ item.key }}" data-ready="{{ 'true' if item.ready else 'false' }}"><span class="label">{{ item.label }}</span><span class="state {{ 'ok' if item.ready else 'todo' }}">{{ '설정됨' if item.ready else '미설정' }}</span></li>
+  <li class="check" data-item="{{ item.key }}" data-ready="{{ 'true' if item.ready else 'false' }}"><span class="label">{{ item.label }}{% if not item.required %} <span class="hint">선택 · 없으면 번역과 요약 없이 원문 제목과 링크만 알립니다</span>{% endif %}</span><span class="state {{ 'ok' if item.ready else 'todo' }}">{{ '설정됨' if item.ready else ('미설정' if item.required else '선택') }}</span></li>
 {% endfor %}
 </ul>
 

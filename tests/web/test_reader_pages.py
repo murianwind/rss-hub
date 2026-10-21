@@ -349,3 +349,13 @@ def test_the_sidebar_becomes_a_drawer_on_narrow_screens(world):
     css = world.client.get("/static/app.css").text
     assert "@media (max-width: 820px)" in css and ".drawer-open .sidebar" in css
     assert ".sidebar-collapsed .sidebar { width: 64px; }" in css
+
+
+def test_an_article_confirmed_without_a_summary_opens_and_lists_with_its_original_title(world):
+    article_id = world.article(title="Plain title", ko="Plain title", summary="")
+    world.articles.mark_ready(
+        article_id, title_ko="Plain title", summary_ko="", topics=[], model="plain"
+    )
+    assert "Plain title" in world.get("/reader").text
+    page = world.get(f"/a/{article_id}")
+    assert page.status_code == 200 and "Plain title" in page.text

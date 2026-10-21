@@ -58,9 +58,13 @@ class LlmEnv:
         if configured:
             self.configure()
 
-    def configure(self) -> None:
-        """요약에 필요한 설정(키, 기본 웹훅, 서비스 주소)과 시스템 알림 웹훅을 채운다."""
-        self.settings.set_openrouter_key(KEY)
+    def configure(self, *, key: bool = True) -> None:
+        """요약에 필요한 설정(키, 기본 웹훅, 서비스 주소)과 시스템 알림 웹훅을 채운다.
+
+        key=False이면 OpenRouter 키만 빼고 채운다.
+        """
+        if key:
+            self.settings.set_openrouter_key(KEY)
         default_id = self.settings.add_webhook("기본", DEFAULT_WEBHOOK)
         system_id = self.settings.add_webhook("시스템", SYSTEM_WEBHOOK)
         self.settings.set_webhook_roles(default_id=default_id, system_id=system_id)
