@@ -19,14 +19,14 @@ from fastapi.templating import Jinja2Templates
 from rss_hub.domain.language import detect_language
 from rss_hub.domain.sanitize import sanitize_html
 from rss_hub.domain.text import strip_html
-from rss_hub.services.fulltext import FullTextService
+from rss_hub.services.fulltext import FullText, FullTextService
 from rss_hub.services.settings import SettingsService
 from rss_hub.storage.articles import PUBLISHED_DATE, PUBLISHED_UNKNOWN, ArticleRepository
 from rss_hub.storage.feeds import FeedRepository
 from rss_hub.storage.reader import ONLY_BOOKMARKS, ONLY_UNREAD, PER_PAGE, ReaderRepository
 from rss_hub.storage.topics import TopicRepository
 from rss_hub.web.articles import is_web_link
-from rss_hub.web.ui import list_url, safe_path, with_toast
+from rss_hub.web.ui import is_preview_request, list_url, safe_path, with_toast
 
 SNIPPET_LENGTH = 140
 MAX_PAGE = 10_000
@@ -221,12 +221,16 @@ def build_reader_router(
         feed = None if article is None else feeds.get(article.feed_id)
         if article is None or feed is None:
             return not_found(request, Scope("all"))
-        if not kept:  # "읽지 않음"을 누르고 돌아온 화면(kept)이 아니면, 열 때 읽음으로 표시한다
+        # 사람이 연 것만 읽음으로 표시한다. 알림 링크를 미리보기 하려는 봇, 미리 가져오기,
+        # "읽지 않음"을 누르고 돌아온 화면(kept)은 읽음 처리하지 않고 원문 전문도 가져오지 않는다
+        preview = is_preview_request(request.headers)
+        if not (kept or preview):
             articles.mark_read(article.id)
             article = articles.get(article.id) or article
         request.state.scope = Scope("feed", feed.id)
         zone = settings.snapshot().timezone
-        full = fulltext.ensure(article)  # 처음 열 때 원문 전문을 가져와 저장한다(실패하면 RSS 본문)
+        # 처음 열 때 원문 전문을 가져와 저장한다(실패하면 RSS 본문). 미리보기는 가져오지 않는다
+        full = FullText(None, "skipped") if preview else fulltext.ensure(article)
         body = (
             full.html
             if full.html is not None

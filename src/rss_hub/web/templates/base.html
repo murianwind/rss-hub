@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{% block title %}RSS Hub{% endblock %}</title>
-<link rel="stylesheet" href="/static/app.css?v={{ ui_version }}">
-<script src="/static/app.js?v={{ ui_version }}" defer></script>
+<link rel="stylesheet" href="/static/app.css?v={{ ui_asset_version }}">
+<script src="/static/app.js?v={{ ui_asset_version }}" defer></script>
 </head>
 <body class="app{% block body_class %}{% endblock %}{% if ui_collapsed %} sidebar-collapsed{% endif %}{% if ui_sbw %} sw-{{ ui_sbw }}{% endif %}" data-auto-read="{{ ui_auto_read }}">
 {{ sprite() }}
