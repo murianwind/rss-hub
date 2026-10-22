@@ -3,7 +3,7 @@
 {% block content %}
 <div class="settings-page">
 <h1>주제 알림</h1>
-<p class="note">글이 어떤 주제에 해당하면, 원래 가는 웹훅에 더해 그 주제의 웹훅으로도 한 번 더 보냅니다. 글에 주제의 키워드가 하나라도 있으면 후보가 됩니다. OpenRouter 키가 있고 주제에 설명을 적었다면, 후보가 된 글을 LLM이 설명으로 한 번 더 확인합니다.</p>
+<p class="note">글이 어떤 주제에 해당하면, 원래 가는 웹훅에 더해 그 주제의 웹훅으로도 한 번 더 보냅니다. 글의 제목이나 본문에 주제의 키워드가 하나라도 있으면 후보가 됩니다. OpenRouter 키가 있으면 요약하면서 LLM이 후보 중 실제로 해당하는 글만 한 번 더 고르고(호출이 늘지 않습니다), 키가 없으면 키워드만으로 정합니다.</p>
 
 {% if notice %}<div class="banner" role="status">{{ notice }}</div>{% endif %}
 {% if error %}<div class="banner error" role="alert">{{ error }}</div>{% endif %}
