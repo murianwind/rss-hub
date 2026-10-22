@@ -126,7 +126,7 @@ def _topic_exists(env, name):
 @given("주제가 20개 있다")
 def _twenty_topics(env):
     for number in range(MAX_TOPICS):
-        env.topics.add(TopicFields(f"주제{number}", "", ()))
+        env.topics.add(TopicFields(f"주제{number}", "", ("steam",)))
 
 
 ADD_TOPIC = (

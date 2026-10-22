@@ -76,14 +76,6 @@ Feature: 주제 판정
     When 주제 "OTT" 해당 여부를 판단한다
     Then 결과는 참이다
 
-  @TPC-07
-  Scenario: 꺼진 주제는 판정하지 않는다
-    # 피드마다 OTT 판정을 끄던 기능은 없어졌다. 주제를 끄면 모든 피드에서 판정하지 않는다
-    Given 주제 "OTT"는 꺼져 있다
-    And 글의 제목은 "New Netflix drama"이고 LLM의 "OTT" 주제 판정은 맞음이다
-    When 주제 "OTT" 해당 여부를 판단한다
-    Then 결과는 거짓이다
-
   @TPC-08
   Scenario Outline: "+"로 끝나는 키워드는 뒤에 공백이 와도 일치하고, 글자가 붙으면 일치하지 않는다
     # 배경(이전 스크립트의 동작): 단어 경계 규칙 때문에 "Disney+ announces"는 일치하지 않고 "disney+x"는 일치했다
@@ -98,11 +90,12 @@ Feature: 주제 판정
       | disney+x launch                | 거짓   |
 
   @TPC-09
-  Scenario: 키워드를 등록하지 않은 주제는 LLM의 판단만으로 정한다
+  Scenario: 키워드가 없는 옛 주제는 LLM이 맞다고 해도 해당하지 않는다
+    # 키워드는 필수다. 예전에 키워드 없이 만든 주제는 키워드를 넣을 때까지 판정에서 빠진다
     Given 주제 "OTT"의 키워드가 비어 있다
     And 글의 제목은 "Apple event recap"이고 LLM의 "OTT" 주제 판정은 맞음이다
     When 주제 "OTT" 해당 여부를 판단한다
-    Then 결과는 참이다
+    Then 결과는 거짓이다
 
   @TPC-10
   Scenario: 글은 여러 주제에 동시에 해당할 수 있다
@@ -123,7 +116,7 @@ Feature: 주제 판정
 
   @TPC-12
   Scenario: 판별 시험은 주제마다 키워드, LLM에게 물었는지와 선택, 최종 결과를 보여 준다
-    Given 주제 "OTT"(키워드 "netflix")와 주제 "게임"(키워드 "steam")이 켜져 있다
+    Given 주제 "OTT"(키워드 "netflix")와 주제 "게임"(키워드 "steam")이 있다
     And LLM이 "OTT" 주제를 고른다
     When 제목 "Netflix announces a new show"로 판별을 시험한다
     Then "OTT"는 키워드 "netflix", LLM 선택, 결과 "해당"으로 표시된다
@@ -131,7 +124,7 @@ Feature: 주제 판정
 
   @TPC-13
   Scenario: 판별 시험은 LLM 호출 한 번만 쓰고 글이나 알림을 만들지 않는다
-    Given 주제 "OTT"가 켜져 있다
+    Given 주제 "OTT"가 있다
     When 제목 "Netflix drama"로 판별을 시험한다
     Then LLM 호출은 1번이고 오늘 호출 수가 1 늘어난다
     And 글과 발송 기록은 만들어지지 않는다
@@ -145,12 +138,12 @@ Feature: 주제 판정
 
     Examples:
       | situation                                    | message                      |
-      | OpenRouter 키가 없고 주제 "OTT"가 켜져 있다 | OpenRouter 키가 설정되지 않았습니다 |
-      | 켜진 주제가 하나도 없다                      | 켜진 주제가 없습니다         |
+      | OpenRouter 키가 없고 주제 "OTT"가 있다 | OpenRouter 키가 설정되지 않았습니다 |
+      | 주제가 하나도 없다                          | 주제가 없습니다              |
 
   @TPC-15
   Scenario: 키워드가 맞은 주제가 없으면 LLM을 호출하지 않고 그 이유를 보여 준다
-    Given 주제 "OTT"가 켜져 있다
+    Given 주제 "OTT"가 있다
     When 제목 "Spring gardening tips"로 판별을 시험한다
     Then LLM 호출은 일어나지 않는다
     And 결과에 "키워드가 맞은 주제가 없어서 LLM을 호출하지 않았습니다"가 표시된다

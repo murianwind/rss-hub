@@ -35,8 +35,8 @@ def test_prompt_asks_for_one_json_object_with_the_two_fields_when_there_are_no_t
 
 def test_prompt_lists_the_topics_with_numbers_and_descriptions_and_asks_for_the_numbers():
     topics = [
-        Topic(1, "OTT", "스트리밍 소식", ("netflix",), None, True),
-        Topic(7, "게임", "", (), None, True),
+        Topic(1, "OTT", "스트리밍 소식", ("netflix",), None),
+        Topic(7, "게임", "", (), None),
     ]
     prompt = build_summary_prompt("t", "c", topics)
     assert "Candidate topics:\n1. OTT: 스트리밍 소식\n7. 게임\n" in prompt
@@ -45,7 +45,7 @@ def test_prompt_lists_the_topics_with_numbers_and_descriptions_and_asks_for_the_
 
 
 def test_the_keywords_are_not_sent_to_the_llm():
-    topic = Topic(1, "OTT", "설명", ("secret-keyword",), None, True)
+    topic = Topic(1, "OTT", "설명", ("secret-keyword",), None)
     assert "secret-keyword" not in build_summary_prompt("t", "c", [topic])
 
 
@@ -61,7 +61,7 @@ from rss_hub.domain.prompts import TopicExamples  # noqa: E402
 
 
 def candidate(topic_id=1, name="OTT"):
-    return Topic(topic_id, name, "스트리밍 소식", ("netflix",), None, True)
+    return Topic(topic_id, name, "스트리밍 소식", ("netflix",), None)
 
 
 def test_confirmed_examples_are_listed_under_their_topic():

@@ -91,13 +91,13 @@ SETTINGS_ALIASES = {
 }
 
 _SAFE_PATH = re.compile(
-    r"^/(?:reader(?:/(?:feed|category|topic)/\d+|/bookmarks)?|a/\d+|topics/\d+/suggestions)"
+    r"^/(?:reader(?:/(?:feed|category|topic)/\d+|/bookmarks)?|a/\d+)"
     r"(?:\?[0-9A-Za-z_=&%+.\-]{0,300})?$"
 )
 
 
 _SAFE_RETURN = re.compile(
-    r"^/(?:reader(?:/(?:feed|category|topic)/\d+|/bookmarks)?|a/\d+|topics/\d+/suggestions"
+    r"^/(?:reader(?:/(?:feed|category|topic)/\d+|/bookmarks)?|a/\d+"
     r"|settings(?:/(?:general|notifications|llm|display))?|feeds|topics|categories|models"
     r"|discord|backup|status|import)"
     r"(?:\?[0-9A-Za-z_=&%+.\-]{0,300})?$"

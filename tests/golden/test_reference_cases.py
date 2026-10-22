@@ -174,7 +174,7 @@ def test_every_slot_feed_defect_is_fixed(case):
 
 # ---------- OTT 키워드 확인(이제는 기본 OTT 주제의 판별) ----------
 
-OTT_TOPIC = Topic(1, "OTT", "", (*DEFAULT_OTT_KEYWORDS.ko, *DEFAULT_OTT_KEYWORDS.en), None, True)
+OTT_TOPIC = Topic(1, "OTT", "", (*DEFAULT_OTT_KEYWORDS.ko, *DEFAULT_OTT_KEYWORDS.en), None)
 
 
 def is_ott_article(llm_flag, title, content):

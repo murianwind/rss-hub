@@ -166,9 +166,9 @@ Feature: 설정 화면
     And 웹훅 주소는 결과 화면에 나타나지 않는다
 
   @SET-14
-  Scenario: OpenRouter 키 확인은 키 정보만 조회하고 채팅 호출은 하지 않는다
-    Given OpenRouter 키가 저장되어 있다
-    When 키 확인을 누른다
+  Scenario: OpenRouter 키를 저장하면 바로 키 정보만 조회하고 채팅 호출은 하지 않는다
+    Given 오늘의 운영 호출 수를 기억해 둔다
+    When OpenRouter 키를 저장한다
     Then 키가 유효한지 여부와 사용량 정보가 표시된다
     And 요약용 채팅 호출은 일어나지 않는다
     And 오늘 운영 호출 수는 늘지 않는다

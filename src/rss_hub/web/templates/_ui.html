@@ -5,7 +5,14 @@
 <div class="field{% if d.key == 'model_chain' %} wide{% endif %}">
   <label for="{{ d.key }}">{{ d.label }}</label>
   {% if d.help %}<p class="hint" id="help-{{ d.key }}">{{ d.help }}</p>{% endif %}
-  {% if d.choices %}<select id="{{ d.key }}" name="{{ d.key }}" aria-describedby="help-{{ d.key }}">{% for value, name in d.choices %}<option value="{{ value }}" {% if values[d.key] == value %}selected{% endif %}>{{ name }}</option>{% endfor %}</select>
+  {% if d.key == 'service_timezone' %}<select id="{{ d.key }}" name="{{ d.key }}" aria-describedby="help-{{ d.key }}">
+    {% set ns = namespace(region='') %}
+    {% if values[d.key] not in d.choices | map('first') %}<option value="{{ values[d.key] }}" selected>{{ values[d.key] }}</option>{% endif %}
+    {% for value, name in d.choices %}{% set region = value.split('/')[0] if '/' in value else '기타' %}
+    {% if region != ns.region %}{% if ns.region %}</optgroup>{% endif %}<optgroup label="{{ region }}">{% set ns.region = region %}{% endif %}
+    <option value="{{ value }}" {% if values[d.key] == value %}selected{% endif %}>{{ name }}</option>{% endfor %}
+    </optgroup></select>
+  {% elif d.choices %}<select id="{{ d.key }}" name="{{ d.key }}" aria-describedby="help-{{ d.key }}">{% for value, name in d.choices %}<option value="{{ value }}" {% if values[d.key] == value %}selected{% endif %}>{{ name }}</option>{% endfor %}</select>
   {% else %}<input type="text" id="{{ d.key }}" name="{{ d.key }}" value="{{ values[d.key] }}" autocomplete="off" aria-describedby="help-{{ d.key }}">{% endif %}
   {% if errors.get(d.key) %}<p class="error">{{ errors[d.key] }}</p>{% endif %}
 </div>

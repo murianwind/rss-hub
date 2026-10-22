@@ -106,8 +106,8 @@ def _on_ott(ctx):
 
 @given(parsers.parse('주제 "게임"과 주제 "만화"의 웹훅은 모두 gizmodo이다'))
 def _two_topics_one_webhook(env):
-    env.add_topic("게임", (), webhook="gizmodo")
-    env.add_topic("만화", (), webhook="gizmodo")
+    env.add_topic("게임", ("gardening",), webhook="gizmodo")
+    env.add_topic("만화", ("gardening",), webhook="gizmodo")
 
 
 @given('글은 주제 "게임"과 "만화"에 해당한다')

@@ -978,3 +978,16 @@
     if (wasRunning) poll();
   }
 })();
+
+/* ---------- 설정 아코디언: 하나를 펼치면 같은 그룹의 다른 것은 접는다 ---------- */
+document.addEventListener(
+  "toggle",
+  function (event) {
+    var opened = event.target;
+    if (!opened.matches || !opened.matches("details[name]") || !opened.open) return;
+    document.querySelectorAll("details[name='" + opened.getAttribute("name") + "']").forEach(function (other) {
+      if (other !== opened) other.open = false;
+    });
+  },
+  true
+);

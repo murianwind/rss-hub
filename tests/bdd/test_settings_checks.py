@@ -66,17 +66,18 @@ def _no_address(parts):
 # ---------- SET-14 ----------
 
 
-@given("OpenRouter 키가 저장되어 있다")
-def _key_saved(parts):
-    parts.settings.set_openrouter_key(KEY)
+@given("오늘의 운영 호출 수를 기억해 둔다")
+def _remember_usage(parts):
     parts.usage_before = LlmUsageRepository(parts.db, parts.clock).count_day(
         parts.clock.now().date()
     )
 
 
-@when("키 확인을 누른다")
-def _press_check(parts):
-    parts.responses.append(parts.client.post("/settings/openrouter-key/check"))
+@when("OpenRouter 키를 저장한다")
+def _save_key(parts):
+    parts.responses.append(
+        parts.client.post("/settings/openrouter-key", data={"openrouter_key": KEY})
+    )
 
 
 @then("키가 유효한지 여부와 사용량 정보가 표시된다")

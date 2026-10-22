@@ -50,7 +50,7 @@ def test_the_llm_request_has_the_title_and_the_plain_text_excerpt(env):
 
 def test_the_topics_the_llm_chose_are_recorded_and_unknown_numbers_are_dropped(env):
     first = env.topics.add(TopicFields("OTT", "스트리밍", ("netflix",)))
-    second = env.topics.add(TopicFields("게임", "", ()))
+    second = env.topics.add(TopicFields("게임", "", ("drama",)))
     article_id = env.add_article(title="Netflix announces a drama")
     env.client.default = reply("t", "s", topics=[second, 999, str(first), True, 1.5, None, second])
     env.summarizer.run()
@@ -60,13 +60,13 @@ def test_the_topics_the_llm_chose_are_recorded_and_unknown_numbers_are_dropped(e
 def test_only_topics_whose_keywords_matched_are_listed_in_the_request(env):
     ott = env.topics.add(TopicFields("OTT", "스트리밍 소식", ("netflix",)))
     game = env.topics.add(TopicFields("게임", "게임 소식", ("steam",)))
-    off = env.topics.add(TopicFields("꺼진 주제", "", ("netflix",)), enabled=False)
+    off = env.topics.add(TopicFields("게임2", "", ("zelda",)))
     env.add_article(title="Netflix announces a drama")
     env.client.default = reply("t", "s")
     env.summarizer.run()
     prompt = env.client.calls[0].prompt
     assert f"{ott}. OTT: 스트리밍 소식" in prompt and f"{game}. 게임" not in prompt
-    assert f"{off}. 꺼진 주제" not in prompt and '"topics"' in prompt
+    assert f"{off}. 게임2" not in prompt and '"topics"' in prompt
 
 
 def test_the_body_text_counts_for_the_keyword_check_but_markup_does_not(env):
@@ -100,13 +100,13 @@ def test_the_llm_cannot_pick_a_topic_that_was_not_a_candidate(env):
     assert article(env, article_id).llm_topics == (ott,)
 
 
-def test_a_topic_without_keywords_is_always_a_candidate(env):
+def test_a_legacy_topic_without_keywords_is_never_asked_about(env):
     topic_id = env.topics.add(TopicFields("보안", "보안 소식", ()))
     article_id = env.add_article(title="Anything at all")
     env.client.default = reply("t", "s", topics=[topic_id])
     env.summarizer.run()
-    assert f"{topic_id}. 보안: 보안 소식" in env.client.calls[0].prompt
-    assert article(env, article_id).llm_topics == (topic_id,)
+    assert "보안 소식" not in env.client.calls[0].prompt
+    assert article(env, article_id).llm_topics == ()
 
 
 def test_the_candidate_check_costs_no_extra_call(env):
@@ -118,19 +118,19 @@ def test_the_candidate_check_costs_no_extra_call(env):
     assert len(env.client.calls) == 1
 
 
-def test_without_enabled_topics_the_prompt_does_not_ask_for_topics_and_the_answer_has_none(env):
+def test_without_topics_the_prompt_does_not_ask_for_topics_and_the_answer_has_none(env):
     article_id = env.add_article()
     env.client.default = reply("t", "s", topics=[1])
     env.summarizer.run()
     assert '"topics"' not in env.client.calls[0].prompt
-    assert article(env, article_id).llm_topics == ()  # 켜진 주제가 없으니 어떤 번호도 유효하지 않다
+    assert article(env, article_id).llm_topics == ()  # 주제가 없으니 어떤 번호도 유효하지 않다
 
 
-def test_a_topic_the_user_turns_off_before_the_summary_is_not_recorded(env):
+def test_a_topic_deleted_before_the_summary_is_not_recorded(env):
     topic_id = env.topics.add(TopicFields("OTT", "", ("phone",)))
     article_id = env.add_article()
     env.client.default = reply("t", "s", topics=[topic_id])
-    env.topics.update(topic_id, TopicFields("OTT", "", ("phone",)), webhook_id=None, enabled=False)
+    env.topics.delete(topic_id)
     env.summarizer.run()
     assert article(env, article_id).llm_topics == ()
 
@@ -460,12 +460,12 @@ def test_nothing_is_recorded_when_no_topic_is_confirmed(env):
     assert topic_matches(env.db, article_id) == {}
 
 
-def test_a_topic_without_keywords_is_recorded_with_an_empty_keyword_list(env):
+def test_a_legacy_topic_without_keywords_records_nothing(env):
     topic_id = env.topics.add(TopicFields("보안", "", ()))
     article_id = env.add_article(title="Anything")
     env.client.default = reply("t", "s", topics=[topic_id])
     env.summarizer.run()
-    assert topic_matches(env.db, article_id) == {topic_id: ()}
+    assert topic_matches(env.db, article_id) == {}
 
 
 def test_a_failed_summary_records_no_topics(env):
@@ -517,9 +517,7 @@ def test_the_setting_puts_confirmed_examples_under_each_candidate_topic(env):
 
 def test_examples_are_only_for_candidate_topics(env):
     ott, _ = feedback(env)
-    env.topics.update(
-        ott, TopicFields("OTT", "스트리밍", ("netflix",)), webhook_id=None, enabled=True
-    )
+    env.topics.update(ott, TopicFields("OTT", "스트리밍", ("netflix",)), webhook_id=None)
     env.settings.update({"topic_feedback_examples": "2"})
     env.add_article(title="Spring gardening")  # 어느 키워드도 안 맞는다
     env.client.default = reply("t", "s")

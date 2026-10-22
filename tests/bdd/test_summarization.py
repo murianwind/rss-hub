@@ -61,8 +61,7 @@ def _batch_default(env):
 
 
 CONTRACT = (
-    'LLM은 JSON으로 "title_ko", "summary_ko"를 답하고, '
-    '켜진 주제가 있으면 "topics"도 답하도록 요청받는다'
+    'LLM은 JSON으로 "title_ko", "summary_ko"를 답하고, 주제가 있으면 "topics"도 답하도록 요청받는다'
 )
 
 
@@ -351,15 +350,10 @@ def _c(env, ctx):
 # ---------- 주제 판별 (SUM-15 ~ 17) ----------
 
 
-@given(parsers.parse('주제 "OTT"(설명 "{description}")와 주제 "게임"이 켜져 있다'))
+@given(parsers.parse('주제 "OTT"(설명 "{description}")와 주제 "게임"이 있다'))
 def _topics_on(env, description):
     env.topics.add(TopicFields("OTT", description, ("netflix",)))
     env.topics.add(TopicFields("게임", "", ("steam",)))
-
-
-@given(parsers.parse('꺼진 주제 "{name}"이 있다'))
-def _disabled_topic(env, name):
-    env.topics.add(TopicFields(name, "", ()), enabled=False)
 
 
 @given(parsers.parse('LLM이 주제 번호로 1, 99, "2", true를 답한다'))
@@ -377,9 +371,7 @@ def _llm_topic_one(env):
     env.client.default = reply("제목", "요약", topics=[1])
 
 
-@given(
-    parsers.re(r'키워드가 없는 주제 "(?P<name>[^"]+)"\(설명 "(?P<description>[^"]+)"\)이 켜져 있다')
-)
+@given(parsers.re(r'키워드가 없는 주제 "(?P<name>[^"]+)"\(설명 "(?P<description>[^"]+)"\)이 있다'))
 def _keywordless_topic(env, name, description):
     env.topics.add(TopicFields(name, description, ()))
 
@@ -398,11 +390,6 @@ def _prompt_has(env, text):
 @then(parsers.re(r'요청에 키워드가 맞지 않은 주제 "(?P<text>[^"]+)"은 들어 있지 않다'))
 def _prompt_lacks_unmatched(env, text):
     assert text not in env.client.calls[0].prompt
-
-
-@then(parsers.parse('요청에 꺼진 주제 "{name}"은 들어 있지 않다'))
-def _prompt_lacks_disabled(env, name):
-    assert name not in env.client.calls[0].prompt
 
 
 @then('글의 주제 판정은 "OTT"와 "게임"이다')

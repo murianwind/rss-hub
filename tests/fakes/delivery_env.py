@@ -115,10 +115,10 @@ class DeliveryEnv:
         self.feed_id = self.add_feed()
         self._counter = 0
 
-    def add_topic(self, name, keywords=(), *, webhook=None, enabled=True, description=""):
+    def add_topic(self, name, keywords=(), *, webhook=None, description=""):
         webhook_id = self.webhooks[webhook] if webhook else None
         return self.topics.add(
-            TopicFields(name, description, tuple(keywords)), webhook_id=webhook_id, enabled=enabled
+            TopicFields(name, description, tuple(keywords)), webhook_id=webhook_id
         )
 
     def topic_id(self, name):

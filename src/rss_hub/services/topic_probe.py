@@ -48,7 +48,7 @@ class ProbeResult:
 def _outage_reason(kinds: set[LlmErrorKind]) -> str:
     """모든 모델이 실패한 이유 중 사용자가 고칠 수 있는 것을 먼저 알려 준다."""
     if LlmErrorKind.UNAUTHORIZED in kinds:
-        return "OpenRouter가 키를 거부했습니다. 설정 화면의 '키 확인'으로 확인해 보세요"
+        return "OpenRouter가 키를 거부했습니다. 모델 화면에서 키를 다시 저장해 확인해 보세요"
     if LlmErrorKind.PAYMENT_REQUIRED in kinds:
         return "OpenRouter 잔액이 부족합니다"
     if LlmErrorKind.RATE_LIMITED in kinds:
@@ -79,9 +79,9 @@ class TopicProbe:
             return ProbeResult(error=f"제목은 {MAX_TITLE_LENGTH}자까지")
         if len(body) > MAX_BODY_LENGTH:
             return ProbeResult(error=f"본문은 {MAX_BODY_LENGTH}자까지")
-        topics = self._topics.list_enabled()
+        topics = self._topics.list_all()
         if not topics:
-            return ProbeResult(error="켜진 주제가 없습니다. 주제를 추가하거나 켜 주세요")
+            return ProbeResult(error="주제가 없습니다. 주제를 추가해 주세요")
         hits = {t.id: find_keywords(title, body, split_keywords(t.keywords)) for t in topics}
         candidates = [t for t in topics if is_candidate(t, title, body)]
         if not candidates:  # 키워드가 맞은 주제가 없으면 LLM에게 물을 것이 없다(호출 0회)

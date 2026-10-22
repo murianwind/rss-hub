@@ -93,7 +93,7 @@ class DeliveryService:
             return DeliveryReport(considered=len(ready), waiting_for_base_url=True)
 
         names = {w.id: w.name for w in self._settings.list_webhooks()}
-        topics = self._topics.list_enabled()
+        topics = self._topics.list_all()
         state = _Run()
         for article in ready[:MAX_ARTICLES_PER_RUN]:
             if state.stop:

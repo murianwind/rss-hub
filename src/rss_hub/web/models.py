@@ -18,7 +18,7 @@ from rss_hub.domain.settings_rules import SettingError
 from rss_hub.services.model_benchmark import MAX_MODELS, BenchmarkRunner
 from rss_hub.services.model_chain import MAX_CHAIN, ModelChainService
 from rss_hub.services.model_scan import ModelScanService
-from rss_hub.services.ports import LlmClient
+from rss_hub.services.ports import KeyCheck, LlmClient
 from rss_hub.services.settings import SETTING_BY_KEY, SettingsService
 from rss_hub.storage.models import (
     CALL_FAILED,
@@ -84,6 +84,19 @@ def progress_view(run: RunInfo | None, calls: Sequence[CallRecord]) -> dict[str,
         "note": run.note,
         "models": models,
     }
+
+
+def _key_result(check: KeyCheck) -> tuple[str, str]:
+    """키를 저장한 직후 확인한 결과(채팅 호출이 아니라서 호출 한도를 쓰지 않는다)."""
+    if check.valid:
+        usage = (
+            f"(오늘 무료 모델 호출 {check.used}/{check.limit})"
+            if check.used is not None and check.limit is not None
+            else ""
+        )
+        return "ok", f"저장했습니다 · 키가 유효합니다{usage}"
+    kind = "error" if check.valid is False else "warn"
+    return kind, f"저장했습니다. 다만 키 확인에 실패했습니다: {check.reason}"
 
 
 def build_model_router(
@@ -190,7 +203,7 @@ def build_model_router(
             settings.set_openrouter_key(str(form.get("openrouter_key", "")))
         except SettingError as error:
             return page(request, error=error.message, status_code=400)
-        return done(form, "/models?saved=1", "saved")
+        return page(request, test_result=_key_result(llm_client.check_key()))
 
     @router.post("/settings/openrouter-key/delete", response_class=HTMLResponse)
     async def delete_key(request: Request) -> Response:
@@ -199,20 +212,6 @@ def build_model_router(
             return page(request, error=DELETE_CONFIRM_MESSAGE, status_code=400)
         settings.delete_openrouter_key()
         return done(form, "/models?saved=1", "saved")
-
-    @router.post("/settings/openrouter-key/check", response_class=HTMLResponse)
-    async def check_key(request: Request) -> Response:
-        """키 정보만 조회한다(채팅 호출이 아니라서 호출 한도와 오늘 호출 수를 쓰지 않는다)."""
-        check = llm_client.check_key()
-        if check.valid:
-            usage_text = (
-                f" · 오늘 무료 모델 호출 {check.used}/{check.limit}"
-                if check.used is not None and check.limit is not None
-                else ""
-            )
-            return page(request, test_result=("ok", f"키가 유효합니다{usage_text}"))
-        kind = "error" if check.valid is False else "warn"
-        return page(request, test_result=(kind, check.reason))
 
     @router.post("/models/scan", response_class=HTMLResponse)
     async def scan(request: Request) -> Response:

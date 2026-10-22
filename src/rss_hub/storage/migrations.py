@@ -260,6 +260,17 @@ MIGRATIONS: tuple[str, ...] = (
         PRIMARY KEY (run_id, model, idx)
     );
     """,
+    # 16: 주제의 "사용" 끄기를 없앴다(모든 주제는 켜진 것으로 본다). 키워드 개선 제안에서 사용자가
+    # 지운 단어는 다시 제안하지 않도록 기억한다
+    """
+    UPDATE topics SET enabled = 1;
+    CREATE TABLE topic_dismissed (
+        topic_id INTEGER NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+        kind     TEXT NOT NULL,
+        word     TEXT NOT NULL,
+        PRIMARY KEY (topic_id, kind, word)
+    );
+    """,
 )
 
 

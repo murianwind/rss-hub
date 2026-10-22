@@ -87,11 +87,11 @@ def test_the_body_is_searched_for_keywords_too(env, probe):
     assert row.keyword_hits == ("드라마",) and row.matched is True
 
 
-def test_a_topic_without_keywords_is_always_asked_about(env, probe):
+def test_a_legacy_topic_without_keywords_is_never_asked_about(env, probe):
     topic_id = env.topics.add(TopicFields("보안", "", ()))
     env.client.default = reply("t", "s", topics=[topic_id])
     row = probe.run("Anything at all").rows[0]
-    assert (row.asked, row.matched) == (True, True)
+    assert (row.asked, row.matched) == (False, False)
 
 
 def test_when_no_topic_is_a_candidate_the_llm_is_not_called_at_all(env, probe):
@@ -120,15 +120,6 @@ def test_the_probe_costs_exactly_one_llm_call_and_creates_nothing(env, probe):
     assert env.articles.count_by_status() == {} and topic_matches(env.db, 1) == {}
 
 
-def test_disabled_topics_are_not_candidates(env, probe):
-    ott, _game = add_topics(env)
-    env.topics.update(
-        ott, TopicFields("OTT", "스트리밍 소식", ("netflix",)), webhook_id=None, enabled=False
-    )
-    result = probe.run(MATCHING_TITLE)
-    assert [r.name for r in result.rows] == ["게임"] and result.llm_called is False
-
-
 def test_the_webhook_a_matching_topic_would_use_is_reported(env, probe):
     webhook_id = env.settings.add_webhook("ott방", "https://discord.com/api/webhooks/5/abc")
     topic_id = env.topics.add(TopicFields("OTT", "", ("netflix",)), webhook_id=webhook_id)
@@ -146,8 +137,8 @@ def test_a_missing_key_is_explained_and_nothing_is_called(tmp_path):
     assert "키가 설정되지 않았습니다" in result.error and env.client.calls == []
 
 
-def test_without_enabled_topics_there_is_nothing_to_test(env, probe):
-    assert "켜진 주제가 없습니다" in probe.run("x").error and env.client.calls == []
+def test_without_topics_there_is_nothing_to_test(env, probe):
+    assert "주제가 없습니다" in probe.run("x").error and env.client.calls == []
 
 
 def test_the_daily_limit_blocks_the_probe_with_a_reason(env, probe):

@@ -126,7 +126,7 @@ class SummarizeService:
     def _run_plain(self) -> SummarizeReport:
         """LLM 없이 원문 제목으로 글을 확정한다. 키워드가 있는 주제는 키워드가 맞아야 해당한다."""
         targets = self.pending(PLAIN_BATCH)
-        topics = [t for t in self._topics.list_enabled() if t.keywords]
+        topics = self._topics.list_all()
         for article in targets:
             matched = [t for t in topics if is_candidate(t, article.title, article.content_html)]
             ids = [t.id for t in matched]
@@ -143,7 +143,7 @@ class SummarizeService:
         # 키워드로 먼저 거른다. 후보가 아닌 주제는 묻지 않고, 후보가 없으면 주제 항목도 없다
         topics = [
             t
-            for t in self._topics.list_enabled()
+            for t in self._topics.list_all()
             if is_candidate(t, article.title, article.content_html)
         ]
         examples = load_examples(

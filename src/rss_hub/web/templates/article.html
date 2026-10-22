@@ -31,7 +31,7 @@
       <details class="menu">
         <summary class="menu-button">{{ icon('hash') }} 특정 주제로</summary>
         <div class="menu-list" role="menu">
-          {% for t in enabled_topics %}
+          {% for t in topics %}
           {% set m = memberships.get(t.id) %}
           {% if not m or m.rejected %}
           <form method="post" action="/a/{{ article.id }}/topics/{{ t.id }}/{{ 'restore' if m else 'add' }}">
@@ -40,8 +40,8 @@
           </form>
           {% endif %}
           {% endfor %}
-          {% if not enabled_topics %}<p class="hint">켜진 주제가 없습니다. <a href="/topics">주제 설정</a></p>
-          {% elif enabled_topics | rejectattr('id', 'in', memberships_active) | list | length == 0 %}<p class="hint">모든 주제에 이미 들어 있습니다.</p>{% endif %}
+          {% if not topics %}<p class="hint">주제가 없습니다. <a href="/topics">주제 설정</a></p>
+          {% elif topics | rejectattr('id', 'in', memberships_active) | list | length == 0 %}<p class="hint">모든 주제에 이미 들어 있습니다.</p>{% endif %}
         </div>
       </details>
     </div>
