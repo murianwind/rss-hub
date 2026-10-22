@@ -17,6 +17,7 @@ from pytest_bdd import given, parsers, then, when
 from rss_hub.web.app import create_app
 from tests.bdd.binding import bind
 from tests.fakes.clock import FakeClock
+from tests.fakes.llm_client import FakeLlmClient
 
 bind(
     globals(),
@@ -39,7 +40,7 @@ LEGACY_ENV_NAMES = (
 
 @pytest.fixture
 def env(tmp_path):
-    app = create_app(data_dir=tmp_path, clock=FakeClock())
+    app = create_app(data_dir=tmp_path, clock=FakeClock(), llm_client=FakeLlmClient())
     return SimpleNamespace(
         app=app,
         service=app.state.settings_service,

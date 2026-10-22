@@ -134,8 +134,8 @@ class LlmClient(Protocol):
         """서버가 알려 주는 오늘 호출 수. 호출 한도를 쓰지 않는다. 조회에 실패하면 None."""
         ...
 
-    def check_key(self) -> KeyCheck:
-        """키가 유효한지와 사용량. 호출 한도를 쓰지 않는다."""
+    def check_key(self, api_key: str | None = None) -> KeyCheck:
+        """키가 유효한지와 사용량. 호출 한도를 쓰지 않는다. 키를 주면 저장 전에 그 키를 확인한다."""
         ...
 
     def list_free_models(self) -> list[FreeModel] | None:

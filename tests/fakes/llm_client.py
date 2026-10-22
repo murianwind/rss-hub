@@ -57,6 +57,7 @@ class FakeLlmClient:
     usage_queries: int = 0
     key_check: KeyCheck = field(default_factory=lambda: KeyCheck(valid=True, used=33, limit=1000))
     key_checks: int = 0
+    checked_keys: list[str | None] = field(default_factory=list)
     free_models: list[FreeModel] | None = field(default_factory=list)
     model_lists: int = 0
 
@@ -84,8 +85,9 @@ class FakeLlmClient:
         self.model_lists += 1
         return self.free_models
 
-    def check_key(self) -> KeyCheck:
+    def check_key(self, api_key: str | None = None) -> KeyCheck:
         self.key_checks += 1
+        self.checked_keys.append(api_key)
         return self.key_check
 
     def models_called(self) -> list[str]:

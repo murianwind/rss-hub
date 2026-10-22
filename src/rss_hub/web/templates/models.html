@@ -29,10 +29,10 @@
 <section class="panel key-area">
   <p class="note">요약과 주제 판별에 쓰는 OpenRouter 무료 모델을 부르는 키입니다. 없어도 동작하지만 번역과 요약 없이 원문 제목과 링크만 알립니다. 상태: <strong>{{ '설정됨' if has_key else '미설정' }}</strong> <span class="hint">(저장한 뒤에는 값을 다시 보여 주지 않습니다)</span></p>
   <div class="key-row">
-    <form method="post" action="/settings/openrouter-key" class="key-save">
+    <form method="post" action="/settings/openrouter-key" class="key-save" data-key-form>
       <label for="openrouter_key">새 키</label>
       <input type="password" id="openrouter_key" name="openrouter_key" autocomplete="off" placeholder="sk-or-...">
-      <button type="submit" class="primary" title="저장하면 바로 키가 유효한지 확인합니다">저장</button>
+      <button type="submit" class="primary" title="키가 유효한지 확인하고 통과하면 저장합니다">저장</button>
     </form>
     {% if has_key %}
     <form method="post" action="/settings/openrouter-key/delete" data-confirm="OpenRouter 키를 삭제합니다. 키를 다시 넣기 전까지 요약과 주제 판정이 멈춥니다. 삭제할까요?">
@@ -44,7 +44,8 @@
       <button type="submit" title="OpenRouter의 무료 텍스트 모델 목록을 가져옵니다. 호출 한도를 쓰지 않습니다">무료 모델 스캔</button>
     </form>
   </div>
-  <p class="hint">저장하면 바로 키가 유효한지 확인합니다(호출 한도를 쓰지 않음). 무료 모델 스캔은 하루에 한 번 자동으로도 하며, 체인의 모델이 사라지면 시스템 웹훅으로 알립니다.</p>
+  <p class="banner" role="alert" data-key-message hidden></p>
+  <p class="hint">저장을 누르면 키가 유효한지 먼저 확인하고(호출 한도를 쓰지 않음), 통과해야 저장합니다. 무료 모델 스캔은 하루에 한 번 자동으로도 하며, 체인의 모델이 사라지면 시스템 웹훅으로 알립니다.</p>
 </section>
 
 <h2>호출 한도</h2>

@@ -11,11 +11,11 @@ from rss_hub.services.ports import KeyCheck
 from tests.bdd.binding import bind
 from tests.fakes.llm_env import LlmEnv
 from tests.fakes.models_env import free
-from tests.keywords.browser import FRAGMENT, post
+from tests.keywords.browser import BROWSER, FRAGMENT, post
 from tests.keywords.models import scan
 from tests.keywords.page import text_of
 
-bind(globals(), "25_settings_topics_refine.feature", [f"STP-{n:02d}" for n in range(1, 18)])
+bind(globals(), "25_settings_topics_refine.feature", [f"STP-{n:02d}" for n in range(1, 20)])
 
 KEY = "sk-or-v1-abcdefghijklmnop"
 PAGES = {
@@ -191,12 +191,28 @@ def _notify_repeat(env, first, second):
     env.alerts.notify("same-kind", "문제가 생겼습니다")
 
 
+OLD_KEY = "sk-or-v1-previous-key-0000"
+
+
+@given("이미 저장된 키가 있다")
+def _old_key(world):
+    world.parts.settings.set_openrouter_key(OLD_KEY)
+
+
 @when("모델 화면에서 OpenRouter 키를 저장한다")
 def _save_key(world, ctx):
     saved = post(world, "/settings/openrouter-key", openrouter_key=KEY, next="/models")
-    assert saved.status_code == 200
     ctx.response = saved
     ctx.html = saved.text
+
+
+@when("백그라운드로 OpenRouter 키를 저장한다")
+def _save_key_in_background(world, ctx):
+    ctx.response = world.client.post(
+        "/settings/openrouter-key",
+        data={"openrouter_key": KEY},
+        headers={**BROWSER, "Accept": "application/json"},
+    )
 
 
 @then(parsers.re(r'서비스 시간대는 지역별로 묶인 선택 목록이고 "(?P<zone>[^"]+)"이 선택되어 있다'))
@@ -363,15 +379,34 @@ def _key_row(ctx):
     html = ctx.html
     assert 'action="/settings/openrouter-key/check"' not in html
     row = html.split('<div class="key-row"')[1].split("</section>")[0]
-    assert 'action="/settings/openrouter-key"' in row and 'action="/models/scan"' in row
+    assert (
+        'action="/settings/openrouter-key"' in row
+        and "data-key-form" in row
+        and 'action="/models/scan"' in row
+    )
     assert row.count("<button") >= 2
 
 
-@then("키는 저장되었고 확인 실패 이유가 화면에 보인다")
-def _saved_but_failed(world, ctx):
-    assert world.parts.settings.has_openrouter_key()
+@then("새 키는 저장되지 않고 이전 키가 남아 있으며 확인 실패 이유가 화면에 보인다")
+def _not_saved_but_explained(world, ctx):
+    assert world.parts.settings.get_openrouter_key() == OLD_KEY
     text = text_of(ctx.response)
-    assert "키 확인에 실패했습니다" in text and "OpenRouter가 키를 거부했습니다" in text
+    assert "저장하지 않았습니다" in text and "OpenRouter가 키를 거부했습니다" in text
+
+
+@then("결과는 성공이고 키가 저장되었다")
+def _json_saved(world, ctx):
+    body = ctx.response.json()
+    assert ctx.response.status_code == 200 and body["ok"] is True
+    assert "키가 유효합니다" in body["message"]
+    assert world.parts.settings.get_openrouter_key() == KEY
+
+
+@then("결과는 실패이고 이유가 있으며 키는 저장되지 않았다")
+def _json_failed(world, ctx):
+    body = ctx.response.json()
+    assert body["ok"] is False and "OpenRouter가 키를 거부했습니다" in body["message"]
+    assert not world.parts.settings.has_openrouter_key()
 
 
 @then("변경 이력은 스크롤 영역 안에 있고 버전 정보는 없다")
