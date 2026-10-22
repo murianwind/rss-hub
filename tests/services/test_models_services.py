@@ -4,6 +4,8 @@ import pytest
 
 from rss_hub.domain.benchmark import SAMPLES
 from rss_hub.services.model_benchmark import (
+    CANCEL_POLL_SECONDS,
+    CANCELLED,
     MAX_MODELS,
     BenchmarkRunner,
     BenchmarkService,
@@ -14,6 +16,7 @@ from rss_hub.services.ports import LlmErrorKind
 from rss_hub.storage.models import (
     RUN_DONE,
     RUN_FAILED,
+    RUN_INTERRUPTED,
     RUN_RUNNING,
 )
 from tests.fakes.llm_client import failure, good, reply
@@ -249,7 +252,7 @@ def test_a_stopped_run_is_recorded_as_failed_with_the_reason(env, runner):
 
 def test_an_unexpected_error_marks_the_run_failed_without_leaking_details(env, runner):
     class Boom(BenchmarkService):
-        def run(self, run_id, model_ids):
+        def run(self, run_id, model_ids, **kwargs):
             raise RuntimeError("https://secret.example.com/token")
 
     boom = BenchmarkRunner(
@@ -375,3 +378,49 @@ def test_a_stopped_account_problem_is_recorded_on_the_run_with_its_reason(env):
     runner.start(["model-a"])
     latest = env.models.latest_run()
     assert latest.status == RUN_FAILED and "키를 거부했습니다" in latest.note
+
+
+# ---------- 중단 ----------
+
+
+def test_a_stop_request_keeps_the_scores_of_finished_models_and_calls_no_more(env):
+    env.perfect_answers("model-a")
+    env.perfect_answers("model-b")
+    outcome = env.benchmark().run(
+        env.models.start_run(12),
+        ["model-a", "model-b"],
+        should_stop=lambda: len(env.client.calls) >= 6,
+    )
+    assert outcome.stopped == CANCELLED and len(env.client.calls) == 6
+    assert [s.model for s in outcome.scores] == ["model-a"]
+
+
+def test_a_stop_request_in_the_middle_of_a_model_leaves_no_score_for_it(env):
+    env.perfect_answers("model-a")
+    outcome = env.benchmark().run(
+        env.models.start_run(6), ["model-a"], should_stop=lambda: len(env.client.calls) >= 2
+    )
+    assert outcome.stopped == CANCELLED and outcome.scores == () and len(env.client.calls) == 2
+
+
+def test_a_stop_request_ends_the_wait_for_the_limits_early(env):
+    env.client.will("model-a", *[failure(LlmErrorKind.RATE_LIMITED, status=429)] * 4)
+    outcome = env.benchmark().run(
+        env.models.start_run(6),
+        ["model-a"],
+        should_stop=lambda: env.sleeps_log.count(CANCEL_POLL_SECONDS) >= 3,
+    )
+    assert outcome.stopped == CANCELLED and env.sleeps_log.count(CANCEL_POLL_SECONDS) == 3
+
+
+def test_cancelling_when_nothing_runs_does_nothing(env, runner):
+    assert runner.cancel() is False
+
+
+def test_cancelling_a_started_run_records_it_as_interrupted_without_calls(env, runner):
+    runner.start(["model-a"])
+    assert runner.cancel() is True
+    env.spawned.pop()()
+    latest = env.models.latest_run()
+    assert latest.status == RUN_INTERRUPTED and latest.note == CANCELLED and env.client.calls == []
+    assert runner.start(["model-a"]).status == "started"  # 중단 요청은 다음 실행에 남지 않는다

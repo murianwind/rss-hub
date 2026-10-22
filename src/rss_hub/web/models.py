@@ -168,11 +168,17 @@ def build_model_router(
 
     @router.get("/models", response_class=HTMLResponse)
     def model_page(
-        request: Request, started: str = "", applied: str = "", saved: str = ""
+        request: Request,
+        started: str = "",
+        applied: str = "",
+        saved: str = "",
+        cancelling: str = "",
     ) -> HTMLResponse:
         notice = (
-            "벤치마크를 시작했습니다. 진행 상황은 아래 패널에서 바로 볼 수 있습니다."
+            "벤치마크를 시작했습니다. 진행 상황은 아래 벤치마크 결과에서 바로 볼 수 있습니다."
             if started
+            else "중단을 요청했습니다. 진행 중인 호출이 끝나면 멈춥니다."
+            if cancelling
             else "모델 체인을 바꿨습니다."
             if applied
             else "저장했습니다"
@@ -250,6 +256,12 @@ def build_model_router(
         return page(
             request, error=result.message, status_code=409 if result.status == "busy" else 400
         )
+
+    @router.post("/models/benchmark/cancel", response_class=HTMLResponse)
+    async def cancel_benchmark(request: Request) -> Response:
+        if runner.cancel():
+            return RedirectResponse("/models?cancelling=1", status_code=303)
+        return page(request, notice="실행 중인 벤치마크가 없습니다.")
 
     @router.post("/models/apply", response_class=HTMLResponse)
     async def apply(request: Request) -> Response:

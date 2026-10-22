@@ -65,7 +65,7 @@
     </nav>
   </div>
   <div class="sb-foot">
-    {% if ui_model_usage %}<span class="model-usage" title="오늘 모델 호출 한도에서 남은 횟수">모델 잔여 사용량 <b data-model-usage>{{ ui_model_usage.remaining }}/{{ ui_model_usage.cap }}</b></span>{% endif %}
+    {% if ui_model_usage %}<span class="model-usage" title="오늘 모델 호출 한도에서 남은 횟수">모델 잔여 사용량 <b data-model-usage>{{ ui_model_usage.remaining }}/{{ ui_model_usage.cap }}</b><button type="button" class="icon-btn mini" data-action="refresh-model-usage" title="지금 바로 새로고침(자동으로는 30초마다 갱신)" aria-label="모델 잔여 사용량 새로고침">{{ icon('refresh') }}</button></span>{% endif %}
     <span>RSS Hub v{{ ui_version }}</span>
   </div>
 </aside>

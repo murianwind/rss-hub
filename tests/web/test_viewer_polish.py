@@ -556,3 +556,12 @@ def test_the_three_sections_share_the_sidebar_height_and_scroll_inside(world):
         "--share-cat: 0.6; --share-top: 0.4;" in css
         and "--share-rss: 0.55; --share-cat: 0.45;" in css
     )
+
+
+def test_refreshing_the_usage_reports_when_the_server_gives_no_number(world):
+    configure_model(world)
+    world.parts.llm.usage = None
+    response = post(world, "/ui/model-usage/refresh")
+    assert response.status_code == 502 and "error" in response.json()
+    server_says(world, 33)
+    assert post(world, "/ui/model-usage/refresh").json() == {"remaining": 967, "cap": 1000}

@@ -8,23 +8,6 @@
 {% if test_result %}<div class="banner {{ 'error' if test_result[0] == 'error' else '' }}" role="status">{{ test_result[1] }}</div>{% endif %}
 {% if error %}<div class="banner error" role="alert">{{ error }}</div>{% endif %}
 
-<section class="bench-panel panel" data-bench-progress data-url="/models/benchmark/progress" data-running="{{ 1 if progress.running else 0 }}" {% if not progress.models %}hidden{% endif %}>
-  <p class="bench-head"><strong>벤치마크</strong>
-    <span data-bench-status>{% if progress.running %}실행 중{% elif progress.status == 'done' %}완료{% elif progress.status == 'failed' %}멈춤{% elif progress.status %}중단됨{% endif %}</span>
-    <span class="hint" data-bench-count>{{ progress.done }}/{{ progress.total }}</span>
-    <span class="hint" data-bench-note>{{ progress.note }}</span></p>
-  <progress class="bench-bar" max="{{ progress.total or 1 }}" value="{{ progress.done }}" data-bench-bar></progress>
-  <div data-bench-models>
-    {% for m in progress.models %}
-    <div class="bench-model"><code>{{ m.model }}</code>
-      <span class="bench-cells">{% for c in m.cells %}<span class="cell cell-{{ c.state }}" title="{{ c.n }}. {{ c.title }}{% if c.latency_ms %} · {{ (c.latency_ms / 1000) | round(1) }}초{% endif %}{% if c.reason %} · {{ c.reason }}: {{ c.detail }}{% endif %}">{{ c.n }}</span>{% endfor %}</span>
-    </div>
-    {% endfor %}
-  </div>
-  <p class="hint">칸 하나가 시험 글 하나입니다. <span class="cell cell-ok">성공</span> <span class="cell cell-failed">실패</span> <span class="cell cell-running">진행 중</span> <span class="cell cell-pending">대기</span> <span class="cell cell-skipped">건너뜀</span> · 칸에 마우스를 올리면 글 제목과 실패 이유가 보입니다. 이 패널은 화면을 새로 고치지 않고 자동으로 갱신됩니다.</p>
-</section>
-<noscript><p class="hint">자바스크립트가 꺼져 있으면 진행 상황은 화면을 직접 새로 고쳐야 보입니다.</p></noscript>
-
 <h2>OpenRouter 키</h2>
 <section class="panel key-area">
   <p class="note">요약과 주제 판별에 쓰는 OpenRouter 무료 모델을 부르는 키입니다. 없어도 동작하지만 번역과 요약 없이 원문 제목과 링크만 알립니다. 상태: <strong>{{ '설정됨' if has_key else '미설정' }}</strong> <span class="hint">(저장한 뒤에는 값을 다시 보여 주지 않습니다)</span></p>
@@ -48,10 +31,11 @@
   <p class="hint">저장을 누르면 키가 유효한지 먼저 확인하고(호출 한도를 쓰지 않음), 통과해야 저장합니다. 무료 모델 스캔은 하루에 한 번 자동으로도 하며, 체인의 모델이 사라지면 시스템 웹훅으로 알립니다.</p>
 </section>
 
-<h2>호출 한도</h2>
-<div class="panel">
+{% set limit_keys = limit_sections[0][1] | map(attribute='key') | list %}
+<details class="panel acc-limit"{% if errors | select('in', limit_keys) | list %} open{% endif %}>
+  <summary>호출 한도</summary>
 {{ settings_form('/models/settings', '/models', limit_sections, values, errors) }}
-</div>
+</details>
 
 <h2>모델 체인</h2>
 <p class="note">요약은 체인의 앞 모델부터 시도하고, 실패하면 다음 모델로 넘어갑니다. 아래 무료 모델 목록에서 모델을 끌어다 놓거나 <b>+</b>를 눌러 넣고, 체인 안에서 끌어 순서를 바꾸고, 밖으로 끌거나 <b>×</b>를 눌러 뺍니다. <b>체인 저장</b>을 눌러야 적용됩니다(최대 {{ max_chain }}개).</p>
@@ -107,6 +91,44 @@
   </div>
   <div class="form-actions"><button type="submit" {% if progress.running %}disabled{% endif %}>선택한 모델 벤치마크</button></div>
 </form>
+
+{% else %}
+<p class="hint">아직 스캔하지 않았습니다. 위의 키 영역에서 무료 모델 스캔을 누르세요.</p>
+{% endif %}
+
+{% set states = [] %}{% for m in progress.models %}{% for c in m.cells %}{% if c.state not in states %}{% set _ = states.append(c.state) %}{% endif %}{% endfor %}{% endfor %}
+{% if progress.status or progress.models or recommendation %}
+<h2>벤치마크 결과</h2>
+<section class="bench-panel panel" data-bench-progress data-url="/models/benchmark/progress" data-running="{{ 1 if progress.running else 0 }}" {% if not progress.models %}hidden{% endif %}>
+  <div class="bench-head"><strong>진행</strong>
+    <span data-bench-status>{% if progress.running %}실행 중{% elif progress.status == 'done' %}완료{% elif progress.status == 'failed' %}멈춤{% elif progress.status %}중단됨{% endif %}</span>
+    <span class="hint" data-bench-count>{{ progress.done }}/{{ progress.total }}</span>
+    <span class="hint" data-bench-note>{{ progress.note }}</span>
+    <form method="post" action="/models/benchmark/cancel" class="bench-cancel" data-bench-cancel data-confirm="벤치마크를 중단합니다. 지금까지 끝낸 모델의 점수는 남습니다. 중단할까요?"{% if not progress.running %} hidden{% endif %}><button type="submit" class="danger compact">중단</button></form></div>
+  <progress class="bench-bar" max="{{ progress.total or 1 }}" value="{{ progress.done }}" data-bench-bar></progress>
+  <div data-bench-models>
+    {% for m in progress.models %}
+    <div class="bench-model"><code>{{ m.model }}</code>
+      <span class="bench-cells">{% for c in m.cells %}<span class="cell cell-{{ c.state }}" title="{{ c.n }}. {{ c.title }}{% if c.latency_ms %} · {{ (c.latency_ms / 1000) | round(1) }}초{% endif %}{% if c.reason %} · {{ c.reason }}: {{ c.detail }}{% endif %}">{{ c.n }}</span>{% endfor %}</span>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="bench-legend" data-bench-legend>{% for state, label in (('ok', '성공'), ('failed', '실패'), ('running', '진행 중'), ('pending', '대기'), ('skipped', '건너뜀')) %}{% if state in states %}<span class="cell cell-{{ state }}">{{ label }}</span> {% endif %}{% endfor %}</p>
+  <p class="hint">칸 하나가 시험 글 하나입니다. 칸에 마우스를 올리면 글 제목과 실패 이유가 보입니다. 이 패널은 화면을 새로 고치지 않고 자동으로 갱신됩니다.</p>
+</section>
+<noscript><p class="hint">자바스크립트가 꺼져 있으면 진행 상황은 화면을 직접 새로 고쳐야 보입니다.</p></noscript>
+
+{% if recommendation %}
+<div class="panel">
+  {% if recommendation.chain %}
+  <p><strong>추천 체인</strong> <span class="hint">{{ recommendation.reason }}</span></p>
+  <ol>{% for m in recommendation.chain %}<li><code>{{ m }}</code></li>{% endfor %}</ol>
+  <p class="hint">바꾸려면 위의 모델 체인에서 끌어다 놓거나 [+]를 눌러 직접 구성하세요.</p>
+  {% else %}<p class="hint">{{ recommendation.reason }}</p>{% endif %}
+</div>
+{% endif %}
+{% endif %}
+{% if progress.status or progress.models or recommendation or catalog %}
 <details class="panel legend">
   <summary>점수 보는 법</summary>
   <ul>
@@ -119,25 +141,6 @@
     <li><b>JSON 응답 지원</b>: 요약 결과를 JSON 형식으로 받아 내는 옵션을 모델이 지원합니다.</li>
   </ul>
 </details>
-{% else %}
-<p class="hint">아직 스캔하지 않았습니다. 위의 키 영역에서 무료 모델 스캔을 누르세요.</p>
-{% endif %}
-
-{% if recommendation %}
-<h2>추천</h2>
-<div class="panel">
-  {% if recommendation.chain %}
-  <p>{{ recommendation.reason }}</p>
-  <ol>{% for m in recommendation.chain %}<li><code>{{ m }}</code></li>{% endfor %}</ol>
-  {% if recommendation.changed %}
-  <form method="post" action="/models/apply" data-confirm="추천 체인으로 바꿉니다. 바꿀까요?">
-    {% for m in recommendation.chain %}<input type="hidden" name="chain" value="{{ m }}">{% endfor %}
-    <input type="hidden" name="confirm" value="yes">
-    <div class="form-actions"><button type="submit" class="primary">추천 체인으로 교체</button></div>
-  </form>
-  {% endif %}
-  {% else %}<p class="hint">{{ recommendation.reason }}</p>{% endif %}
-</div>
 {% endif %}
 </div>
 {% endblock %}

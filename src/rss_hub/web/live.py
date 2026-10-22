@@ -1,6 +1,5 @@
 """화면을 다시 불러오지 않고 사이드바를 갱신하는 데 쓰는 경로: 개수와 상태, 피드 강제 새로고침."""
 
-from collections.abc import Callable
 from dataclasses import replace
 
 from fastapi import APIRouter
@@ -10,6 +9,7 @@ from rss_hub.domain.discovery import describe_fetch_failure
 from rss_hub.services.collect import CollectService
 from rss_hub.storage.feeds import FeedRepository
 from rss_hub.storage.reader import ReaderRepository, Sidebar
+from rss_hub.web.ui import ModelUsageView
 
 
 def sidebar_state(side: Sidebar, model_usage: dict[str, int] | None = None) -> dict[str, object]:
@@ -32,13 +32,21 @@ def build_live_router(
     reader: ReaderRepository,
     feeds: FeedRepository,
     collector: CollectService,
-    model_usage: Callable[[], dict[str, int] | None],
+    model_usage: ModelUsageView,
 ) -> APIRouter:
     router = APIRouter()
 
     @router.get("/ui/state")
     def state() -> JSONResponse:
         return JSONResponse(sidebar_state(reader.sidebar(), model_usage()))
+
+    @router.post("/ui/model-usage/refresh")
+    def refresh_model_usage() -> JSONResponse:
+        """서버에 오늘 호출 수를 바로 다시 묻는다(1분 동안 재사용하는 값을 건너뛴다)."""
+        fresh = model_usage.refresh()
+        if fresh is None:
+            return JSONResponse({"error": "서버에서 값을 받지 못했습니다"}, status_code=502)
+        return JSONResponse(fresh)
 
     @router.post("/feeds/{feed_id}/refresh")
     def refresh(feed_id: int) -> JSONResponse:
