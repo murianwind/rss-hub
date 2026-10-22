@@ -1153,3 +1153,56 @@ document.addEventListener(
     summary.open = false;
   }
 })();
+
+/* ---------- 좁은 화면의 글 화면: 스크롤하면 RSS Hub 바를 숨기고, 멈추면 다시 보인다 ---------- */
+/* ---------- 왼쪽 가장자리에서 오른쪽으로 쓸면 목록으로 돌아간다 ---------- */
+(function () {
+  var bar = document.querySelector(".article-page .mobilebar");
+  var scroller = document.querySelector(".article-page .detail-scroll");
+  if (!bar || !scroller) return;
+  var narrow = window.matchMedia ? window.matchMedia("(max-width: 820px)") : null;
+  var timer = null;
+
+  scroller.addEventListener(
+    "scroll",
+    function () {
+      if (!narrow || !narrow.matches) return;
+      if (scroller.scrollTop > 8) bar.classList.add("bar-hidden");
+      window.clearTimeout(timer);
+      timer = window.setTimeout(function () {
+        bar.classList.remove("bar-hidden");
+      }, 400);
+    },
+    { passive: true }
+  );
+
+  var EDGE_SWIPE = { edge: 24, distance: 70, slope: 0.5 };
+  var back = document.querySelector("a.back");
+  var start = null;
+  document.addEventListener(
+    "touchstart",
+    function (event) {
+      var touch = event.touches[0];
+      var drawer = document.body.classList.contains("drawer-open");
+      start =
+        back && narrow && narrow.matches && !drawer && event.touches.length === 1 && touch.clientX <= EDGE_SWIPE.edge
+          ? { x: touch.clientX, y: touch.clientY }
+          : null;
+    },
+    { passive: true }
+  );
+  document.addEventListener(
+    "touchend",
+    function (event) {
+      if (!start) return;
+      var touch = event.changedTouches[0];
+      var dx = touch.clientX - start.x;
+      var dy = Math.abs(touch.clientY - start.y);
+      start = null;
+      if (dx >= EDGE_SWIPE.distance && dy <= dx * EDGE_SWIPE.slope) {
+        window.location.href = back.getAttribute("href");
+      }
+    },
+    { passive: true }
+  );
+})();

@@ -7,14 +7,14 @@
 <link rel="stylesheet" href="/static/app.css?v={{ ui_version }}">
 <script src="/static/app.js?v={{ ui_version }}" defer></script>
 </head>
-<body class="app{% if ui_collapsed %} sidebar-collapsed{% endif %}{% if ui_sbw %} sw-{{ ui_sbw }}{% endif %}" data-auto-read="{{ ui_auto_read }}">
+<body class="app{% block body_class %}{% endblock %}{% if ui_collapsed %} sidebar-collapsed{% endif %}{% if ui_sbw %} sw-{{ ui_sbw }}{% endif %}" data-auto-read="{{ ui_auto_read }}">
 {{ sprite() }}
 <div class="shell">
 {% include "_sidebar.html" %}
 <div class="resizer" id="resizer" role="separator" aria-orientation="vertical" aria-label="사이드바 너비 조절(끌거나 좌우 방향키, 두 번 누르면 기본 폭)" tabindex="0" title="끌어서 너비 조절 · 두 번 누르면 기본 폭"></div>
 <div class="backdrop" data-action="close-drawer"></div>
 <div class="main">
-  <div class="mobilebar"><button type="button" class="icon-btn" data-action="open-drawer" aria-label="메뉴 열기">{{ icon('menu') }}</button><b>RSS Hub</b></div>
+  <header class="mobilebar"><button type="button" class="icon-btn" data-action="open-drawer" aria-label="메뉴 열기">{{ icon('menu') }}</button><b>RSS Hub</b>{% block topbar_actions %}{% endblock %}</header>
   {% if ui_toast %}<div class="toast" role="status" data-toast><span>{{ ui_toast }}</span><button type="button" class="icon-btn" data-action="close-toast" aria-label="닫기">{{ icon('x') }}</button></div>{% endif %}
   <div id="panel-slot" class="panel-slot" hidden></div>
   {% block main %}<div class="scroll{% block scroll_class %}{% endblock %}"><div class="page{% block page_class %}{% endblock %}">

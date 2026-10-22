@@ -578,3 +578,22 @@ details.acc-limit[open] > summary { margin-bottom: 8px; }
   .label-long { display: none; }
   .label-short { display: inline; }
 }
+
+.menu-mobile { display: none; }
+.mobile-actions { display: none; margin-left: auto; gap: 6px; align-items: center; }
+.mobile-actions form { margin: 0; }
+@media (max-width: 820px) {
+  .mobile-actions { display: flex; }
+  .article-page .detailbar { display: none; }
+  .article-page .mobilebar { position: fixed; top: 0; left: 0; right: 0; z-index: 20; transition: transform 0.2s ease; }
+  .article-page .mobilebar.bar-hidden { transform: translateY(-100%); }
+  .article-page .detail-scroll { overflow-y: auto; padding-top: 60px; }
+  .article-page .doc { overflow: visible; flex: none; }
+  .article-page .doc-fixed { max-height: none; overflow: visible; }
+  .article-page .doc-scroll { overflow: visible; }
+  .article-page .doc-summary { max-height: none; overflow: visible; }
+  .menu-label { display: none; }
+  .menu-desktop { display: none; }
+  .menu-mobile { display: inline; }
+}
+@media (prefers-reduced-motion: reduce) { .article-page .mobilebar { transition: none; } }

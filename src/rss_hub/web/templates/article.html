@@ -1,19 +1,24 @@
 {% extends "base.html" %}
 {% block title %}{{ title }} · RSS Hub{% endblock %}
-{% block main %}
-<header class="detailbar">
-  <a class="back" href="{{ back }}">{{ icon('arrow-left') }}<span class="label-long">목록으로 돌아가기</span><span class="label-short">목록</span></a>
-  <div class="detail-actions">
+{% block body_class %} article-page{% endblock %}
+{% macro actions() %}
     <form method="post" action="/a/{{ article.id }}/bookmark">
       <input type="hidden" name="on" value="{{ 0 if bookmarked else 1 }}">
       <input type="hidden" name="next" value="{{ here }}">
       <button type="submit" class="compact" aria-pressed="{{ 'true' if bookmarked else 'false' }}" aria-label="{{ '북마크 해제' if bookmarked else '북마크' }}" title="{{ '북마크 해제' if bookmarked else '북마크' }}">{{ icon('bookmark', 'fill' if bookmarked else '') }}<span class="label-long"> {{ '북마크 해제' if bookmarked else '북마크' }}</span></button>
     </form>
     <form method="post" action="/a/{{ article.id }}/read">
-      <input type="hidden" name="state" value="unread">
-      <input type="hidden" name="next" value="{{ back }}">
-      <button type="submit" class="compact" title="읽지 않은 글로 되돌리고 목록으로 갑니다"><span class="label-long">읽지 않음으로</span><span class="label-short">읽지 않음</span></button>
+      <input type="hidden" name="state" value="{{ 'unread' if is_read else 'read' }}">
+      <input type="hidden" name="next" value="{{ kept_here }}">
+      <button type="submit" class="compact" title="{{ '읽지 않은 글로 되돌립니다. 이 화면에 그대로 있습니다' if is_read else '읽은 글로 표시합니다' }}"><span class="label-long">{{ '읽지 않음으로' if is_read else '읽음으로' }}</span><span class="label-short">{{ '읽지 않음' if is_read else '읽음' }}</span></button>
     </form>
+{% endmacro %}
+{% block topbar_actions %}<div class="mobile-actions" data-mobile-actions>{{ actions() }}</div>{% endblock %}
+{% block main %}
+<header class="detailbar">
+  <a class="back" href="{{ back }}">{{ icon('arrow-left') }}<span class="label-long">목록으로 돌아가기</span><span class="label-short">목록</span></a>
+  <div class="detail-actions">
+    {{ actions() }}
   </div>
 </header>
 <div class="scroll detail-scroll">
@@ -29,7 +34,7 @@
       </form>
       {% endfor %}
       <details class="menu">
-        <summary class="menu-button">{{ icon('hash') }} 특정 주제로</summary>
+        <summary class="menu-button" aria-label="특정 주제로">{{ icon('hash', 'menu-desktop') }}{{ icon('more', 'menu-mobile') }}<span class="menu-label"> 특정 주제로</span></summary>
         <div class="menu-list" role="menu">
           {% for t in topics %}
           {% set m = memberships.get(t.id) %}
