@@ -11,8 +11,8 @@ from rss_hub.domain.topics import (
 )
 
 
-def topic(keywords=("netflix", "드라마"), *, enabled=True, topic_id=1):
-    return Topic(topic_id, "OTT", "스트리밍", tuple(keywords), None, enabled)
+def topic(keywords=("netflix", "드라마"), *, topic_id=1):
+    return Topic(topic_id, "OTT", "스트리밍", tuple(keywords), None)
 
 
 def error_of(**fields):
@@ -71,9 +71,10 @@ def test_valid_fields_are_trimmed():
     )
 
 
-def test_the_description_and_keywords_are_optional():
-    fields = validate_topic_fields("보안", "", "")
-    assert (fields.description, fields.keywords) == ("", ())
+def test_the_description_is_optional_but_keywords_are_required():
+    fields = validate_topic_fields("보안", "", "cve")
+    assert (fields.description, fields.keywords) == ("", ("cve",))
+    assert error_of(name="보안", description="", keywords_text=" ,\n") == "키워드가 필요함"
 
 
 @pytest.mark.parametrize(
@@ -85,11 +86,11 @@ def test_the_name_is_required_and_limited(name, message):
 
 
 def test_a_forty_character_name_is_fine():
-    assert validate_topic_fields("가" * 40, "", "").name == "가" * 40
+    assert validate_topic_fields("가" * 40, "", "a").name == "가" * 40
 
 
 def test_the_description_is_limited_to_two_hundred_characters():
-    assert validate_topic_fields("a", "가" * 200, "").description == "가" * 200
+    assert validate_topic_fields("a", "가" * 200, "a").description == "가" * 200
     assert error_of(description="가" * 201) == "설명은 200자까지"
 
 
@@ -113,17 +114,12 @@ def test_an_article_without_a_summary_result_matches_nothing():
     assert match_topic(topic(), None, "New Netflix drama", "") is None
 
 
-def test_a_topic_without_keywords_follows_the_llm_alone():
-    assert match_topic(topic(()), {1}, "Anything at all", "") == ()
-    assert match_topic(topic(()), set(), "Anything at all", "") is None
-
-
-def test_a_disabled_topic_never_matches():
-    assert match_topic(topic(enabled=False), {1}, "New Netflix drama", "") is None
+def test_a_legacy_topic_without_keywords_never_matches():
+    assert match_topic(topic(()), {1}, "Anything at all", "") is None
 
 
 def test_each_topic_is_judged_by_its_own_number():
-    games = Topic(2, "게임", "", ("steam",), None, True)
+    games = Topic(2, "게임", "", ("steam",), None)
     assert match_topic(games, {1}, "Steam sale", "") is None
     assert match_topic(games, {2}, "Steam sale", "") == ("steam",)
 
@@ -168,13 +164,8 @@ def test_a_topic_is_not_a_candidate_without_a_keyword_match():
     assert is_candidate(topic(), "Weekend picks", '<img src="x/netflix.jpg">') is False
 
 
-def test_a_topic_without_keywords_is_always_a_candidate():
-    assert is_candidate(topic(()), "Anything at all", "") is True
-
-
-def test_a_disabled_topic_is_never_a_candidate():
-    assert is_candidate(topic(enabled=False), "New Netflix drama", "") is False
-    assert is_candidate(topic((), enabled=False), "Anything", "") is False
+def test_a_legacy_topic_without_keywords_is_never_a_candidate():
+    assert is_candidate(topic(()), "Anything at all", "") is False
 
 
 def test_candidates_follow_the_same_word_rules_as_the_final_check():

@@ -36,9 +36,8 @@ def add(client, **data):
     form = {
         "name": "게임",
         "description": "",
-        "keywords": "",
+        "keywords": "steam",
         "webhook_id": "",
-        "enabled": "yes",
     } | data
     return client.post("/topics/add", data=form)
 
@@ -82,11 +81,13 @@ def test_a_start_that_cannot_create_the_topic_is_logged_and_the_server_still_ans
 # ---------- 화면 ----------
 
 
-def test_the_page_shows_each_topic_with_its_fields_and_the_webhooks(client, app):
-    app.state.settings_service.add_webhook("dev", WEBHOOK)
+def test_the_page_lists_topic_cards_and_opens_forms_in_the_top_panel(client, topics):
     html = client.get("/topics").text
-    assert 'name="keywords"' in html and "netflix" in html and ">dev</option>" in html
-    assert 'action="/topics/add"' in html
+    ott = only(topics, "OTT")
+    assert 'class="topic-card"' in html and "netflix" in html
+    assert 'href="/panel/add/topic?next=%2Ftopics" data-panel' in html
+    assert f'href="/panel/settings/topic/{ott.id}?next=%2Ftopics" data-panel' in html
+    assert 'action="/topics/add"' not in html
 
 
 def test_the_menu_links_to_topics_and_categories(client):
@@ -110,26 +111,23 @@ def test_adding_a_topic_saves_it_and_goes_back_to_the_list(client, topics):
     )
     assert response.status_code == 303 and response.headers["location"] == "/topics?saved=1"
     topic = only(topics, "게임 할인")
-    assert (topic.description, topic.keywords, topic.enabled) == (
-        "가격 소식",
-        ("steam", "스팀"),
-        True,
-    )
+    assert (topic.description, topic.keywords) == ("가격 소식", ("steam", "스팀"))
     assert "저장했습니다" in client.get("/topics?saved=1").text
 
 
-def test_a_topic_can_be_added_with_a_webhook_and_turned_off(client, app, topics):
+def test_a_topic_can_be_added_with_a_webhook(client, app, topics):
     webhook_id = app.state.settings_service.add_webhook("dev", WEBHOOK)
-    data = {"name": "만화", "description": "", "keywords": "", "webhook_id": str(webhook_id)}
-    client.post("/topics/add", data=data)  # 사용 체크박스를 보내지 않음 = 끔
-    topic = only(topics, "만화")
-    assert (topic.webhook_id, topic.enabled) == (webhook_id, False)
+    client.post(
+        "/topics/add", data={"name": "만화", "keywords": "anime", "webhook_id": str(webhook_id)}
+    )
+    assert only(topics, "만화").webhook_id == webhook_id
 
 
 @pytest.mark.parametrize(
     ("data", "message"),
     [
         ({"name": ""}, "이름이 필요함"),
+        ({"keywords": ""}, "키워드가 필요함"),
         ({"name": "가" * 41}, "이름은 40자까지"),
         ({"description": "가" * 201}, "설명은 200자까지"),
         ({"keywords": "가" * 41}, "키워드는 40자까지"),
@@ -164,9 +162,8 @@ def update(client, topic_id, **data):
     form = {
         "name": "OTT",
         "description": "",
-        "keywords": "",
+        "keywords": "netflix",
         "webhook_id": "",
-        "enabled": "yes",
     } | data
     return client.post(f"/topics/{topic_id}/update", data=form)
 
@@ -180,12 +177,6 @@ def test_a_topic_can_be_edited(client, app, topics):
     assert response.status_code == 303
     topic = topics.get(ott.id)
     assert (topic.name, topic.keywords, topic.webhook_id) == ("스트리밍", ("netflix",), webhook_id)
-
-
-def test_clearing_the_enabled_box_turns_the_topic_off(client, topics):
-    ott = only(topics, "OTT")
-    update(client, ott.id, enabled="")
-    assert topics.get(ott.id).enabled is False
 
 
 def test_editing_with_a_bad_value_is_refused_and_nothing_changes(client, topics):

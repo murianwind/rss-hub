@@ -91,7 +91,6 @@ def test_adding_a_topic_from_the_panel_works_the_same_way(world):
         name="새 주제",
         description="",
         keywords="a, b",
-        enabled="yes",
         next="/reader",
     )
     assert response.headers["location"] == "/reader?toast=saved"
@@ -155,10 +154,10 @@ def test_the_category_panel_is_one_form_for_name_and_webhook_without_delete(worl
     )
 
 
-def test_the_topic_panel_shows_the_keywords_and_links_to_the_suggestions(world):
+def test_the_topic_panel_shows_the_required_keywords_without_a_use_checkbox(world):
     html = panel(world, f"/panel/settings/topic/{world.topic}").text
     assert f'action="/topics/{world.topic}/update"' in html and ">steam</textarea>" in html
-    assert f'href="/topics/{world.topic}/suggestions"' in html and "checked" in html
+    assert "required" in html and 'name="enabled"' not in html and "checked" not in html
     assert "/delete" not in html and re.search(
         r'저장</button><a class="button"[^>]*>닫기</a>', html
     )
@@ -298,7 +297,9 @@ def test_the_settings_are_one_page_of_accordions_in_a_logical_order(world):
 
 def test_only_the_first_section_starts_open(world):
     html = world.get("/settings").text
-    assert re.findall(r'<details class="acc" id="acc-(\w+)" open>', html) == ["general"]
+    assert re.findall(r'<details class="acc" id="acc-(\w+)" name="settings-acc" open>', html) == [
+        "general"
+    ]
 
 
 def test_each_section_holds_its_own_settings(world):
@@ -350,7 +351,7 @@ def test_saving_a_section_returns_with_a_toast(world):
         assert "저장했습니다." in world.get(f"{page}?toast=saved").text
 
 
-def test_webhook_and_key_forms_return_to_their_own_screens(world):
+def test_webhook_form_returns_to_its_screen_and_key_form_shows_the_check_result(world):
     added = post(world, "/settings/webhooks", name="새 웹훅", url=WEBHOOK, next="/discord")
     assert added.headers["location"] == "/discord?toast=saved"
     saved = post(
@@ -359,16 +360,15 @@ def test_webhook_and_key_forms_return_to_their_own_screens(world):
         openrouter_key="sk-or-v1-abcdefghijklmnop",
         next="/models",
     )
-    assert saved.headers["location"] == "/models?toast=saved"
+    assert saved.status_code == 200 and "<h1>모델</h1>" in saved.text  # 저장하고 바로 확인한 결과
 
 
 def test_an_error_opens_the_section_it_belongs_to(world):
     response = post(world, "/settings", ui_theme="neon", next="/settings")
     assert response.status_code == 400 and "목록에 있는 값" in response.text
-    assert set(re.findall(r'<details class="acc" id="acc-(\w+)" open>', response.text)) == {
-        "general",
-        "display",
-    }
+    assert re.findall(
+        r'<details class="acc" id="acc-(\w+)" name="settings-acc" open>', response.text
+    ) == ["display"]
     bad_url = post(
         world,
         "/settings/webhooks",

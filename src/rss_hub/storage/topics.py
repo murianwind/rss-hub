@@ -23,7 +23,6 @@ def _topic(row: sqlite3.Row) -> Topic:
         description=row["description"],
         keywords=tuple(json.loads(row["keywords"])),
         webhook_id=row["webhook_id"],
-        enabled=bool(row["enabled"]),
     )
 
 
@@ -59,9 +58,7 @@ class TopicRepository:
         if conn.execute("SELECT 1 FROM webhooks WHERE id = ?", (webhook_id,)).fetchone() is None:
             raise TopicInputError("웹훅을 찾을 수 없음")
 
-    def add(
-        self, fields: TopicFields, *, webhook_id: int | None = None, enabled: bool = True
-    ) -> int:
+    def add(self, fields: TopicFields, *, webhook_id: int | None = None) -> int:
         with self._db.connect() as conn:
             if conn.execute("SELECT COUNT(*) AS n FROM topics").fetchone()["n"] >= MAX_TOPICS:
                 raise TopicInputError(f"주제는 {MAX_TOPICS}개까지")
@@ -69,14 +66,13 @@ class TopicRepository:
             try:
                 cursor = conn.execute(
                     "INSERT INTO topics(name, name_key, description, keywords, webhook_id, "
-                    "enabled, created_at) VALUES(?, ?, ?, ?, ?, ?, ?)",
+                    "created_at) VALUES(?, ?, ?, ?, ?, ?)",
                     (
                         fields.name,
                         fields.name.lower(),
                         fields.description,
                         _dump(fields.keywords),
                         webhook_id,
-                        int(enabled),
                         to_iso(self._clock.now()),
                     ),
                 )
@@ -84,29 +80,45 @@ class TopicRepository:
                 raise TopicInputError("같은 이름의 주제가 이미 있음") from error
             return int(cursor.lastrowid or 0)
 
-    def update(
-        self, topic_id: int, fields: TopicFields, *, webhook_id: int | None, enabled: bool
-    ) -> bool:
+    def update(self, topic_id: int, fields: TopicFields, *, webhook_id: int | None) -> bool:
         """주제를 고친다. 그런 주제가 없으면 False."""
         with self._db.connect() as conn:
             self._check_webhook(conn, webhook_id)
             try:
                 cursor = conn.execute(
                     "UPDATE topics SET name = ?, name_key = ?, description = ?, keywords = ?, "
-                    "webhook_id = ?, enabled = ? WHERE id = ?",
+                    "webhook_id = ? WHERE id = ?",
                     (
                         fields.name,
                         fields.name.lower(),
                         fields.description,
                         _dump(fields.keywords),
                         webhook_id,
-                        int(enabled),
                         topic_id,
                     ),
                 )
             except sqlite3.IntegrityError as error:
                 raise TopicInputError("같은 이름의 주제가 이미 있음") from error
             return cursor.rowcount > 0
+
+    def dismiss_suggestion(self, topic_id: int, kind: str, word: str) -> bool:
+        """사용자가 지운 키워드 제안(kind는 add 또는 remove)을 기억한다. 주제가 없으면 False."""
+        with self._db.connect() as conn:
+            if conn.execute("SELECT 1 FROM topics WHERE id = ?", (topic_id,)).fetchone() is None:
+                return False
+            conn.execute(
+                "INSERT OR IGNORE INTO topic_dismissed(topic_id, kind, word) VALUES(?, ?, ?)",
+                (topic_id, kind, word),
+            )
+            return True
+
+    def dismissed_suggestions(self, topic_id: int) -> set[tuple[str, str]]:
+        """지운 제안 (kind, word) 모음."""
+        with self._db.connect() as conn:
+            rows = conn.execute(
+                "SELECT kind, word FROM topic_dismissed WHERE topic_id = ?", (topic_id,)
+            ).fetchall()
+        return {(r["kind"], r["word"]) for r in rows}
 
     def delete(self, topic_id: int) -> bool:
         with self._db.connect() as conn:
@@ -120,9 +132,6 @@ class TopicRepository:
     def list_all(self) -> list[Topic]:
         with self._db.connect() as conn:
             return [_topic(r) for r in conn.execute("SELECT * FROM topics ORDER BY id")]
-
-    def list_enabled(self) -> list[Topic]:
-        return [topic for topic in self.list_all() if topic.enabled]
 
     # ---------- 글이 해당한 주제 ----------
 
@@ -249,7 +258,7 @@ class TopicRepository:
             if created:
                 conn.execute(
                     "INSERT INTO topics(name, name_key, description, keywords, webhook_id, "
-                    "enabled, created_at) VALUES(?, ?, ?, ?, ?, 1, ?)",
+                    "created_at) VALUES(?, ?, ?, ?, ?, ?)",
                     (
                         DEFAULT_TOPIC_NAME,
                         DEFAULT_TOPIC_NAME.lower(),

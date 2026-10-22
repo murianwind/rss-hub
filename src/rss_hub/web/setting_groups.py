@@ -31,7 +31,7 @@ SETTING_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "topic_feedback_examples",
         ),
     ),
-    ("알림", ("alert_cooldown_hours",)),
+    ("알림", ("alert_repeat", "alert_cooldown_hours")),
     ("화면", ("ui_theme", "ui_font_size", "ui_auto_read")),
 )
 GROUP_KEYS = dict(SETTING_GROUPS)

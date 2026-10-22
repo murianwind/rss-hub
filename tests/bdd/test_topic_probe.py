@@ -50,7 +50,7 @@ def _background_default_topic(parts):
     assert any(t.name == "OTT" for t in parts.topics.list_all())
 
 
-@given('주제 "OTT"(키워드 "netflix")와 주제 "게임"(키워드 "steam")이 켜져 있다')
+@given('주제 "OTT"(키워드 "netflix")와 주제 "게임"(키워드 "steam")이 있다')
 def _two_topics(parts):
     parts.settings.set_openrouter_key(KEY)
     clear_topics(parts)
@@ -63,7 +63,7 @@ def _llm_chooses_ott(parts):
     parts.llm.default = reply("넷플릭스 신작", "요약입니다.", topics=[parts.ott_id])
 
 
-@given(parsers.re(r'주제 "OTT"가 켜져 있다'))
+@given(parsers.re(r'주제 "OTT"가 있다'))
 def _ott_topic(parts):
     parts.settings.set_openrouter_key(KEY)
     clear_topics(parts)
@@ -72,13 +72,13 @@ def _ott_topic(parts):
     parts.usage_before = usage(parts).count_day(parts.clock.now().date())
 
 
-@given('OpenRouter 키가 없고 주제 "OTT"가 켜져 있다')
+@given('OpenRouter 키가 없고 주제 "OTT"가 있다')
 def _no_key(parts):
     clear_topics(parts)
     parts.topics.add(TopicFields("OTT", "", ("netflix",)))
 
 
-@given("켜진 주제가 하나도 없다")
+@given("주제가 하나도 없다")
 def _no_topics(parts):
     parts.settings.set_openrouter_key(KEY)
     clear_topics(parts)

@@ -3,39 +3,68 @@
 {% block content %}
 <div class="settings-page">
 <h1>주제 알림</h1>
-<p class="note">글이 어떤 주제에 해당하면, 원래 가는 웹훅에 더해 그 주제의 웹훅으로도 한 번 더 보냅니다. LLM이 요약하면서 주제를 고르고, 키워드를 등록했다면 글에 키워드가 하나라도 있어야 해당합니다(키워드를 비워 두면 LLM의 판단만 씁니다).</p>
+<p class="note">글이 어떤 주제에 해당하면, 원래 가는 웹훅에 더해 그 주제의 웹훅으로도 한 번 더 보냅니다. 글에 주제의 키워드가 하나라도 있으면 후보가 됩니다. OpenRouter 키가 있고 주제에 설명을 적었다면, 후보가 된 글을 LLM이 설명으로 한 번 더 확인합니다.</p>
 
 {% if notice %}<div class="banner" role="status">{{ notice }}</div>{% endif %}
 {% if error %}<div class="banner error" role="alert">{{ error }}</div>{% endif %}
 
-<h2>주제 추가</h2>
-<form method="post" action="/topics/add" class="panel">
-  <div class="fields-grid">
-    <div class="field">
-      <label for="new_name">이름</label>
-      <input id="new_name" name="name" maxlength="40" required>
-    </div>
-    <div class="field">
-      <label for="new_wh">웹훅</label>
-      <select id="new_wh" name="webhook_id">
-        <option value="">지정 안 함(알림만 판별)</option>
-        {% for w in webhooks %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}
-      </select>
-    </div>
-    <div class="field wide">
-      <label for="new_desc">설명 <span class="hint">LLM이 주제를 이해하는 데 쓰입니다</span></label>
-      <input id="new_desc" name="description" maxlength="200">
-    </div>
-    <div class="field wide">
-      <label for="new_kw">키워드 <span class="hint">쉼표나 줄바꿈으로 구분. 비우면 LLM의 판단만 씁니다</span></label>
-      <textarea id="new_kw" name="keywords" rows="2"></textarea>
+<div class="section-head">
+  <h2>주제 목록</h2>
+  <a class="button" href="/panel/add/topic?next=%2Ftopics" data-panel>주제 추가</a>
+</div>
+{% for card in topics %}
+{% set t = card.topic %}{% set s = card.suggestions %}
+<article class="topic-card" data-topic-name="{{ t.name }}">
+  <div class="topic-head">
+    <h3>{{ t.name }}</h3>
+    <div class="row">
+      <a class="button" href="/panel/settings/topic/{{ t.id }}?next=%2Ftopics" data-panel>설정</a>
+      <button type="submit" class="danger" form="del_{{ t.id }}">삭제</button>
     </div>
   </div>
-  <div class="form-actions">
-    <label class="check-row"><input type="checkbox" name="enabled" value="yes" checked>사용</label>
-    <button type="submit" class="primary">추가</button>
-  </div>
-</form>
+  {% if t.keywords %}
+  <p class="topic-keywords">{% for k in t.keywords %}<span class="chip">{{ k }}</span>{% endfor %}</p>
+  {% else %}
+  <p class="hint">키워드를 입력하세요. 키워드가 없는 주제는 글을 고르지 못합니다([설정]에서 입력).</p>
+  {% endif %}
+  <p class="hint">웹훅 {{ webhook_names.get(t.webhook_id, '지정 안 함') if t.webhook_id else '지정 안 함' }} · 직접 넣은 글 {{ s.manual | length }}개 · 싫어요 {{ s.rejected | length }}개</p>
+  {% if s.count %}
+  <details class="suggest-acc">
+    <summary>키워드 개선 제안 ({{ s.count }})</summary>
+    {% if s.additions %}
+    <h4>키워드에 추가하면 좋을 단어</h4>
+    {% for a in s.additions %}
+    <div class="suggest-row">
+      <div><strong>{{ a.keyword }}</strong> <span class="hint">직접 넣은 글 {{ a.support }}개{% if a.against %} · 싫어요 글 {{ a.against }}개{% endif %}에 나옴</span>
+        <ul class="hint">{% for example in a.examples %}<li>{{ example }}</li>{% endfor %}</ul></div>
+      <div class="row">
+        <form method="post" action="/topics/{{ t.id }}/keywords/add"><input type="hidden" name="keyword" value="{{ a.keyword }}"><button type="submit" class="primary">추가</button></form>
+        <form method="post" action="/topics/{{ t.id }}/suggestions/dismiss"><input type="hidden" name="kind" value="add"><input type="hidden" name="keyword" value="{{ a.keyword }}"><button type="submit">제안 지우기</button></form>
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% if s.removals %}
+    <h4>키워드에서 빼면 좋을 단어</h4>
+    {% for r in s.removals %}
+    <div class="suggest-row">
+      <div><strong>{{ r.keyword }}</strong> <span class="hint">이 키워드로 들어온 글 {{ r.total }}개 중 {{ r.rejected }}개를 싫어요로 뺌</span></div>
+      <div class="row">
+        <form method="post" action="/topics/{{ t.id }}/keywords/remove"><input type="hidden" name="keyword" value="{{ r.keyword }}"><button type="submit" class="danger">빼기</button></form>
+        <form method="post" action="/topics/{{ t.id }}/suggestions/dismiss"><input type="hidden" name="kind" value="remove"><input type="hidden" name="keyword" value="{{ r.keyword }}"><button type="submit">제안 지우기</button></form>
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+  </details>
+  {% endif %}
+  <form id="del_{{ t.id }}" method="post" action="/topics/{{ t.id }}/delete" data-confirm="‘{{ t.name }}’ {{ delete_notes['topic'] }}">
+    <input type="hidden" name="confirm" value="yes">
+  </form>
+</article>
+{% else %}
+<p class="hint">주제가 없습니다. [주제 추가]로 만드세요.</p>
+{% endfor %}
 
 <h2>판별 시험</h2>
 <form method="post" action="/topics/probe" class="panel">
@@ -71,43 +100,6 @@
   </div>
   {% endif %}
 {% endif %}
-
-<h2>주제 목록</h2>
-{% for t in topics %}
-{% set counts = feedback_counts[t.id] %}
-<p class="hint"><a href="/topics/{{ t.id }}/suggestions">{{ t.name }} 키워드 개선 제안</a> · 직접 넣은 글 {{ counts[0] }}개 · 싫어요 {{ counts[1] }}개</p>
-<form method="post" action="/topics/{{ t.id }}/update" class="panel">
-  <div class="fields-grid">
-    <div class="field">
-      <label for="name_{{ t.id }}">이름</label>
-      <input id="name_{{ t.id }}" name="name" value="{{ t.name }}" maxlength="40" required>
-    </div>
-    <div class="field">
-      <label for="wh_{{ t.id }}">웹훅</label>
-      <select id="wh_{{ t.id }}" name="webhook_id">
-        <option value="">지정 안 함(알림만 판별)</option>
-        {% for w in webhooks %}<option value="{{ w.id }}" {% if t.webhook_id == w.id %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
-      </select>
-    </div>
-    <div class="field wide">
-      <label for="desc_{{ t.id }}">설명 <span class="hint">LLM이 주제를 이해하는 데 쓰입니다</span></label>
-      <input id="desc_{{ t.id }}" name="description" value="{{ t.description }}" maxlength="200">
-    </div>
-    <div class="field wide">
-      <label for="kw_{{ t.id }}">키워드 <span class="hint">쉼표나 줄바꿈으로 구분</span></label>
-      <textarea id="kw_{{ t.id }}" name="keywords" rows="2">{{ t.keywords | join(', ') }}</textarea>
-    </div>
-  </div>
-  <div class="form-actions">
-    <label class="check-row"><input type="checkbox" name="enabled" value="yes" {% if t.enabled %}checked{% endif %}>사용</label>
-    <button type="submit" class="primary">저장</button>
-    <button type="submit" class="danger" form="del_{{ t.id }}">삭제</button>
-  </div>
-</form>
-<form id="del_{{ t.id }}" method="post" action="/topics/{{ t.id }}/delete" data-confirm="‘{{ t.name }}’ {{ delete_notes['topic'] }}">
-  <input type="hidden" name="confirm" value="yes">
-</form>
-{% endfor %}
 
 </div>
 {% endblock %}

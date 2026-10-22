@@ -20,7 +20,7 @@ MIN_OK_RATE = 0.8  # 추천 대상이 되려면 성공률이 이 이상이어야
 CHAIN_SIZE = 3
 WEIGHTS = (50.0, 20.0, 20.0, 10.0)
 
-BENCH_TOPIC = Topic(1, "OTT", "OTT, 스트리밍 서비스와 영화, 드라마 소식", ("netflix",), None, True)
+BENCH_TOPIC = Topic(1, "OTT", "OTT, 스트리밍 서비스와 영화, 드라마 소식", ("netflix",), None)
 
 
 @dataclass(frozen=True)

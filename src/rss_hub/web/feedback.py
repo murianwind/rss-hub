@@ -7,20 +7,22 @@
 """
 
 from fastapi import APIRouter, Request, Response
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import PlainTextResponse, RedirectResponse
 
-from rss_hub.domain.topic_suggestions import suggest_additions, suggest_removals
-from rss_hub.domain.topics import Topic, TopicInputError, validate_topic_fields
+from rss_hub.domain.topics import TopicInputError, validate_topic_fields
+from rss_hub.services.keyword_suggestions import KIND_ADD, KIND_REMOVE
 from rss_hub.storage.articles import ArticleRepository
 from rss_hub.storage.topics import TopicRepository
 from rss_hub.web.ui import safe_path
 
 ACTIONS = ("reject", "restore", "add")
-LAST_KEYWORD_MESSAGE = (
-    "마지막 키워드는 지울 수 없습니다. 키워드가 하나도 없으면 모든 글을 LLM에게 묻게 됩니다. "
-    "정말 비우려면 주제 화면에서 직접 고치세요."
-)
+WARNINGS = {
+    "last": (
+        "마지막 키워드는 지울 수 없습니다. 주제에는 키워드가 하나 이상 있어야 합니다. "
+        "주제를 없애려면 주제 카드에서 삭제하세요."
+    ),
+    "missing": "그런 키워드가 없습니다",
+}
 
 
 def safe_next(value: object, default: str) -> str:
@@ -28,9 +30,7 @@ def safe_next(value: object, default: str) -> str:
     return safe_path(value, default)
 
 
-def build_feedback_router(
-    *, topics: TopicRepository, articles: ArticleRepository, templates: Jinja2Templates
-) -> APIRouter:
+def build_feedback_router(*, topics: TopicRepository, articles: ArticleRepository) -> APIRouter:
     router = APIRouter()
 
     # ---------- 글 하나에 대한 버튼 ----------
@@ -42,8 +42,6 @@ def build_feedback_router(
         topic = topics.get(topic_id)
         if articles.get(article_id) is None or topic is None:
             return PlainTextResponse("글이나 주제를 찾을 수 없습니다", status_code=404)
-        if action == "add" and not topic.enabled:
-            return PlainTextResponse("꺼진 주제에는 넣을 수 없습니다", status_code=400)
         form = await request.form()
         if action == "reject":
             topics.reject(article_id, topic_id)
@@ -53,37 +51,9 @@ def build_feedback_router(
             topics.add_manual(article_id, topic_id)
         return RedirectResponse(safe_next(form.get("next"), f"/a/{article_id}"), status_code=303)
 
-    # ---------- 키워드 개선 제안 ----------
+    # ---------- 키워드 개선 제안(주제 카드 안에서 보여 준다) ----------
 
-    def suggestions_page(
-        request: Request, topic: Topic, *, error: str = "", notice: str = "", status_code: int = 200
-    ) -> HTMLResponse:
-        samples = topics.feedback_samples(topic.id)
-        manual = [s for s in samples if s.source == "manual" and not s.rejected]
-        rejected = [s for s in samples if s.rejected]
-        context = {
-            "topic": topic,
-            "manual": manual,
-            "rejected": rejected,
-            "additions": suggest_additions(
-                [s.title for s in manual], [s.title for s in rejected], topic.keywords
-            ),
-            "removals": suggest_removals(topics.keyword_outcomes(topic.id)),
-            "error": error,
-            "notice": notice,
-        }
-        return templates.TemplateResponse(
-            request, "topic_suggestions.html", context, status_code=status_code
-        )
-
-    @router.get("/topics/{topic_id}/suggestions", response_class=HTMLResponse)
-    def suggestions(request: Request, topic_id: int, saved: str = "") -> Response:
-        topic = topics.get(topic_id)
-        if topic is None:
-            return PlainTextResponse("주제를 찾을 수 없습니다", status_code=404)
-        return suggestions_page(request, topic, notice="키워드를 바꿨습니다." if saved else "")
-
-    @router.post("/topics/{topic_id}/keywords/{action}", response_class=HTMLResponse)
+    @router.post("/topics/{topic_id}/keywords/{action}")
     async def change_keyword(request: Request, topic_id: int, action: str) -> Response:
         topic = topics.get(topic_id)
         if topic is None or action not in ("add", "remove"):
@@ -99,17 +69,26 @@ def build_feedback_router(
             )
         else:
             if keyword not in current:
-                return suggestions_page(
-                    request, topic, error="그런 키워드가 없습니다", status_code=400
-                )
+                return RedirectResponse("/topics?warn=missing", status_code=303)
             changed = [k for k in current if k != keyword]
             if not changed:
-                return suggestions_page(request, topic, error=LAST_KEYWORD_MESSAGE, status_code=400)
+                return RedirectResponse("/topics?warn=last", status_code=303)
         try:
             fields = validate_topic_fields(topic.name, topic.description, ", ".join(changed))
-        except TopicInputError as error:
-            return suggestions_page(request, topic, error=error.message, status_code=400)
-        topics.update(topic.id, fields, webhook_id=topic.webhook_id, enabled=topic.enabled)
-        return RedirectResponse(f"/topics/{topic.id}/suggestions?saved=1", status_code=303)
+        except TopicInputError:
+            return RedirectResponse("/topics?warn=last", status_code=303)
+        topics.update(topic.id, fields, webhook_id=topic.webhook_id)
+        return RedirectResponse("/topics?saved=1", status_code=303)
+
+    @router.post("/topics/{topic_id}/suggestions/dismiss")
+    async def dismiss_suggestion(request: Request, topic_id: int) -> Response:
+        """제안 하나를 지운다. 지운 제안은 같은 단어가 다시 제안되지 않는다."""
+        form = await request.form()
+        kind, keyword = str(form.get("kind", "")), str(form.get("keyword", "")).strip()
+        if kind not in (KIND_ADD, KIND_REMOVE) or not keyword:
+            return PlainTextResponse("알 수 없는 제안입니다", status_code=400)
+        if not topics.dismiss_suggestion(topic_id, kind, keyword):
+            return PlainTextResponse("주제를 찾을 수 없습니다", status_code=404)
+        return RedirectResponse("/topics", status_code=303)
 
     return router

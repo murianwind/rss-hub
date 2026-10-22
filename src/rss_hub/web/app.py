@@ -246,7 +246,7 @@ def create_app(
             llm_client=client,
         )
     )
-    app.include_router(build_feedback_router(topics=topics, articles=articles, templates=templates))
+    app.include_router(build_feedback_router(topics=topics, articles=articles))
     reader = ReaderRepository(database, app_clock)
     model_usage = model_usage_view(
         usage=LlmUsageRepository(database, app_clock),

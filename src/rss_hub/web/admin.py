@@ -17,7 +17,6 @@ from rss_hub.storage.articles import STATUS_COLLECTED, STATUS_READY, ArticleRepo
 from rss_hub.storage.feeds import FeedRepository
 from rss_hub.storage.job_runs import JobRunRepository
 from rss_hub.storage.llm_usage import LlmUsageRepository
-from rss_hub.version import get_version
 from rss_hub.web.setting_groups import SETTINGS_ACCORDIONS, keys_of, sections
 from rss_hub.web.ui import done
 
@@ -91,11 +90,15 @@ def build_admin_router(
             (acc_id, title, sections(*groups, titled=len(groups) > 1))
             for acc_id, title, groups in SETTINGS_ACCORDIONS
         ]
-        opened = {"general"} | {
-            acc_id
-            for acc_id, _, groups in SETTINGS_ACCORDIONS
-            if any(key in (errors or {}) for key in keys_of(*groups))
-        }
+        # 항목은 하나만 펼쳐진다: 오류가 있는 항목이 있으면 그것, 없으면 첫 항목
+        opened = next(
+            (
+                acc_id
+                for acc_id, _, groups in SETTINGS_ACCORDIONS
+                if any(key in (errors or {}) for key in keys_of(*groups))
+            ),
+            "general",
+        )
         context: dict[str, Any] = {
             "values": {**service.raw_values(), **(form_values or {})},
             "errors": errors or {},
@@ -186,7 +189,6 @@ def build_admin_router(
             "checklist": checklist,
             "all_ready": all(item.ready for item in checklist if item.required),
             "audit": audit,
-            "version": get_version(),
         }
         return templates.TemplateResponse(request, "status.html", context)
 

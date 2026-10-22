@@ -53,9 +53,7 @@ def listed(world, topic):
 @given('사이트 "자유 블로그"와 주제 "OTT"(키워드 "netflix"), 주제 "게임"(키워드 "steam")이 있다')
 def _background(world):
     ott = world.topics.list_all()[0]
-    world.topics.update(
-        ott.id, TopicFields("OTT", "스트리밍", ("netflix",)), webhook_id=None, enabled=True
-    )
+    world.topics.update(ott.id, TopicFields("OTT", "스트리밍", ("netflix",)), webhook_id=None)
     world.topics.add(TopicFields("게임", "게임 소식", ("steam",)))
 
 
@@ -132,9 +130,7 @@ def deliverer(world):
     ott_hook = parts.settings.add_webhook("ott", webhook_url("ott"))
     parts.settings.set_webhook_roles(default_id=rss, system_id=None)
     ott = topic_id(world, "OTT")
-    world.topics.update(
-        ott, TopicFields("OTT", "스트리밍", ("netflix",)), webhook_id=ott_hook, enabled=True
-    )
+    world.topics.update(ott, TopicFields("OTT", "스트리밍", ("netflix",)), webhook_id=ott_hook)
     alerts = build_llm_services(
         parts.db, parts.clock, parts.settings, client=parts.llm, sender=parts.sender
     ).alerts
@@ -225,9 +221,9 @@ def _two_dislikes(world, keyword, topic):
         press(world, article, topic, "싫어요")
 
 
-@when(parsers.re(r'주제 "(?P<topic>[^"]+)"의 키워드 개선 제안을 연다'))
-def _open_suggestions(world, ctx, topic):
-    ctx.response = world.get(f"/topics/{topic_id(world, topic)}/suggestions")
+@when(parsers.re(r'주제 "[^"]+"의 키워드 개선 제안을 연다'))
+def _open_suggestions(world, ctx):
+    ctx.response = world.get("/topics")  # 제안은 주제 카드 안에 있다
 
 
 @then(parsers.re(r'"(?P<keyword>[^"]+)"를 키워드에 추가하자는 제안이 근거 글과 함께 보인다'))
@@ -280,9 +276,10 @@ def _keywords_are(world, topic, a, b):
     )
 )
 def _last_kept(world, ctx, keyword):
-    assert (
-        ctx.response.status_code == 400 and "마지막 키워드는 지울 수 없습니다" in ctx.response.text
+    assert ctx.response.status_code == 303 and ctx.response.headers["location"].endswith(
+        "warn=last"
     )
+    assert "마지막 키워드는 지울 수 없습니다" in world.get(ctx.response.headers["location"]).text
     assert keywords_of(world, "OTT") == (keyword,)
 
 

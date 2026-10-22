@@ -52,19 +52,18 @@ def test_a_topic_is_stored_and_read_back_with_korean_text(env):
         "게임 소식",
         ("steam", "스팀"),
     )
-    assert (topic.webhook_id, topic.enabled) == (None, True)
+    assert topic.webhook_id is None
 
 
 def test_unknown_topics_are_not_found(env):
     assert env.topics.get(999) is None
 
 
-def test_topics_are_listed_in_creation_order_and_enabled_ones_separately(env):
+def test_topics_are_listed_in_creation_order(env):
     first = env.topics.add(fields("가"))
-    second = env.topics.add(fields("나"), enabled=False)
+    second = env.topics.add(fields("나"))
     third = env.topics.add(fields("다"))
     assert [t.id for t in env.topics.list_all()] == [first, second, third]
-    assert [t.id for t in env.topics.list_enabled()] == [first, third]
 
 
 def test_a_topic_may_have_a_webhook(env):
@@ -100,35 +99,33 @@ def test_at_most_twenty_topics_can_exist(env):
 def test_a_topic_can_be_edited(env):
     webhook_id = env.settings.add_webhook("dev", WEBHOOK)
     topic_id = env.topics.add(fields())
-    assert env.topics.update(
-        topic_id, fields("만화", "", ("anime",)), webhook_id=webhook_id, enabled=False
-    )
+    assert env.topics.update(topic_id, fields("만화", "", ("anime",)), webhook_id=webhook_id)
     topic = env.topics.get(topic_id)
     assert (topic.name, topic.description, topic.keywords) == ("만화", "", ("anime",))
-    assert (topic.webhook_id, topic.enabled) == (webhook_id, False)
+    assert topic.webhook_id == webhook_id
 
 
 def test_editing_an_unknown_topic_reports_it(env):
-    assert env.topics.update(999, fields(), webhook_id=None, enabled=True) is False
+    assert env.topics.update(999, fields(), webhook_id=None) is False
 
 
 def test_renaming_to_an_existing_name_is_refused(env):
     env.topics.add(fields("가"))
     other = env.topics.add(fields("나"))
     with pytest.raises(TopicInputError) as info:
-        env.topics.update(other, fields("가"), webhook_id=None, enabled=True)
+        env.topics.update(other, fields("가"), webhook_id=None)
     assert info.value.message == "같은 이름의 주제가 이미 있음"
 
 
 def test_editing_with_a_missing_webhook_is_refused(env):
     topic_id = env.topics.add(fields())
     with pytest.raises(TopicInputError):
-        env.topics.update(topic_id, fields(), webhook_id=999, enabled=True)
+        env.topics.update(topic_id, fields(), webhook_id=999)
 
 
 def test_saving_a_topic_under_its_own_name_is_fine(env):
     topic_id = env.topics.add(fields("가"))
-    assert env.topics.update(topic_id, fields("가", "새 설명"), webhook_id=None, enabled=True)
+    assert env.topics.update(topic_id, fields("가", "새 설명"), webhook_id=None)
 
 
 def test_a_topic_can_be_deleted_once(env):
@@ -189,7 +186,7 @@ def test_the_first_start_creates_the_ott_topic_with_the_default_keywords(env):
     (topic,) = env.topics.list_all()
     assert (topic.name, topic.description) == ("OTT", DEFAULT_TOPIC_DESCRIPTION)
     assert {"넷플릭스", "드라마", "netflix", "disney+", "trailer"} <= set(topic.keywords)
-    assert (topic.webhook_id, topic.enabled) == (None, True)
+    assert topic.webhook_id is None
 
 
 def test_the_default_topic_is_created_only_once(env):
@@ -240,3 +237,26 @@ def test_the_seeded_mark_is_a_setting_the_settings_service_does_not_mind(env):
     with env.db.connect() as conn:
         assert conn.execute("SELECT value FROM settings WHERE key = ?", (SEEDED_KEY,)).fetchone()
     assert env.settings.snapshot().timezone is not None
+
+
+# ---------- 지운 키워드 제안 ----------
+
+
+def test_a_dismissed_suggestion_is_remembered_per_topic_and_kind(env):
+    topic_id = env.topics.add(fields("가"))
+    other = env.topics.add(fields("나"))
+    assert env.topics.dismiss_suggestion(topic_id, "add", "스팀")
+    assert env.topics.dismiss_suggestion(topic_id, "add", "스팀")  # 두 번 지워도 같다
+    assert env.topics.dismissed_suggestions(topic_id) == {("add", "스팀")}
+    assert env.topics.dismissed_suggestions(other) == set()
+
+
+def test_dismissing_for_an_unknown_topic_is_reported(env):
+    assert env.topics.dismiss_suggestion(999, "add", "스팀") is False
+
+
+def test_dismissed_suggestions_go_away_with_the_topic(env):
+    topic_id = env.topics.add(fields("가"))
+    env.topics.dismiss_suggestion(topic_id, "remove", "sale")
+    env.topics.delete(topic_id)
+    assert env.topics.dismissed_suggestions(topic_id) == set()

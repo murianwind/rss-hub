@@ -232,7 +232,7 @@ def build_reader_router(
             "memberships_active": [
                 m.topic_id for m in topics.memberships(article.id) if not m.rejected
             ],
-            "enabled_topics": topics.list_enabled(),
+            "topics": topics.list_all(),
             "body": body,
             "fulltext_state": full.state,
             "fulltext_reason": full.reason,

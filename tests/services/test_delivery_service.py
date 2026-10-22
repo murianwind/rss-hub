@@ -3,7 +3,6 @@ from datetime import UTC, datetime
 
 import pytest
 
-from rss_hub.domain.topics import TopicFields
 from rss_hub.services.ports import SendResult
 from tests.fakes.delivery_env import DeliveryEnv, ok, webhook_url
 from tests.keywords.store import create_category, topic_matches
@@ -131,29 +130,17 @@ def test_a_keyword_alone_is_not_enough_without_the_llm_choice(env):
     assert env.sender.to("ott") == []
 
 
-def test_a_topic_without_keywords_follows_the_llm_alone(env):
+def test_a_legacy_topic_without_keywords_sends_nothing_extra(env):
     env.add_topic("게임", (), webhook="gizmodo")
     env.add_ready_article(title="Anything at all", topics=("게임",))
-    env.service.run()
-    assert len(env.sender.to("gizmodo")) == 1
-
-
-def test_a_disabled_topic_sends_nothing_extra(env):
-    env.add_topic("게임", (), webhook="gizmodo", enabled=False)
-    env.add_ready_article(title="Anything", topics=("게임",))
     env.service.run()
     assert env.sender.to("gizmodo") == []
 
 
-def test_topics_are_read_when_delivering_so_a_topic_turned_off_since_the_summary_is_skipped(env):
+def test_topics_are_read_when_delivering_so_a_topic_deleted_since_the_summary_is_skipped(env):
     env.add_ready_article(title="Netflix movie", topics=("OTT",))
     ott = env.topics.get(env.topic_id("OTT"))
-    env.topics.update(
-        ott.id,
-        TopicFields(ott.name, ott.description, ott.keywords),
-        webhook_id=ott.webhook_id,
-        enabled=False,
-    )
+    env.topics.delete(ott.id)
     env.service.run()
     assert env.sender.to("ott") == [] and len(env.sender.to("rss")) == 1
 
@@ -184,7 +171,7 @@ def test_matches_are_not_recorded_while_delivery_is_on_hold(tmp_path):
 
 
 def test_a_topic_webhook_equal_to_the_default_webhook_receives_one_message(env):
-    env.add_topic("게임", (), webhook="rss")
+    env.add_topic("게임", ("original",), webhook="rss")
     env.add_ready_article(topics=("게임",))
     env.service.run()
     assert len(env.sender.to("rss")) == 1
@@ -192,23 +179,23 @@ def test_a_topic_webhook_equal_to_the_default_webhook_receives_one_message(env):
 
 def test_a_topic_webhook_equal_to_the_category_webhook_receives_one_message(env):
     category = create_category(env.feeds, "뉴스", webhook_id=env.webhooks["dev"])
-    env.add_topic("게임", (), webhook="dev")
+    env.add_topic("게임", ("original",), webhook="dev")
     env.add_ready_article(feed_id=env.add_feed("N", category=category), topics=("게임",))
     env.service.run()
     assert (len(env.sender.to("dev")), len(env.sender.to("rss"))) == (1, 0)
 
 
 def test_two_topics_sharing_a_webhook_send_one_extra_message(env):
-    env.add_topic("게임", (), webhook="gizmodo")
-    env.add_topic("만화", (), webhook="gizmodo")
+    env.add_topic("게임", ("original",), webhook="gizmodo")
+    env.add_topic("만화", ("original",), webhook="gizmodo")
     env.add_ready_article(topics=("게임", "만화"))
     env.service.run()
     assert len(env.sender.to("gizmodo")) == 1
 
 
 def test_topics_with_different_webhooks_each_send_one_extra_message(env):
-    env.add_topic("게임", (), webhook="gizmodo")
-    env.add_topic("보안", (), webhook="dev")
+    env.add_topic("게임", ("original",), webhook="gizmodo")
+    env.add_topic("보안", ("original",), webhook="dev")
     env.add_ready_article(topics=("게임", "보안"))
     env.service.run()
     assert (
@@ -617,11 +604,11 @@ def test_a_hand_added_topic_that_was_later_rejected_gets_nothing(env):
     assert env.statuses(article_id) == {"rss:primary": "sent"}
 
 
-def test_a_hand_added_topic_that_is_turned_off_is_ignored(env):
+def test_a_hand_added_topic_that_was_deleted_is_ignored(env):
     article_id = env.add_ready_article(title="Totally unrelated words")
     topic = env.topic_id("OTT")
     env.topics.add_manual(article_id, topic)
-    env.topics.update(topic, TopicFields("OTT", "", ()), webhook_id=None, enabled=False)
+    env.topics.delete(topic)
     env.service.run()
     assert env.statuses(article_id) == {"rss:primary": "sent"}
 

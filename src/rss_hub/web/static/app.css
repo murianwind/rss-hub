@@ -174,7 +174,7 @@ button.back { font: inherit; font-weight: 700; font-size: 13px; cursor: pointer;
 
 /* ---------- 공통 부품(관리 화면) ---------- */
 .note, .hint { color: var(--muted); font-size: 0.9rem; }
-.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+.panel, .topic-card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
 .checks { list-style: none; padding: 0; margin: 0 0 12px; }
 .check { display: flex; justify-content: space-between; align-items: center; min-height: 44px; padding: 6px 0; border-bottom: 1px solid var(--line); }
 .state.ok { color: var(--ok); font-weight: 600; }
@@ -472,8 +472,24 @@ input[readonly] { background: var(--panel); color: var(--muted); cursor: default
 .wh-row .wh-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .wh-row form { margin: 0; }
 .key-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
-.key-row .field { flex: 1 1 220px; margin: 0; }
-.key-row form { margin: 0; display: contents; }
+.key-row form { margin: 0; display: flex; gap: 8px; align-items: center; }
+.key-row .key-save { flex: 1 1 320px; }
+.key-row .key-save label { white-space: nowrap; font-weight: 600; }
+.key-row .key-save input { flex: 1; min-width: 0; }
+.key-row button { height: 36px; }
+.model-scroll { max-height: min(46vh, 420px); overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px; }
+.model-scroll .model-list { margin: 0; }
+.history-scroll { max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; }
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.section-head h2 { margin: 0; }
+.topic-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.topic-head h3 { margin: 0; }
+.topic-keywords { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.topic-keywords .chip { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; font-size: 12px; }
+.suggest-acc { margin-top: 8px; border-top: 1px solid var(--line-soft); padding-top: 6px; }
+.suggest-acc summary { cursor: pointer; font-weight: 600; }
+.suggest-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line-soft); }
+.suggest-row form { margin: 0; }
 .back-row { margin: 0 0 8px; }
 .back-link { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--accent); text-decoration: none; }
 .back-link:hover { text-decoration: underline; }

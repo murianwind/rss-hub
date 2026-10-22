@@ -62,7 +62,6 @@ def test_list_urls_leave_out_default_values(kwargs, url):
         "/reader/topic/1",
         "/reader/bookmarks",
         "/a/5",
-        "/topics/1/suggestions",
         "/reader?page=2&q=ab&only=unread",
         "/reader/feed/3?q=%EC%98%A4",
     ],

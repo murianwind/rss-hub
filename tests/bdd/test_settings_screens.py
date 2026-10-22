@@ -66,10 +66,7 @@ def _topic(world, ctx):
 
 @when(parsers.re(r"(?P<name>.+?)[을를] 연다$"))
 def _open(world, ctx, name):
-    if name == "주제 키워드 개선 제안":
-        topic = ctx.topic or world.topics.list_all()[0].id
-        path = f"/topics/{topic}/suggestions"
-    elif name == "복원 결과":
+    if name == "복원 결과":
         _, data = download_backup(world)
         ctx.response = restore_backup(world, data)
         ctx.html = ctx.response.text
@@ -143,10 +140,9 @@ def _models_page(ctx):
         assert needle in ctx.html
 
 
-@then("모델 화면으로 돌아오고 키는 설정됨으로 보인다")
-def _back_to_models(world, ctx):
-    assert ctx.response.status_code == 303
-    assert ctx.response.headers["location"].startswith("/models")
+@then("모델 화면에 머물고 키는 설정됨으로 보인다")
+def _stays_on_models(world, ctx):
+    assert ctx.response.status_code == 200 and "<h1>모델</h1>" in ctx.response.text
     assert "설정됨" in text_of(world.get("/models"))
 
 

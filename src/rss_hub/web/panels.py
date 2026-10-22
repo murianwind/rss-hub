@@ -28,10 +28,11 @@ def render_panel(
     *,
     status_code: int = 200,
     next_path: str | None = None,
+    has_llm_key: bool = False,
 ) -> Response:
     """패널을 조각(스크립트 요청)이나 전체 화면(스크립트 없이 연 경우)으로 그린다."""
     chosen = safe_return(next_path or request.query_params.get("next"), "/reader")
-    context = {"panel": panel, "next": chosen, "webhooks": webhooks}
+    context = {"panel": panel, "next": chosen, "webhooks": webhooks, "has_llm_key": has_llm_key}
     template = "_panel.html" if request.headers.get("x-panel") else "panel_page.html"
     request.state.scope = Scope("all")
     return templates.TemplateResponse(request, template, context, status_code=status_code)
@@ -47,7 +48,13 @@ def build_panel_router(
     router = APIRouter()
 
     def render(request: Request, panel: dict[str, object]) -> Response:
-        return render_panel(templates, request, panel, settings.list_webhooks())
+        return render_panel(
+            templates,
+            request,
+            panel,
+            settings.list_webhooks(),
+            has_llm_key=settings.has_openrouter_key(),
+        )
 
     def missing() -> Response:
         return PlainTextResponse("찾을 수 없습니다", status_code=404)

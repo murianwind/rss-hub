@@ -98,44 +98,53 @@ def test_the_test_button_is_shown_next_to_every_webhook(parts):
     )
 
 
-# ---------- 키 확인 ----------
+# ---------- 키 저장과 확인 ----------
 
 
-def test_the_key_check_shows_validity_and_usage_without_any_chat_call(parts):
-    parts.settings.set_openrouter_key(KEY)
+def save_key(parts, value=KEY):
+    return parts.client.post("/settings/openrouter-key", data={"openrouter_key": value})
+
+
+def test_saving_the_key_checks_it_right_away_without_any_chat_call(parts):
     usage = LlmUsageRepository(parts.db, parts.clock)
     before = usage.count_day(parts.clock.now().date())
-    response = parts.client.post("/settings/openrouter-key/check")
-    assert "키가 유효합니다" in response.text and "33/1000" in response.text
+    response = save_key(parts)
+    assert "저장했습니다 · 키가 유효합니다" in response.text and "33/1000" in response.text
     assert parts.llm.key_checks == 1 and parts.llm.calls == []
     assert usage.count_day(parts.clock.now().date()) == before
 
 
 def test_a_valid_key_without_counters_still_says_valid(parts):
     parts.llm.key_check = KeyCheck(valid=True)
-    html = parts.client.post("/settings/openrouter-key/check").text
+    html = save_key(parts).text
     assert "키가 유효합니다" in html and "오늘 무료 모델 호출" not in html
 
 
-def test_a_rejected_key_is_an_error_banner(parts):
+def test_a_rejected_key_is_saved_and_the_reason_is_an_error_banner(parts):
     parts.llm.key_check = KeyCheck(valid=False, reason="OpenRouter가 키를 거부했습니다(HTTP 401)")
-    html = parts.client.post("/settings/openrouter-key/check").text
-    assert "거부했습니다(HTTP 401)" in html and 'class="banner error"' in html
+    html = save_key(parts).text
+    assert "키 확인에 실패했습니다: OpenRouter가 키를 거부했습니다(HTTP 401)" in html
+    assert 'class="banner error"' in html and parts.settings.has_openrouter_key()
 
 
 def test_an_unknown_result_is_a_neutral_banner_not_an_error(parts):
     parts.llm.key_check = KeyCheck(
         valid=None, reason="OpenRouter에 연결하지 못했습니다(ReadTimeout)"
     )
-    html = parts.client.post("/settings/openrouter-key/check").text
+    html = save_key(parts).text
     assert "연결하지 못했습니다(ReadTimeout)" in html and 'class="banner error"' not in html
 
 
-def test_the_key_is_never_shown_and_the_check_button_needs_a_saved_key(parts):
+def test_the_key_is_never_shown_and_there_is_no_separate_check_button(parts):
     parts.settings.set_openrouter_key(KEY)
     html = parts.client.get("/models").text
-    assert "openrouter-key/check" in html and KEY not in html
-    assert KEY not in parts.client.post("/settings/openrouter-key/check").text
+    assert "openrouter-key/check" not in html and KEY not in html
+    assert KEY not in save_key(parts).text
+
+
+def test_an_empty_key_is_refused_and_nothing_is_checked(parts):
+    response = save_key(parts, "")
+    assert response.status_code == 400 and parts.llm.key_checks == 0
 
 
 # ---------- 주제 판별 시험 ----------
@@ -204,7 +213,7 @@ def test_a_title_without_any_keyword_match_makes_no_call_and_says_so(parts):
 
 @pytest.mark.security
 @pytest.mark.parametrize(
-    "path", ["/settings/webhooks/1/test", "/settings/openrouter-key/check", "/topics/probe"]
+    "path", ["/settings/webhooks/1/test", "/settings/openrouter-key", "/topics/probe"]
 )
 def test_the_new_buttons_reject_other_sites_and_accept_the_browsers_own_form(parts, path):
     other = parts.client.post(

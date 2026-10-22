@@ -40,7 +40,7 @@ FORMS = [
     ("/settings", {"service_base_url": BASE}),
     (
         "/topics/add",
-        {"name": "게임", "description": "", "keywords": "", "webhook_id": "", "enabled": "yes"},
+        {"name": "게임", "description": "", "keywords": "steam", "webhook_id": ""},
     ),
     ("/categories/add", {"name": "뉴스"}),
     ("/feeds/999/category", {"category_id": ""}),

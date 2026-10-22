@@ -9,7 +9,9 @@ from rss_hub.domain.keywords import DEFAULT_OTT_KEYWORDS
 from rss_hub.domain.topics import Topic, match_topic
 from tests.bdd.binding import bind
 
-bind(globals(), "04_topic_judgement.feature", [f"TPC-{n:02d}" for n in range(1, 12)])
+bind(
+    globals(), "04_topic_judgement.feature", [f"TPC-{n:02d}" for n in (*range(1, 7), *range(8, 12))]
+)
 
 LLM_FLAGS = {"맞음": True, "아님": False, "없음": None}
 
@@ -19,8 +21,8 @@ def ctx():
     return SimpleNamespace(topics={}, title="", content="", llm_ids=None, result=None, found=None)
 
 
-def make_topic(ctx, name, keywords, *, enabled=True):
-    ctx.topics[name] = Topic(len(ctx.topics) + 1, name, "", tuple(keywords), None, enabled)
+def make_topic(ctx, name, keywords):
+    ctx.topics[name] = Topic(len(ctx.topics) + 1, name, "", tuple(keywords), None)
 
 
 @given('주제 "OTT"가 있고 기본 OTT 키워드가 등록되어 있다')
@@ -53,21 +55,13 @@ def _content(ctx, content):
 @given(parsers.parse('주제 "OTT"의 키워드에 "{keyword}"를 추가했다'))
 def _add_keyword(ctx, keyword):
     ott = ctx.topics["OTT"]
-    ctx.topics["OTT"] = Topic(
-        ott.id, ott.name, ott.description, (*ott.keywords, keyword), None, True
-    )
-
-
-@given('주제 "OTT"는 꺼져 있다')
-def _disable(ctx):
-    ott = ctx.topics["OTT"]
-    ctx.topics["OTT"] = Topic(ott.id, ott.name, ott.description, ott.keywords, None, False)
+    ctx.topics["OTT"] = Topic(ott.id, ott.name, ott.description, (*ott.keywords, keyword), None)
 
 
 @given('주제 "OTT"의 키워드가 비어 있다')
 def _no_keywords(ctx):
     ott = ctx.topics["OTT"]
-    ctx.topics["OTT"] = Topic(ott.id, ott.name, ott.description, (), None, True)
+    ctx.topics["OTT"] = Topic(ott.id, ott.name, ott.description, (), None)
 
 
 @given(parsers.parse('주제 "게임"이 있고 키워드는 "{keyword}"이다'))

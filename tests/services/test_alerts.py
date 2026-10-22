@@ -29,17 +29,17 @@ def test_without_a_system_webhook_nothing_is_sent_or_recorded_so_it_can_be_sent_
     assert env.alerts.notify("llm_cap", "t") is True
 
 
-def test_the_same_kind_is_not_repeated_during_the_cooldown(env):
+def test_the_same_kind_is_sent_once_and_not_again_for_a_day_by_default(env):
     assert env.alerts.notify("llm_cap", "첫 알림") is True
-    env.clock.advance(hours=5, minutes=59)
+    env.clock.advance(hours=23, minutes=59)
     assert env.alerts.notify("llm_cap", "또") is False
-    env.clock.advance(minutes=2)  # 쿨다운(기본 6시간)이 끝남
+    env.clock.advance(minutes=2)  # 반복 보내기가 꺼져 있으면 24시간 뒤에야 다시 보낸다
     assert env.alerts.notify("llm_cap", "다시") is True
     assert env.notifier.texts() == ["첫 알림", "다시"]
 
 
-def test_the_cooldown_comes_from_settings(env):
-    env.settings.update({"alert_cooldown_hours": "1"})
+def test_with_repeat_on_the_interval_comes_from_settings(env):
+    env.settings.update({"alert_repeat": "on", "alert_cooldown_hours": "1"})
     env.alerts.notify("k", "a")
     env.clock.advance(minutes=61)
     assert env.alerts.notify("k", "b") is True
@@ -50,6 +50,7 @@ def test_different_kinds_do_not_block_each_other(env):
 
 
 def test_once_per_day_alerts_wait_for_the_next_utc_day_even_after_the_cooldown(env):
+    env.settings.update({"alert_repeat": "on"})
     assert env.alerts.notify("llm_warn", "80%", once_per_day=True) is True
     env.clock.advance(hours=7)  # 쿨다운은 지났지만 같은 UTC 날짜
     assert env.alerts.notify("llm_warn", "80%", once_per_day=True) is False

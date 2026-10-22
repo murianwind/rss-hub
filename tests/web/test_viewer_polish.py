@@ -412,7 +412,7 @@ def server_says(world, used, limit=1000):
 
 
 def configure_model(world):
-    post(world, "/settings/openrouter-key", openrouter_key=KEY, next="/settings")
+    world.parts.settings.set_openrouter_key(KEY)
 
 
 def test_the_server_numbers_are_shown_with_the_server_limit(world):

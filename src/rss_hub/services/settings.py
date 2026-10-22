@@ -9,7 +9,7 @@ import sqlite3
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, available_timezones
 
 from rss_hub.domain.settings_rules import (
     SettingError,
@@ -65,6 +65,13 @@ def _choice(options: tuple[tuple[str, str], ...]) -> Callable[[str], str]:
     return validate
 
 
+_HIDDEN_ZONE_PREFIXES = ("Etc/", "posix/", "right/", "SystemV/", "US/", "Brazil/", "Canada/")
+TIMEZONE_CHOICES = tuple(
+    (zone, zone)
+    for zone in sorted(available_timezones())
+    if zone == "UTC" or ("/" in zone and not zone.startswith(_HIDDEN_ZONE_PREFIXES))
+)  # 화면에서 고르는 목록. 서버는 그 밖의 IANA 이름도 받는다
+ALERT_REPEAT_CHOICES = (("off", "끔"), ("on", "켬"))
 THEME_CHOICES = (("system", "기기 설정 따르기"), ("light", "밝게"), ("dark", "어둡게"))
 FONT_CHOICES = (("normal", "보통"), ("large", "크게"))
 AUTO_READ_CHOICES = (("on", "켜기"), ("off", "끄기"))
@@ -87,6 +94,7 @@ SETTING_DEFS: tuple[SettingDef, ...] = (
         "서비스 시간대",
         "Asia/Seoul",
         validate_timezone,
+        choices=TIMEZONE_CHOICES,
         help="알림 시각과 날짜를 계산하는 시간대(예: Asia/Seoul)",
     ),
     SettingDef(
@@ -219,11 +227,19 @@ SETTING_DEFS: tuple[SettingDef, ...] = (
         help="요약 잡이 한 번에 처리하는 글 수(1~50)",
     ),
     SettingDef(
+        "alert_repeat",
+        "같은 알림 반복 보내기",
+        "off",
+        _choice(ALERT_REPEAT_CHOICES),
+        ALERT_REPEAT_CHOICES,
+        help="끄면 같은 종류의 시스템 알림은 한 번 보내고 24시간 안에는 다시 보내지 않음",
+    ),
+    SettingDef(
         "alert_cooldown_hours",
-        "알림 쿨다운(시간)",
+        "반복 간격(시간)",
         "6",
         _bounded(168),
-        help="같은 시스템 알림을 다시 보내기까지 기다리는 시간(1~168시간)",
+        help="반복 보내기를 켰을 때만 적용. 같은 알림을 다시 보내기까지 기다리는 시간(1~168)",
     ),
 )
 SETTING_BY_KEY = {d.key: d for d in SETTING_DEFS}
@@ -253,6 +269,7 @@ class AppSettings:
     llm_reserve_calls: int
     llm_wait_limit_minutes: int
     summarize_batch: int
+    alert_repeat: bool
     alert_cooldown_hours: int
     webhook_default_id: int | None
     webhook_system_id: int | None
@@ -324,6 +341,7 @@ class SettingsService:
             llm_reserve_calls=int(v["llm_reserve_calls"]),
             llm_wait_limit_minutes=int(v["llm_wait_limit_minutes"]),
             summarize_batch=int(v["summarize_batch"]),
+            alert_repeat=v["alert_repeat"] == "on",
             alert_cooldown_hours=int(v["alert_cooldown_hours"]),
             webhook_default_id=_to_id(stored.get(ROLE_KEYS["default"], "")),
             webhook_system_id=_to_id(stored.get(ROLE_KEYS["system"], "")),

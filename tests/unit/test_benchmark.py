@@ -26,7 +26,7 @@ def test_the_sample_set_is_balanced_and_covers_both_languages():
     assert len(SAMPLES) == 6
     assert sum(s.expects_topic for s in SAMPLES) == 3
     assert any(s.title.isascii() for s in SAMPLES) and any(not s.title.isascii() for s in SAMPLES)
-    assert BENCH_TOPIC.enabled and BENCH_TOPIC.id == 1
+    assert BENCH_TOPIC.id == 1
 
 
 # ---------- 점수 ----------

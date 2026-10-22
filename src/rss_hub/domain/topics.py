@@ -1,9 +1,9 @@
 """주제 알림: 입력 규칙과 판별 규칙.
 
-주제는 이름, 설명, 키워드, 웹훅으로 이루어진다. 글이 주제에 해당하려면 LLM이 그 주제를 골랐고,
-키워드가 등록되어 있다면 제목이나 본문에 키워드가 하나라도 있어야 한다("LLM 확인 + 키워드 보완").
-키워드가 먼저 후보를 거르고(`is_candidate`), LLM은 그 후보만 확인한다. LLM이 후보가 아닌 주제를
-고르는 것(환각)은 구조적으로 불가능하다.
+주제는 이름, 키워드, 웹훅, (선택) LLM이 읽는 설명으로 이루어진다. 키워드는 필수다.
+글의 제목이나 본문에 키워드가 하나라도 있어야 후보가 되고(`is_candidate`), OpenRouter 키가 있으면
+LLM이 그 후보만 설명을 보고 최종 확인한다. LLM이 후보가 아닌 주제를 고르는 것(환각)은 구조적으로
+불가능하다. 키가 없으면 키워드만으로 판정한다. 키워드가 없는 옛 주제는 판정에서 빠진다.
 """
 
 import re
@@ -36,7 +36,6 @@ class Topic:
     description: str
     keywords: tuple[str, ...]
     webhook_id: int | None
-    enabled: bool
 
 
 @dataclass(frozen=True)
@@ -72,25 +71,24 @@ def validate_topic_fields(name: str, description: str, keywords_text: str) -> To
         raise TopicInputError(f"이름은 {MAX_NAME_LENGTH}자까지")
     if len(description) > MAX_DESCRIPTION_LENGTH:
         raise TopicInputError(f"설명은 {MAX_DESCRIPTION_LENGTH}자까지")
-    return TopicFields(name=name, description=description, keywords=parse_keywords(keywords_text))
+    keywords = parse_keywords(keywords_text)
+    if not keywords:
+        raise TopicInputError("키워드가 필요함")
+    return TopicFields(name=name, description=description, keywords=keywords)
 
 
 def is_candidate(topic: Topic, title: str, content_html: str) -> bool:
-    """LLM에게 물어볼 후보인가: 켜져 있고, 키워드가 맞거나 키워드가 없는(LLM만으로 정하는) 주제."""
-    if not topic.enabled:
-        return False
+    """후보인가: 제목이나 본문에 키워드가 하나라도 있다. 키워드가 없는 옛 주제는 후보가 아니다."""
     if not topic.keywords:
-        return True
+        return False
     return bool(find_keywords(title, content_html, split_keywords(topic.keywords)))
 
 
 def match_topic(
     topic: Topic, llm_topic_ids: Collection[int] | None, title: str, content_html: str
 ) -> tuple[str, ...] | None:
-    """해당하면 일치한 키워드(키워드가 없는 주제는 빈 튜플)를, 아니면 None을 돌려준다."""
-    if not topic.enabled or llm_topic_ids is None or topic.id not in llm_topic_ids:
+    """해당하면 일치한 키워드를, 아니면 None을 돌려준다."""
+    if llm_topic_ids is None or topic.id not in llm_topic_ids or not topic.keywords:
         return None
-    if not topic.keywords:
-        return ()
     hits = find_keywords(title, content_html, split_keywords(topic.keywords))
     return hits or None

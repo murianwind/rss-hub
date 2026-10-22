@@ -128,7 +128,7 @@ def test_html_special_characters_are_escaped(client, service):
 
 def test_saving_the_key_never_shows_it_again(client, service):
     response = post(client, "/settings/openrouter-key", {"openrouter_key": KEY})
-    assert response.status_code == 303
+    assert response.status_code == 200 and KEY not in response.text
     assert service.get_openrouter_key() == KEY
     for path in ("/", "/settings", "/models"):
         html = client.get(path).text

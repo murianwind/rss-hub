@@ -12,7 +12,7 @@
 
 <div class="acc-list">
 {% for acc_id, acc_title, sections in accordions %}
-<details class="acc" id="acc-{{ acc_id }}" {% if acc_id in opened %}open{% endif %}>
+<details class="acc" id="acc-{{ acc_id }}" name="settings-acc" {% if acc_id == opened %}open{% endif %}>
   <summary><span>{{ loop.index }}. {{ acc_title }}</span>{{ icon('chevron-down', 'chev') }}</summary>
   <div class="acc-body">
   {% if acc_id == 'general' and suggestion %}
