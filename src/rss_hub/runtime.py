@@ -7,11 +7,14 @@
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, cast
 
 from rss_hub.adapters.discord_webhook import DiscordNotifier, RequestsWebhookSender
 from rss_hub.adapters.http_feed_fetcher import RequestsFeedFetcher
 from rss_hub.adapters.openrouter_client import OpenRouterClient
+from rss_hub.jobs.progress import JobProgress
+from rss_hub.jobs.results import describe_result
 from rss_hub.jobs.runner import IntervalJob, Job, JobRunner, SlotJob, start_thread
 from rss_hub.services.alerts import AlertService
 from rss_hub.services.clock import Clock
@@ -95,6 +98,7 @@ def build_runner(
     llm = build_llm_services(database, clock, settings, client=llm_client, sender=webhook_sender)
     alerts, gateway = llm.alerts, llm.gateway
     feed_fetcher = fetcher or RequestsFeedFetcher()
+    progress = JobProgress()
     collector = CollectService(
         feeds=feeds,
         articles=articles,
@@ -102,9 +106,15 @@ def build_runner(
         settings=settings,
         clock=clock,
         pages=PageFeedSource(pages=cast(PageFetcher, feed_fetcher), clock=clock),
+        progress=partial(progress.report, JOB_COLLECT),
     )
     summarizer = SummarizeService(
-        articles=articles, gateway=gateway, settings=settings, topics=topics, clock=clock
+        articles=articles,
+        gateway=gateway,
+        settings=settings,
+        topics=topics,
+        clock=clock,
+        progress=partial(progress.report, JOB_SUMMARIZE),
     )
     retention = RetentionService(articles=articles, settings=settings, clock=clock)
     model_scan = ModelScanService(
@@ -123,10 +133,14 @@ def build_runner(
         alerts=alerts,
         clock=clock,
         stop_requested=stop.is_set,
+        progress=partial(progress.report, JOB_DELIVER),
     )
     jobs: list[Job] = [
         SlotJob(
-            JOB_COLLECT, collector.run_slot, lambda: settings.snapshot().collect_interval_minutes
+            JOB_COLLECT,
+            collector.run_slot,
+            lambda: settings.snapshot().collect_interval_minutes,
+            run_now=collector.run_all,
         ),
         IntervalJob(
             JOB_SUMMARIZE, summarizer.run, lambda: settings.snapshot().summarize_interval_seconds
@@ -145,4 +159,6 @@ def build_runner(
         spawn=spawn,
         stop_event=stop,
         tick_seconds=tick_seconds,
+        describe=describe_result,
+        progress=progress,
     )

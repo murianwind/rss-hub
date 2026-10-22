@@ -24,6 +24,7 @@ class JobRun:
     last_slot: datetime | None
     skipped_count: int
     last_skipped_at: datetime | None
+    last_result: str = ""  # 마지막으로 끝난 실행의 처리 결과 한 줄
 
 
 def _run(row: sqlite3.Row) -> JobRun:
@@ -37,6 +38,7 @@ def _run(row: sqlite3.Row) -> JobRun:
         last_slot=from_iso(row["last_slot"]),
         skipped_count=row["skipped_count"],
         last_skipped_at=from_iso(row["last_skipped_at"]),
+        last_result=row["last_result"],
     )
 
 
@@ -68,16 +70,34 @@ class JobRunRepository:
                 (self._now(), STATUS_RUNNING, None if slot is None else slot.isoformat(), job),
             )
 
-    def mark_finished(self, job: str, error: str | None = None) -> None:
-        """작업이 끝났다. error가 없으면 성공이다."""
+    def mark_finished(self, job: str, error: str | None = None, result: str = "") -> None:
+        """작업이 끝났다. error가 없으면 성공이다. result는 처리 결과 한 줄(실패하면 비운다)."""
         now = self._now()
         with self._db.connect() as conn:
             conn.execute("INSERT OR IGNORE INTO job_runs(job) VALUES(?)", (job,))
             conn.execute(
                 "UPDATE job_runs SET last_finished_at = ?, last_status = ?, last_error = ?, "
+                "last_result = ?, "
                 "last_ok_at = CASE WHEN ? IS NULL THEN ? ELSE last_ok_at END WHERE job = ?",
-                (now, STATUS_OK if error is None else STATUS_ERROR, error, error, now, job),
+                (
+                    now,
+                    STATUS_OK if error is None else STATUS_ERROR,
+                    error,
+                    "" if error else result,
+                    error,
+                    now,
+                    job,
+                ),
             )
+
+    def recover_interrupted(self) -> int:
+        """끝나지 못한 작업의 "실행 중"을 오류(Interrupted)로 바꾼다. 바꾼 수."""
+        with self._db.connect() as conn:
+            return conn.execute(
+                "UPDATE job_runs SET last_status = ?, last_error = 'Interrupted', "
+                "last_result = '', last_finished_at = ? WHERE last_status = ?",
+                (STATUS_ERROR, self._now(), STATUS_RUNNING),
+            ).rowcount
 
     def mark_skipped(self, job: str) -> None:
         """이전 실행이 끝나지 않아서 이번 실행을 건너뛰었다."""

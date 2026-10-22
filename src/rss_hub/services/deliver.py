@@ -74,8 +74,10 @@ class DeliveryService:
         clock: Clock,
         sleep: Callable[[float], None] = time.sleep,
         stop_requested: Callable[[], bool] = lambda: False,
+        progress: Callable[[int, int], None] = lambda done, total: None,
     ) -> None:
         self._stop_requested = stop_requested
+        self._progress = progress
         self._topics = topics
         self._articles = articles
         self._feeds = feeds
@@ -95,7 +97,9 @@ class DeliveryService:
         names = {w.id: w.name for w in self._settings.list_webhooks()}
         topics = self._topics.list_all()
         state = _Run()
-        for article in ready[:MAX_ARTICLES_PER_RUN]:
+        batch = ready[:MAX_ARTICLES_PER_RUN]
+        for done, article in enumerate(batch):
+            self._progress(done, len(batch))
             if state.stop:
                 break
             if self._stop_requested():  # 서비스 종료 중: 지금 글까지 마치고 나머지는 ready로 남긴다
@@ -105,6 +109,7 @@ class DeliveryService:
                 self._deliver_article(article, topics, config, names, state)
             except Exception:
                 logger.exception("글 발송 중 예상하지 못한 오류: article_id=%s", article.id)
+        self._progress(len(batch), len(batch))
         return DeliveryReport(
             considered=len(ready),
             delivered=state.delivered,

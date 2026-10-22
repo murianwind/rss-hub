@@ -8,7 +8,7 @@
 """
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -54,7 +54,9 @@ class SummarizeService:
         settings: SettingsService,
         topics: TopicRepository,
         clock: Clock,
+        progress: Callable[[int, int], None] = lambda done, total: None,
     ) -> None:
+        self._progress = progress
         self._topics = topics
         self._articles = articles
         self._gateway = gateway
@@ -81,7 +83,8 @@ class SummarizeService:
         outage = False
         blocked: BudgetBlock | None = None
 
-        for article in targets:
+        for done, article in enumerate(targets):
+            self._progress(done, len(targets))
             overdue = now - article.discovered_at >= wait_limit
             if outage:  # 장애 중에는 더 호출하지 않고, 오래 기다린 글만 원문 발췌로 확정한다
                 if overdue:
@@ -112,6 +115,7 @@ class SummarizeService:
             else:
                 fallback += 1
 
+        self._progress(len(targets), len(targets))
         return SummarizeReport(
             considered=len(targets),
             ready=ready,
@@ -127,13 +131,15 @@ class SummarizeService:
         """LLM 없이 원문 제목으로 글을 확정한다. 키워드가 있는 주제는 키워드가 맞아야 해당한다."""
         targets = self.pending(PLAIN_BATCH)
         topics = self._topics.list_all()
-        for article in targets:
+        for done, article in enumerate(targets):
+            self._progress(done, len(targets))
             matched = [t for t in topics if is_candidate(t, article.title, article.content_html)]
             ids = [t.id for t in matched]
             self._articles.mark_ready(
                 article.id, title_ko=article.title, summary_ko="", topics=ids, model=MODEL_PLAIN
             )
             self._record_topic_matches(article, matched, ids)
+        self._progress(len(targets), len(targets))
         return SummarizeReport(considered=len(targets), plain=len(targets))
 
     # ---------- 글 하나 ----------

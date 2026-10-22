@@ -554,3 +554,16 @@ details.acc-limit[open] > summary { margin-bottom: 8px; }
 .status-card .check > .row { flex-shrink: 0; align-items: center; }
 
 .pub-date { font-size: 12px; color: var(--muted); }
+
+.status-card .check { gap: 16px; }
+.status-card .hint.block { display: block; margin-top: 2px; }
+.job-list .job-row { display: block; padding: 8px 0; }
+.job-main { display: flex; align-items: center; gap: 12px; }
+.job-name { font-weight: 600; min-width: 4.5em; }
+.job-main form { margin: 0 0 0 auto; }
+.job-detail { margin-top: 4px; line-height: 1.5; }
+.state.running { color: var(--accent); font-weight: 600; animation: cell-pulse 1s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .state.running { animation: none; } }
+
+.run-actions { gap: 12px; }
+.run-row .hint.running { color: var(--accent); font-weight: 600; }

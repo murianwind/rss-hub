@@ -79,3 +79,28 @@ def test_all_returns_one_record_per_job(runs):
     runs.mark_started("collect")
     runs.mark_started("summarize")
     assert set(runs.all()) == {"collect", "summarize"}
+
+
+# ---------- 결과 한 줄과 끊긴 실행 ----------
+
+
+def test_the_result_line_is_kept_and_cleared_when_a_run_fails(runs):
+    runs.mark_started("summarize")
+    runs.mark_finished("summarize", None, "요약 3건")
+    assert runs.get("summarize").last_result == "요약 3건"
+    runs.mark_started("summarize")
+    assert (
+        runs.get("summarize").last_result == "요약 3건"
+    )  # 새 실행이 끝나기 전에는 이전 결과를 둔다
+    runs.mark_finished("summarize", "Timeout", "무시되는 결과")
+    assert runs.get("summarize").last_result == ""
+
+
+def test_interrupted_runs_are_recovered_once(runs):
+    runs.mark_started("deliver")
+    runs.mark_started("collect")
+    runs.mark_finished("collect", None, "ok")
+    assert runs.recover_interrupted() == 1
+    record = runs.get("deliver")
+    assert (record.last_status, record.last_error) == (STATUS_ERROR, "Interrupted")
+    assert runs.get("collect").last_status == STATUS_OK and runs.recover_interrupted() == 0

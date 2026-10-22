@@ -13,7 +13,7 @@ from tests.bdd.binding import bind
 from tests.keywords.browser import post
 from tests.keywords.page import text_of
 
-bind(globals(), "28_status_screen.feature", [f"STS-{n:02d}" for n in range(1, 8)])
+bind(globals(), "28_status_screen.feature", [f"STS-{n:02d}" for n in range(1, 11)])
 
 
 class FakeRunner:
@@ -26,6 +26,9 @@ class FakeRunner:
     def run_now(self, name):
         self.calls.append(name)
         return "busy" if name in self.busy else "started"
+
+    def progress_of(self, name):
+        return None
 
 
 @pytest.fixture
@@ -71,6 +74,23 @@ def _waiting_to_send(world, title):
 @given(parsers.parse('요약을 기다리는 글 "{title}"이 있다'))
 def _waiting_to_summarize(world, title):
     world.article(title=title)
+
+
+@given("발송을 기다리는 글과 요약을 기다리는 글이 있다")
+def _both_waiting(world):
+    world.article(title="발송 글", ko="발송 글", summary="요약")
+    world.article(title="요약 글")
+
+
+@given("발송을 기다리는 글도 요약을 기다리는 글도 없다")
+def _nothing_waiting(world):
+    assert world.articles.count_by_status() == {}
+
+
+@given("구독한 피드가 하나도 없다")
+def _no_feeds(world):
+    for feed in world.feeds.list_all():
+        world.feeds.delete(feed.id)
 
 
 @given("작업 실행기가 있다")
@@ -128,10 +148,11 @@ def _usage_note(ctx):
     assert "OpenRouter 서버가 세는" in text and "실패한 호출은 빠질 수" in text
 
 
-@then(parsers.parse('요약 작업에 "{label}"가 보이고 그 뜻이 설명되어 있다'))
+@then(parsers.parse('요약 작업 기록에 "{label}"가 보이고 글이 밀린 것이 아니라는 설명이 있다'))
 def _skip_label(ctx, label):
     text = re.sub(r"\s+", " ", text_of(ctx.response))
     assert label in text and "이전 실행이 끝나기 전에 다음 차례가 와서" in text
+    assert "글이 밀린다는 뜻이 아닙니다" in text
 
 
 def pending_list(html, kind):
@@ -154,6 +175,15 @@ def _started(ctx):
     assert "발송 작업을 시작했습니다" in text_of(ctx.response) and ctx.runner.calls == ["deliver"]
 
 
+@then("지금 실행 버튼은 작업 기록이 아니라 현재 상태의 대기 글 줄에 있다")
+def _buttons_in_current_state(ctx):
+    current = ctx.html.split("data-current")[1].split("</section>")[0]
+    log = ctx.html.split("data-jobs ")[1].split("</section>")[0]
+    for name in ("collect", "summarize", "deliver"):
+        assert f'action="/status/jobs/{name}/run"' in current
+    assert "/run" not in log
+
+
 @then("이미 실행 중이라는 안내가 보인다")
 def _busy(ctx):
     assert "이미 실행 중입니다" in text_of(ctx.response)
@@ -169,10 +199,40 @@ def _unknown(ctx):
     assert ctx.response.status_code == 404
 
 
-@then("현재 상태, 작업, 설정 점검, 변경 이력이 격자 칸으로 나뉘어 있다")
+@then("현재 상태, 작업 기록, 설정 점검, 변경 이력이 격자 칸으로 나뉘어 있다")
 def _grid(world, ctx):
     assert 'class="status-grid"' in ctx.html
     cards = re.findall(r'<section class="status-card[^"]*"[^>]*>\s*<h2>([^<]+)</h2>', ctx.html)
-    assert cards == ["현재 상태", "작업", "설정 점검", "변경 이력"]
+    assert cards == ["현재 상태", "작업 기록", "설정 점검", "변경 이력"]
     css = world.get("/static/app.css").text
     assert ".status-grid {" in css and "grid-template-columns" in css.split(".status-grid {")[1]
+
+
+def current_state(html):
+    return html.split("data-current")[1].split("</section>")[0]
+
+
+@then("현재 상태에 지금 발송과 지금 요약 버튼은 없고 대기 글이 없다는 안내가 있다")
+def _no_waiting_buttons(ctx):
+    current = current_state(ctx.html)
+    assert "/status/jobs/deliver/run" not in current and "/status/jobs/summarize/run" not in current
+    assert current.count("대기 글이 없습니다") == 2
+
+
+@then("현재 상태에 지금 수집 버튼은 있다")
+def _collect_button(ctx):
+    assert 'action="/status/jobs/collect/run"' in current_state(ctx.html)
+
+
+@then("현재 상태에 지금 발송과 지금 요약 버튼이 있다")
+def _waiting_buttons(ctx):
+    current = current_state(ctx.html)
+    assert re.search(r"<button[^>]*>\s*지금 발송", current)
+    assert re.search(r"<button[^>]*>\s*지금 요약", current)
+    assert "대기 글이 없습니다" not in current
+
+
+@then("현재 상태에 지금 수집 버튼은 없다")
+def _no_collect_button(ctx):
+    current = current_state(ctx.html)
+    assert "/status/jobs/collect/run" not in current and "등록된 피드가 없습니다" in current
