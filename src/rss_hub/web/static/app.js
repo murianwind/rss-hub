@@ -284,6 +284,29 @@
     }
   }
 
+  // 피드 관리: 새로고침으로 상태나 마지막 게시가 바뀌면 필터 조건에서 벗어난 피드가 목록에서 빠져야 한다.
+  // 같은 주소(필터 포함)를 다시 받아서 목록과 상태 칩만 바꿔 끼운다(스크롤 자리는 그대로).
+  function reloadFeedList() {
+    var list = document.querySelector(".feed-scroll");
+    var chips = document.querySelector(".feed-tools .chips");
+    if (!list || !chips) return;
+    fetch(window.location.href, { credentials: "same-origin" })
+      .then(function (response) {
+        return response.ok ? response.text() : null;
+      })
+      .then(function (text) {
+        if (!text) return;
+        var next = new DOMParser().parseFromString(text, "text/html");
+        var nextList = next.querySelector(".feed-scroll");
+        var nextChips = next.querySelector(".feed-tools .chips");
+        if (!nextList || !nextChips) return;
+        // 문자열을 HTML로 쓰지 않고, 파싱된 문서의 노드를 그대로 옮겨 붙인다
+        list.replaceChildren.apply(list, document.importNode(nextList, true).childNodes);
+        chips.replaceChildren.apply(chips, document.importNode(nextChips, true).childNodes);
+      })
+      .catch(function () {});
+  }
+
   function refreshFeed(button) {
     if (button.disabled) return;
     button.disabled = true;
@@ -297,6 +320,7 @@
           data = null;
         }
         if (data && data.state) applyState(data.state);
+        reloadFeedList();
         if (!data) showToast("다시 읽지 못했습니다.");
         else if (!data.ok) showToast("읽지 못했습니다: " + data.error);
         else if (data.added > 0) showToast("새 글 " + data.added + "개를 가져왔습니다.");

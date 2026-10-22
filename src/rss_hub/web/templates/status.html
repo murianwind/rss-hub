@@ -1,55 +1,85 @@
 {% extends "base.html" %}
 {% block title %}상태 · RSS Hub{% endblock %}
+{% block page_class %} page-wide{% endblock %}
 {% block content %}
 <h1>상태</h1>
 
+{% if run_notice %}<div class="banner" role="status">{{ run_notice }}</div>{% endif %}
 {% if waiting_for_address %}
 <div class="banner error" role="alert">서비스 주소 필요: 발송을 기다리는 글이 {{ waiting_for_address }}개 있습니다. <a href="/settings">설정 화면</a>에서 서비스 주소를 지정하세요.</div>
 {% endif %}
 
-<h2>현재 상태</h2>
-<ul class="checks">
-  <li class="check"><span class="label">발송 대기 글</span><span class="state">{{ ready_count }}개</span></li>
-  <li class="check"><span class="label">요약 대기 글</span><span class="state">{{ collected_count }}개</span></li>
-  <li class="check"><span class="label">오늘 LLM 호출</span><span class="state">{{ llm_calls_today }}회</span></li>
-  <li class="check"><span class="label">실패 피드</span><span class="state">{{ failing_feeds | length }}개</span></li>
-</ul>
-{% if failing_feeds %}
-<ul class="checks">
-{% for f in failing_feeds %}
-  <li class="check"><span class="label">{{ f.name }} <span class="hint">{{ f.last_error or '' }}</span></span><span class="state todo">연속 {{ f.fail_count }}회</span></li>
-{% endfor %}
-</ul>
-{% endif %}
+<div class="status-grid">
+<section class="status-card panel">
+  <h2>현재 상태</h2>
+  <ul class="checks">
+    <li class="check"><span class="label">발송 대기 글</span><span class="state">{{ ready_count }}개</span></li>
+    <li class="check"><span class="label">요약 대기 글</span><span class="state">{{ collected_count }}개</span></li>
+    <li class="check"><span class="label">오늘 LLM 호출 <span class="hint">(UTC 기준 하루)</span></span><span class="state">{{ llm_calls_today }}회</span></li>
+    <li class="check"><span class="label">실패 피드</span><span class="state">{{ failing_feeds | length }}개</span></li>
+  </ul>
+  <p class="hint">성공 {{ llm_calls_ok }} · 실패 {{ llm_calls_failed }}. 사이드바의 모델 잔여 사용량은 OpenRouter 서버가 세는 값이라 실패한 호출은 빠질 수 있고, 같은 키를 쓰는 다른 프로그램의 호출은 더해집니다.</p>
+  {% if failing_feeds %}
+  <ul class="checks">
+  {% for f in failing_feeds %}
+    <li class="check"><span class="label">{{ f.name }} <span class="hint">{{ f.last_error or '' }}</span></span><span class="state todo">연속 {{ f.fail_count }}회</span></li>
+  {% endfor %}
+  </ul>
+  {% endif %}
+  {% if pending.ready or pending.collected %}
+  <details class="pending-box">
+    <summary>대기 중인 글 보기 <span class="hint">발송 {{ ready_count }} · 요약 {{ collected_count }}</span></summary>
+    {% for kind, heading, rows in (('ready', '발송 대기', pending.ready), ('collected', '요약 대기', pending.collected)) %}
+    {% if rows %}
+    <h3 class="acc-sub">{{ heading }} 글{% if (ready_count if kind == 'ready' else collected_count) > rows | length %} <span class="hint">오래된 {{ rows | length }}개만 표시</span>{% endif %}</h3>
+    <ul class="pending-list" data-pending="{{ kind }}">
+      {% for a in rows %}<li><span class="pending-title" title="{{ a.title }}">{{ a.title }}</span><span class="hint">{{ a.feed }} · {{ a.why }}</span></li>{% endfor %}
+    </ul>
+    {% endif %}
+    {% endfor %}
+  </details>
+  {% endif %}
+</section>
 
-<h2>작업</h2>
-<ul class="checks">
-{% for job in jobs %}
-  <li class="check"><span class="label">{{ job.label }} <span class="hint">마지막 성공 {{ job.last_ok or '없음' }}{% if job.skipped %} · 건너뜀 {{ job.skipped }}회{% endif %}</span></span><span class="state {{ 'ok' if job.status == 'ok' else 'todo' }}">{{ job.status or '대기' }}</span></li>
-{% endfor %}
-</ul>
+<section class="status-card panel">
+  <h2>작업</h2>
+  <ul class="checks">
+  {% for job in jobs %}
+    <li class="check"><span class="label">{{ job.label }} <span class="hint">마지막 성공 {{ job.last_ok or '없음' }}{% if job.skipped %} · 겹침으로 넘김 {{ job.skipped }}회{% endif %}</span></span>
+      <span class="row">
+        {% if job.runnable %}<form method="post" action="/status/jobs/{{ job.name }}/run"><button type="submit" class="compact" title="차례를 기다리지 않고 지금 실행합니다">지금 실행</button></form>{% endif %}
+        <span class="state {{ 'ok' if job.status == 'ok' else 'todo' }}">{{ job.status or '대기' }}</span>
+      </span></li>
+  {% endfor %}
+  </ul>
+  <p class="hint">겹침으로 넘김: 이전 실행이 끝나기 전에 다음 차례가 와서 그 차례를 넘긴 횟수입니다(글을 건너뛴 것이 아니라, 이전 실행이 끝나면 이어서 처리합니다).</p>
+</section>
 
-<h2>설정 점검</h2>
-<ul class="checks">
-{% for item in checklist %}
-  <li class="check" data-item="{{ item.key }}" data-ready="{{ 'true' if item.ready else 'false' }}"><span class="label">{{ item.label }}{% if not item.required %} <span class="hint">선택 · 없으면 번역과 요약 없이 원문 제목과 링크만 알립니다</span>{% endif %}</span><span class="state {{ 'ok' if item.ready else 'todo' }}">{{ '설정됨' if item.ready else ('미설정' if item.required else '선택') }}</span></li>
-{% endfor %}
-</ul>
+<section class="status-card panel">
+  <h2>설정 점검</h2>
+  <ul class="checks">
+  {% for item in checklist %}
+    <li class="check" data-item="{{ item.key }}" data-ready="{{ 'true' if item.ready else 'false' }}"><span class="label">{{ item.label }}{% if not item.required %} <span class="hint">선택 · 없으면 번역과 요약 없이 원문 제목과 링크만 알립니다</span>{% endif %}</span><span class="state {{ 'ok' if item.ready else 'todo' }}">{{ '설정됨' if item.ready else ('미설정' if item.required else '선택') }}</span></li>
+  {% endfor %}
+  </ul>
+  {% if all_ready %}
+  <p class="note">필요한 설정이 모두 채워졌습니다.</p>
+  {% else %}
+  <p class="note">아래 항목은 <a href="/settings">설정 화면</a>에서 채워 주세요.</p>
+  {% endif %}
+</section>
 
-{% if all_ready %}
-<p class="note">필요한 설정이 모두 채워졌습니다.</p>
-{% else %}
-<p class="note">아래 항목은 <a href="/settings">설정 화면</a>에서 채워 주세요.</p>
-{% endif %}
-
-<h2>변경 이력</h2>
-<div class="history-scroll">
-{% if audit %}
-<ul class="history">
-  {% for e in audit %}<li><time>{{ e.time }}</time>{{ e.summary }}</li>{% endfor %}
-</ul>
-{% else %}
-<p class="note">아직 변경한 내용이 없습니다.</p>
-{% endif %}
+<section class="status-card panel">
+  <h2>변경 이력</h2>
+  <div class="history-scroll">
+  {% if audit %}
+  <ul class="history">
+    {% for e in audit %}<li><time>{{ e.time }}</time>{{ e.summary }}</li>{% endfor %}
+  </ul>
+  {% else %}
+  <p class="note">아직 변경한 내용이 없습니다.</p>
+  {% endif %}
+  </div>
+</section>
 </div>
 {% endblock %}

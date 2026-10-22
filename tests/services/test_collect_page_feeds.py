@@ -46,7 +46,8 @@ def test_the_first_check_only_records_a_baseline_and_makes_the_feed_active(env):
     assert env.collected() == [] and report.baseline_recorded == 5 and report.failed == ()
     assert all(env.articles.is_seen(f"{BASE}/news/post-{n}") for n in range(1, 6))
     assert env.feeds.get(feed).status == STATUS_ACTIVE
-    assert env.pages.page_calls == [LIST_URL]  # 글 페이지는 아직 가져오지 않는다
+    # 목록 한 번과, 뷰어용으로 보관하는 글의 발행일을 읽으려고 가져오는 글 페이지(보관 개수만큼)
+    assert env.pages.page_calls[0] == LIST_URL and len(env.pages.page_calls) == 1 + 5
     assert env.fetcher.calls == []  # RSS 수집기는 부르지 않는다
 
 

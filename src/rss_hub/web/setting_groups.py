@@ -19,9 +19,8 @@ SETTING_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "모델 체인과 호출 한도",
+        "호출 한도",
         (
-            "model_chain",
             "llm_daily_cap",
             "llm_warn_percent",
             "llm_rpm_cap",

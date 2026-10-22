@@ -8,6 +8,7 @@
 """
 
 from dataclasses import dataclass
+from datetime import datetime, tzinfo
 from urllib.parse import quote, urlsplit
 
 from fastapi import APIRouter, Request, Response
@@ -20,7 +21,7 @@ from rss_hub.domain.sanitize import sanitize_html
 from rss_hub.domain.text import strip_html
 from rss_hub.services.fulltext import FullTextService
 from rss_hub.services.settings import SettingsService
-from rss_hub.storage.articles import ArticleRepository
+from rss_hub.storage.articles import PUBLISHED_DATE, PUBLISHED_UNKNOWN, ArticleRepository
 from rss_hub.storage.feeds import FeedRepository
 from rss_hub.storage.reader import ONLY_BOOKMARKS, ONLY_UNREAD, PER_PAGE, ReaderRepository
 from rss_hub.storage.topics import TopicRepository
@@ -64,6 +65,14 @@ def _site_of(html_url: str, feed_url: str) -> str:
         parts = urlsplit(feed_url)
         return f"{parts.scheme}://{parts.netloc}/"
     return ""
+
+
+def published_text(moment: datetime, kind: str, zone: tzinfo) -> str:
+    """발행일을 아는 만큼만 글자로: 시각까지, 날짜만, 모르면 빈 글자."""
+    local = moment.astimezone(zone)
+    if kind == PUBLISHED_UNKNOWN:
+        return ""
+    return local.strftime("%Y-%m-%d" if kind == PUBLISHED_DATE else "%Y-%m-%d %H:%M")
 
 
 def build_reader_router(
@@ -132,7 +141,13 @@ def build_reader_router(
             "prev_url": list_url(base_path, page=page.page - 1, query=query, only=shown_only),
             "next_url": list_url(base_path, page=page.page + 1, query=query, only=shown_only),
             "times": {
-                i.id: i.published_dt.astimezone(zone).strftime("%Y-%m-%d %H:%M") for i in page.items
+                i.id: published_text(i.published_dt, i.published_kind, zone) for i in page.items
+            },
+            "pub_dates": {
+                i.id: published_text(i.published_dt, PUBLISHED_DATE, zone)
+                if i.published_kind != PUBLISHED_UNKNOWN
+                else ""
+                for i in page.items
             },
             "snippets": {i.id: _snippet(i.summary) for i in page.items},
         }
@@ -226,7 +241,7 @@ def build_reader_router(
             "feed": feed,
             "title": article.title_ko or article.title,
             "show_original_title": bool(article.title_ko and article.title_ko != article.title),
-            "published": article.published_dt.astimezone(zone).strftime("%Y-%m-%d %H:%M"),
+            "published": published_text(article.published_dt, article.published_kind, zone),
             "topic_matches": reader.topics_of(article.id),
             "memberships": {m.topic_id: m for m in topics.memberships(article.id)},
             "memberships_active": [

@@ -21,7 +21,7 @@
     <div class="doc-fixed">
     <div class="doc-meta">
       <a class="chip" href="/reader/feed/{{ feed.id }}">{{ feed.name }}</a>
-      <span>·</span><time datetime="{{ article.published_dt.isoformat() }}">{{ published }}</time>
+      {% if published %}<span>·</span><time datetime="{{ article.published_dt.isoformat() }}">{{ published }}</time>{% endif %}
       {% for match in topic_matches %}
       <form method="post" action="/a/{{ article.id }}/topics/{{ match.topic_id }}/reject" class="inline-chip">
         <input type="hidden" name="next" value="{{ here }}">

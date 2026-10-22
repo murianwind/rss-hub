@@ -48,3 +48,25 @@ COMSCORE_LIKE = """<html><head><title>Blog - Comscore, Inc.</title></head><body>
 <div><a href="/Insights/Blog/Summer-Signals" title="Summer Signals: Reading Guide to the Season That Was">Blog Summer Signals: Reading Guide to the Season That Was</a></div>
 <a href="/Insights/Blog/Front-Door" title="Blog: The New Front Door to Financial Decision Making">29 jul 2026 The New Front Door to Financial Decision Making:...</a>
 <ul><li><a href="/Insights/Blog?page=2">2</a></li></ul><footer><a href="/Insights/Blog/Footer">Footer</a></footer></body></html>"""
+
+
+def dated_article_html(n, *, head="", body_top=""):
+    """발행일 정보를 head(메타, JSON-LD)나 본문 위쪽에 넣은 글 페이지."""
+    paragraphs = "".join(
+        f"<p>{n}번 글의 {k}번째 본문 문단입니다. 요약에 쓸 충분히 긴 문장이고 서로 겹치지 않습니다.</p>"
+        for k in range(1, 7)
+    )
+    return f"<html><head>{head}</head><body><article>{body_top}{paragraphs}</article></body></html>"
+
+
+PUBLISHED_PAGES = {
+    "메타 태그 article:published_time": dict(
+        head='<meta property="article:published_time" content="2026-09-28T09:00:00+09:00">'
+    ),
+    "time 태그의 datetime": dict(body_top='<p><time datetime="2026-09-28">Sep 28</time></p>'),
+    "JSON-LD의 datePublished": dict(
+        head='<script type="application/ld+json">{"@type":"Article","datePublished":"2026-09-28T01:00:00+09:00"}</script>'
+    ),
+    "본문 위쪽의 September 28, 2026": dict(body_top="<p>By Kim</p><p>September 28, 2026</p>"),
+    "본문 위쪽의 2026년 9월 28일 게시": dict(body_top="<p>게시일: 2026년 9월 28일</p>"),
+}

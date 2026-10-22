@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -246,3 +246,11 @@ def test_every_status_is_cleaned_up_after_the_retention_period(env):
     clock.advance(days=100)
     assert articles.delete_older_than(clock.now() - timedelta(days=90)) == 4
     assert articles.count_by_status() == {}
+
+
+def test_list_by_status_can_be_limited_to_the_oldest_ones(env):
+    articles, _, feed_a, _ = env
+    base = datetime(2026, 10, 16, 0, 0, tzinfo=UTC)
+    for guid, hours in (("g3", 3), ("g1", 1), ("g2", 2)):
+        articles.add(new(feed_a, guid, published=base + timedelta(hours=hours)))
+    assert [a.guid for a in articles.list_by_status(STATUS_COLLECTED, 2)] == ["g1", "g2"]

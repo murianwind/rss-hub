@@ -133,7 +133,7 @@ def _discord_forms(ctx):
 def _models_page(ctx):
     for needle in (
         'action="/settings/openrouter-key"',
-        'name="model_chain"',
+        "data-chain-editor",
         'name="llm_daily_cap"',
         'action="/models/scan"',
     ):
@@ -176,6 +176,8 @@ def _every_help():
 def _help_shown(world):
     html = "".join(world.get(path).text for path in ("/settings", "/discord", "/models"))
     for definition in SETTING_DEFS:
+        if definition.key == "model_chain":
+            continue  # 모델 체인은 입력 칸이 아니라 끌어다 놓는 편집기로 바꾼다
         assert definition.help in html, definition.key
 
 

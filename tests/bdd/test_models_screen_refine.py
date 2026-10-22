@@ -12,7 +12,7 @@ from tests.bdd.binding import bind
 from tests.keywords.models import call_result, open_model_world, post, record_run, scan
 from tests.keywords.page import text_of
 
-bind(globals(), "26_models_screen_refine.feature", [f"MDS-{n:02d}" for n in range(1, 10)])
+bind(globals(), "26_models_screen_refine.feature", [f"MDS-{n:02d}" for n in range(1, 11)])
 
 
 @pytest.fixture
@@ -194,3 +194,18 @@ def _legend(ctx):
     legend = ctx.html.split('class="bench-legend"')[1].split("</p>")[0]
     assert "실패" in legend and "건너뜀" in legend
     assert "진행 중" not in legend and "대기" not in legend and "성공" not in legend
+
+
+@then("모델 이름을 직접 입력하는 칸은 없다")
+def _no_manual_chain_input(ctx):
+    assert "직접 입력" not in ctx.html and 'name="model_chain"' not in ctx.html
+
+
+@when("호출 한도 양식으로 모델 체인을 보내 본다")
+def _post_chain_to_limits(world):
+    post(world, "/models/settings", {"model_chain": "model-z", "llm_daily_cap": "700"})
+
+
+@then("모델 체인은 바뀌지 않는다")
+def _chain_unchanged(world):
+    assert world.settings.snapshot().model_chain == ("model-a", "model-b")

@@ -306,3 +306,29 @@ def test_slots_follow_the_service_timezone_even_when_its_minutes_differ_from_utc
     assert runner.tick() == []
     env.clock.advance(minutes=30)  # 인도 시각 15:00
     assert runner.tick() == ["collect"]
+
+
+# ---------- 지금 실행 ----------
+
+
+def test_run_now_starts_a_job_without_waiting_for_its_turn(env):
+    runner = env.runner()
+    assert runner.run_now("summarize") == "started"
+    assert env.calls == {"summarize": 1}
+    assert env.records.get("summarize").last_status == STATUS_OK
+
+
+def test_run_now_refuses_a_job_that_is_already_running(tmp_path):
+    env = Env(tmp_path, inline=False)
+    runner = env.runner()
+    assert runner.run_now("summarize") == "started"
+    assert runner.run_now("summarize") == "busy"
+    env.pending.pop()()  # 실행이 끝나면 다시 시작할 수 있다
+    assert runner.run_now("summarize") == "started"
+
+
+def test_run_now_reports_an_unknown_job_and_does_nothing_while_stopping(env):
+    runner = env.runner()
+    assert runner.run_now("nonsense") == "unknown"
+    runner.request_stop()
+    assert runner.run_now("summarize") == "busy" and env.calls == {}

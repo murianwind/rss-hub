@@ -20,6 +20,10 @@ MODEL_PLAIN = "plain"  # OpenRouter 키가 없어서 LLM 없이 원문 제목으
 MODEL_FALLBACK = "fallback-final"  # 요약에 끝까지 실패해서 원문 발췌로 확정한 글
 SEEN_BASELINE = "baseline"
 SEEN_ARTICLE = "article"
+SEEN_STALE = "stale"  # 글 페이지의 발행일이 오늘이 아니라서 알림 대상에서 뺀 글
+PUBLISHED_EXACT = "exact"  # 발행 시각까지 안다(RSS)
+PUBLISHED_DATE = "date"  # 날짜만 안다(웹페이지 구독의 목록이나 글 페이지)
+PUBLISHED_UNKNOWN = "unknown"  # 모른다(그때의 수집 시각을 대신 저장했다)
 MAX_FULL_TEXT_CHARS = 400_000  # 저장하는 전문의 최대 길이
 
 
@@ -33,6 +37,7 @@ class NewArticle:
     published_raw: str
     published_dt: datetime
     published_date: str
+    published_kind: str = PUBLISHED_EXACT
 
 
 @dataclass(frozen=True)
@@ -58,6 +63,7 @@ class Article:
     full_html: str | None = None  # 원문 페이지에서 뽑은 전문(정제됨)
     full_status: str | None = None  # None(가져온 적 없음), ok, failed
     full_error: str | None = None  # 실패 분류(예: ReadTimeout)
+    published_kind: str = PUBLISHED_EXACT
 
 
 def _article(row: sqlite3.Row) -> Article:
@@ -85,6 +91,7 @@ def _article(row: sqlite3.Row) -> Article:
         full_html=row["full_html"],
         full_status=row["full_status"],
         full_error=row["full_error"],
+        published_kind=row["published_kind"],
     )
 
 
@@ -123,7 +130,8 @@ class ArticleRepository:
                 return None
             cursor = conn.execute(
                 "INSERT INTO articles(feed_id, guid, title, link, content_html, published_raw, "
-                "published_dt, published_date, discovered_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "published_dt, published_date, published_kind, discovered_at) "
+                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     article.feed_id,
                     article.guid,
@@ -133,6 +141,7 @@ class ArticleRepository:
                     article.published_raw,
                     to_iso(article.published_dt),
                     article.published_date,
+                    article.published_kind,
                     now,
                 ),
             )
@@ -153,8 +162,8 @@ class ArticleRepository:
             )
             cursor = conn.execute(
                 "INSERT INTO articles(feed_id, guid, title, link, content_html, published_raw, "
-                "published_dt, published_date, discovered_at, status, read_at) "
-                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "published_dt, published_date, published_kind, discovered_at, status, read_at) "
+                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     article.feed_id,
                     article.guid,
@@ -164,6 +173,7 @@ class ArticleRepository:
                     article.published_raw,
                     to_iso(article.published_dt),
                     article.published_date,
+                    article.published_kind,
                     now,
                     STATUS_ARCHIVED,
                     now,  # 보관 글은 읽은 것으로 시작한다(읽지 않은 글 수를 부풀리지 않게)
@@ -266,10 +276,12 @@ class ArticleRepository:
             row = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
         return None if row is None else _article(row)
 
-    def list_by_status(self, status: str) -> list[Article]:
+    def list_by_status(self, status: str, limit: int = -1) -> list[Article]:
+        """상태가 같은 글을 오래된 순으로. limit이 음수이면 모두."""
         with self._db.connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM articles WHERE status = ? ORDER BY published_dt, id", (status,)
+                "SELECT * FROM articles WHERE status = ? ORDER BY published_dt, id LIMIT ?",
+                (status, limit),
             ).fetchall()
         return [_article(row) for row in rows]
 

@@ -30,6 +30,7 @@ class ListedArticle:
     read: bool
     bookmarked: bool
     keep_unread: bool = False  # 사용자가 읽지 않음으로 고정(자동 읽음 처리에서 빠진다)
+    published_kind: str = "exact"  # 발행일을 얼마나 아는지(exact, date, unknown)
 
 
 @dataclass(frozen=True)
@@ -157,7 +158,7 @@ class ReaderRepository:
         select = (
             "SELECT a.id, a.feed_id, f.name AS feed_name, "
             "COALESCE(a.title_ko, a.title) AS title, a.summary_ko, a.published_dt, a.status, "
-            "a.read_at, a.bookmarked_at, a.keep_unread "
+            "a.read_at, a.bookmarked_at, a.keep_unread, a.published_kind "
             f"{source} WHERE {where} ORDER BY a.published_dt DESC, a.id DESC LIMIT ? OFFSET ?"
         )
         with self._db.connect() as conn:
@@ -304,4 +305,5 @@ def _listed(row: sqlite3.Row, topics: tuple[str, ...]) -> ListedArticle:
         read=row["read_at"] is not None,
         bookmarked=row["bookmarked_at"] is not None,
         keep_unread=bool(row["keep_unread"]),
+        published_kind=row["published_kind"],
     )

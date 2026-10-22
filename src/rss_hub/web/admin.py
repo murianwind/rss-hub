@@ -1,11 +1,12 @@
 """관리 화면: 상태, 설정, Discord. 서버에서 HTML을 만든다(스크립트 없음)."""
 
 import re
-from datetime import datetime, tzinfo
-from typing import Any
+from collections.abc import Callable
+from datetime import UTC, datetime, tzinfo
+from typing import Any, Protocol
 
 from fastapi import APIRouter, Request, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from rss_hub.domain.delivery import describe_send_failure
@@ -13,7 +14,7 @@ from rss_hub.domain.settings_rules import SettingError, normalize_base_url
 from rss_hub.services.clock import Clock
 from rss_hub.services.ports import WebhookSender
 from rss_hub.services.settings import SettingsService
-from rss_hub.storage.articles import STATUS_COLLECTED, STATUS_READY, ArticleRepository
+from rss_hub.storage.articles import STATUS_COLLECTED, STATUS_READY, Article, ArticleRepository
 from rss_hub.storage.feeds import FeedRepository
 from rss_hub.storage.job_runs import JobRunRepository
 from rss_hub.storage.llm_usage import LlmUsageRepository
@@ -49,8 +50,52 @@ def _parse_role(raw: str) -> int | None:
     return int(value)
 
 
+def _llm_today(usage: LlmUsageRepository, clock: Clock) -> dict[str, int]:
+    """오늘(UTC) 모델 호출 수. 호출 한도와 같은 하루 기준이다."""
+    by_outcome = usage.count_day_by_outcome(clock.now().astimezone(UTC).date())
+    ok = by_outcome.get("success", 0)
+    total = sum(by_outcome.values())
+    return {"llm_calls_today": total, "llm_calls_ok": ok, "llm_calls_failed": total - ok}
+
+
+def _run_notice(run: str) -> str:
+    name, _, result = run.partition(".")
+    template = RUN_NOTICES.get(result, "")
+    return template.format(label=RUNNABLE_JOBS.get(name, "")) if name in RUNNABLE_JOBS else ""
+
+
 def _local(moment: datetime | None, zone: tzinfo) -> str:
     return "" if moment is None else moment.astimezone(zone).strftime("%m-%d %H:%M:%S")
+
+
+PENDING_SHOWN = 8  # 상태 화면에 보여 줄 대기 글 수(종류마다)
+RUNNABLE_JOBS = {"collect": "수집", "summarize": "요약", "deliver": "발송"}
+RUN_NOTICES = {
+    "started": "{label} 작업을 시작했습니다. 결과는 아래 작업 표에서 볼 수 있습니다.",
+    "busy": "{label} 작업은 이미 실행 중입니다. 끝난 뒤에 다시 눌러 주세요.",
+    "unavailable": "작업 실행기가 꺼져 있어 지금 실행할 수 없습니다.",
+}
+
+
+class JobStarter(Protocol):
+    def run_now(self, name: str) -> str: ...
+
+
+def _why_waiting(
+    article: Article, *, sending: bool, base_url: str, has_default: bool, has_key: bool
+) -> str:
+    """대기 중인 글이 왜 아직 안 나갔는지 한 줄로."""
+    if sending:
+        if not base_url:
+            return "서비스 주소가 없어 발송을 기다립니다"
+        if not has_default:
+            return "기본 웹훅이 없어 발송을 기다립니다"
+        return "발송 차례를 기다립니다"
+    if article.retry_count:
+        return f"요약을 {article.retry_count}번 다시 시도했습니다"
+    if not has_key:
+        return "OpenRouter 키가 없어 원문 제목으로 곧 확정합니다"
+    return "요약 차례를 기다립니다"
 
 
 JOB_LABELS = {
@@ -72,6 +117,7 @@ def build_admin_router(
     usage: LlmUsageRepository,
     clock: Clock,
     sender: WebhookSender,
+    runner: Callable[[], JobStarter | None] = lambda: None,
 ) -> APIRouter:
     router = APIRouter()
     settings_keys = keys_of(*(group for _, _, groups in SETTINGS_ACCORDIONS for group in groups))
@@ -151,7 +197,7 @@ def build_admin_router(
         )
 
     @router.get("/status", response_class=HTMLResponse)
-    def status_page(request: Request) -> HTMLResponse:
+    def status_page(request: Request, run: str = "") -> HTMLResponse:
         checklist = service.setup_checklist()
         waiting = (
             0 if service.snapshot().base_url else articles.count_by_status().get(STATUS_READY, 0)
@@ -159,6 +205,25 @@ def build_admin_router(
         config = service.snapshot()
         counts = articles.count_by_status()
         runs = job_runs.all()
+        has_key = service.has_openrouter_key()
+        feed_names = {f.id: f.name for f in feeds.list_all()}
+        pending = {
+            kind: [
+                {
+                    "title": a.title_ko or a.title,
+                    "feed": feed_names.get(a.feed_id, ""),
+                    "why": _why_waiting(
+                        a,
+                        sending=kind == STATUS_READY,
+                        base_url=config.base_url,
+                        has_default=config.webhook_default_id is not None,
+                        has_key=has_key,
+                    ),
+                }
+                for a in articles.list_by_status(kind, PENDING_SHOWN)
+            ]
+            for kind in (STATUS_READY, STATUS_COLLECTED)
+        }
         failing = sorted(
             (f for f in feeds.list_all() if f.fail_count > 0), key=lambda f: -f.fail_count
         )
@@ -172,11 +237,15 @@ def build_admin_router(
         context: dict[str, Any] = {
             "ready_count": counts.get(STATUS_READY, 0),
             "collected_count": counts.get(STATUS_COLLECTED, 0),
-            "llm_calls_today": usage.count_day(clock.now().astimezone(config.timezone).date()),
+            **_llm_today(usage, clock),
+            "pending": pending,
+            "run_notice": _run_notice(run),
             "failing_feeds": failing,
             "jobs": [
                 {
+                    "name": name,
                     "label": label,
+                    "runnable": name in RUNNABLE_JOBS,
                     "last_ok": _local(runs[name].last_ok_at, config.timezone)
                     if name in runs
                     else "",
@@ -191,6 +260,15 @@ def build_admin_router(
             "audit": audit,
         }
         return templates.TemplateResponse(request, "status.html", context)
+
+    @router.post("/status/jobs/{name}/run")
+    def run_job(name: str) -> Response:
+        """요약, 발송 같은 작업을 차례를 기다리지 않고 지금 실행한다."""
+        if name not in RUNNABLE_JOBS:
+            return PlainTextResponse("알 수 없는 작업입니다", status_code=404)
+        starter = runner()
+        result = "unavailable" if starter is None else starter.run_now(name)
+        return RedirectResponse(f"/status?run={name}.{result}", status_code=303)
 
     @router.get("/settings", response_class=HTMLResponse)
     def settings_page(request: Request, saved: str = "") -> HTMLResponse:

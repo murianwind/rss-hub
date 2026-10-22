@@ -18,7 +18,7 @@ from rss_hub.services.model_benchmark import MAX_MODELS, BenchmarkRunner
 from rss_hub.services.model_chain import MAX_CHAIN, ModelChainService
 from rss_hub.services.model_scan import ModelScanService
 from rss_hub.services.ports import KeyCheck, LlmClient
-from rss_hub.services.settings import SETTING_BY_KEY, SettingsService
+from rss_hub.services.settings import SettingsService
 from rss_hub.storage.models import (
     CALL_FAILED,
     CALL_OK,
@@ -109,7 +109,7 @@ def build_model_router(
     llm_client: LlmClient,
 ) -> APIRouter:
     router = APIRouter()
-    limit_keys = keys_of("모델 체인과 호출 한도")
+    limit_keys = keys_of("호출 한도")
 
     def page(
         request: Request,
@@ -157,10 +157,7 @@ def build_model_router(
             "error": error,
             "test_result": test_result,
             "has_key": settings.has_openrouter_key(),
-            "chain_sections": [("", [SETTING_BY_KEY["model_chain"]])],
-            "limit_sections": [
-                ("", [d for d in sections("모델 체인과 호출 한도")[0][1] if d.key != "model_chain"])
-            ],
+            "limit_sections": sections("호출 한도"),
             "values": {**settings.raw_values(), **(form_values or {})},
             "errors": errors or {},
         }

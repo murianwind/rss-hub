@@ -535,3 +535,22 @@ input[readonly] { background: var(--panel); color: var(--muted); cursor: default
 .bench-legend { margin: 6px 0; font-size: 12px; }
 details.acc-limit > summary { cursor: pointer; font-weight: 600; }
 details.acc-limit[open] > summary { margin-bottom: 8px; }
+
+.status-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.status-grid .status-card { margin-bottom: 0; }
+.status-card h2 { margin: 0 0 6px; font-size: 16px; }
+.status-card .checks { margin-bottom: 6px; }
+.status-card .history-scroll { max-height: 120px; }
+.status-grid .status-card:last-child { grid-column: 1 / -1; }
+.pending-box { margin-top: 6px; }
+.pending-box > summary { cursor: pointer; font-weight: 600; }
+.pending-box[open] > summary { margin-bottom: 4px; }
+.pending-list { list-style: none; margin: 0 0 6px; padding: 0; }
+.pending-list li { display: flex; flex-direction: column; padding: 4px 0; border-bottom: 1px solid var(--line-soft); }
+.pending-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (min-width: 1200px) { .status-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 900px) { .status-grid { grid-template-columns: minmax(0, 1fr); } }
+.status-card .check .state { white-space: nowrap; flex-shrink: 0; }
+.status-card .check > .row { flex-shrink: 0; align-items: center; }
+
+.pub-date { font-size: 12px; color: var(--muted); }

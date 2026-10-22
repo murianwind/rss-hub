@@ -2,7 +2,7 @@
 {% macro back_link(href, label) %}<p class="back-row"><a class="back-link" href="{{ href }}">← {{ label }}</a></p>{% endmacro %}
 
 {% macro setting_field(d, values, errors) %}
-<div class="field{% if d.key == 'model_chain' %} wide{% endif %}"{% if d.show_when %} data-show-when="{{ d.show_when[0] }}={{ d.show_when[1] }}"{% if values[d.show_when[0]] != d.show_when[1] %} hidden{% endif %}{% endif %}>
+<div class="field"{% if d.show_when %} data-show-when="{{ d.show_when[0] }}={{ d.show_when[1] }}"{% if values[d.show_when[0]] != d.show_when[1] %} hidden{% endif %}{% endif %}>
   <label for="{{ d.key }}">{{ d.label }}</label>
   {% if d.help %}<p class="hint" id="help-{{ d.key }}">{{ d.help }}</p>{% endif %}
   {% if d.key == 'service_timezone' %}<select id="{{ d.key }}" name="{{ d.key }}" aria-describedby="help-{{ d.key }}">
