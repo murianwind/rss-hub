@@ -115,7 +115,7 @@ def test_the_unread_wording_is_the_new_one_everywhere_a_user_sees_it(world):
     for path in ("/reader", f"/a/{article}", "/settings", "/feeds"):
         text = world.get(path).text
         assert "안 읽" not in text, path
-    assert ">읽지 않음으로</button>" in world.get(f"/a/{article}").text
+    assert '<span class="label-long">읽지 않음으로</span>' in world.get(f"/a/{article}").text
     assert "읽지 않음으로 표시" in world.get("/reader").text
     assert "안 읽" not in world.client.get("/static/app.js").text
 
