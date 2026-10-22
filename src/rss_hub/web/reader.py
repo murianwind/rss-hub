@@ -216,12 +216,14 @@ def build_reader_router(
         )
 
     @router.get("/a/{article_id}", response_class=HTMLResponse)
-    def article_page(request: Request, article_id: int, back: str = "") -> Response:
+    def article_page(request: Request, article_id: int, back: str = "", kept: str = "") -> Response:
         article = articles.get(article_id)
         feed = None if article is None else feeds.get(article.feed_id)
         if article is None or feed is None:
             return not_found(request, Scope("all"))
-        articles.mark_read(article.id)  # 처음 열 때 읽음으로 표시한다(이미 읽었으면 그대로)
+        if not kept:  # "읽지 않음"을 누르고 돌아온 화면(kept)이 아니면, 열 때 읽음으로 표시한다
+            articles.mark_read(article.id)
+            article = articles.get(article.id) or article
         request.state.scope = Scope("feed", feed.id)
         zone = settings.snapshot().timezone
         full = fulltext.ensure(article)  # 처음 열 때 원문 전문을 가져와 저장한다(실패하면 RSS 본문)
@@ -256,6 +258,8 @@ def build_reader_router(
             "has_original": is_web_link(article.link),
             "back": checked_back or f"/reader/feed/{feed.id}",
             "here": here,
+            "kept_here": f"{here}{'&' if '?' in here else '?'}kept=1",
+            "is_read": article.read_at is not None,
             "bookmarked": article.bookmarked_at is not None,
         }
         return templates.TemplateResponse(request, "article.html", context)

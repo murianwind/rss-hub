@@ -1,5 +1,6 @@
 """31_mobile_reading.feature: 모바일 글 화면과 읽음 처리 규칙."""
 
+import html as html_module
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,8 +11,9 @@ from pytest_bdd import given, then, when
 from rss_hub.services.settings import SETTING_BY_KEY
 from tests.bdd.binding import bind
 from tests.fakes.delivery_env import DeliveryEnv
+from tests.keywords.browser import BROWSER
 
-bind(globals(), "31_mobile_reading.feature", [f"MOB-{n:02d}" for n in range(1, 8)])
+bind(globals(), "31_mobile_reading.feature", [f"MOB-{n:02d}" for n in range(1, 13)])
 
 APP_JS = Path("src/rss_hub/web/static/app.js")
 
@@ -38,18 +40,23 @@ def _open_article(world, ctx):
     ctx.html = response.text
 
 
-@then("위쪽 막대의 버튼은 좁은 화면에서 줄바꿈하지 않고 짧은 이름으로 바뀐다")
-def _one_line_bar(world, ctx):
-    bar = ctx.html.split('<header class="detailbar">')[1].split("</header>")[0]
-    for short in ("목록", "읽지 않음"):
-        assert f'<span class="label-short">{short}</span>' in bar
-    assert 'class="label-long"' in bar
+def narrow_css(world):
+    """좁은 화면(820px 이하) 규칙들."""
     css = world.get("/static/app.css").text
-    narrow = css.split("@media (max-width: 820px)")
-    rules = " ".join(block.split("}")[0] for block in narrow[1:])
-    assert ".detailbar" in css and "flex-wrap: nowrap" in " ".join(narrow)
-    assert ".label-long { display: none" in " ".join(narrow) and ".label-short" in css
-    assert rules  # 좁은 화면 규칙이 있다
+    return " ".join(block.split("\n}")[0] for block in css.split("@media (max-width: 820px)")[1:])
+
+
+@then("북마크와 읽지 않음 버튼이 RSS Hub 바에 있다")
+def _bar_actions(ctx):
+    bar = ctx.html.split('class="mobilebar"')[1].split("</header>")[0]
+    assert "data-mobile-actions" in bar
+    assert 'action="/a/' in bar and "/bookmark" in bar and "/read" in bar
+
+
+@then("좁은 화면에서는 따로 있던 위쪽 막대와 목록으로 버튼이 보이지 않는다")
+def _detailbar_hidden(world, ctx):
+    assert 'class="back"' in ctx.html  # 데스크톱의 목록으로 버튼과 스와이프가 쓴다
+    assert ".article-page .detailbar { display: none" in narrow_css(world)
 
 
 @then("요약은 접이식이고 스크립트가 없으면 펼쳐진 채로 보인다")
@@ -117,3 +124,92 @@ def _delivered_unread(ctx):
 @then("자동 읽음 설정의 설명에 화면 위로 스크롤해 지나간 글만이라고 적혀 있다")
 def _help_text():
     assert "화면 위로 스크롤해 지나간 글만" in SETTING_BY_KEY["ui_auto_read"].help
+
+
+READ_FORM = re.compile(
+    r'<form method="post" action="/a/(\d+)/read">'
+    r'\s*<input type="hidden" name="state" value="(\w+)">'
+    r'\s*<input type="hidden" name="next" value="([^"]+)">'
+)
+
+
+@given("읽은 글이 있다")
+def _read_article(world, ctx):
+    ctx.article = world.article(title="읽은 글")
+    assert world.get(f"/a/{ctx.article}?back=/reader").status_code == 200  # 열면 읽음이 된다
+    assert world.articles.get(ctx.article).read_at is not None
+
+
+def mobile_read_form(html):
+    bar = html.split('class="mobilebar"')[1].split("</header>")[0]
+    article_id, state, next_value = READ_FORM.search(bar).groups()
+    return article_id, state, html_module.unescape(next_value)  # 브라우저가 보내는 값
+
+
+@when("글 화면에서 읽지 않음 버튼을 누른다")
+def _press_unread(world, ctx):
+    page = world.get(f"/a/{ctx.article}?back=/reader").text
+    article_id, state, next_value = mobile_read_form(page)
+    assert state == "unread"
+    sent = world.client.post(
+        f"/a/{article_id}/read", data={"state": state, "next": next_value}, headers=BROWSER
+    )
+    assert sent.status_code == 303
+    ctx.location = sent.headers["location"]
+    ctx.html = world.get(ctx.location).text
+
+
+@then("같은 글 화면으로 돌아오고 글은 읽지 않음으로 남는다")
+def _stays(world, ctx):
+    assert ctx.location.startswith(f"/a/{ctx.article}")
+    assert (
+        world.articles.get(ctx.article).read_at is None
+    )  # 돌아온 화면을 열어도 읽음이 되지 않는다
+
+
+@then("버튼은 읽음으로로 바뀌고 그것을 누르면 읽음이 된다")
+def _toggle_to_read(world, ctx):
+    article_id, state, next_value = mobile_read_form(ctx.html)
+    assert state == "read" and "읽음으로" in ctx.html.split('class="mobilebar"')[1]
+    world.client.post(
+        f"/a/{article_id}/read", data={"state": state, "next": next_value}, headers=BROWSER
+    )
+    assert world.articles.get(ctx.article).read_at is not None
+
+
+@then("좁은 화면의 글 화면은 머리 영역을 고정하지 않고 하나의 영역이 스크롤된다")
+def _one_scroll_area(world):
+    css = narrow_css(world)
+    assert ".article-page .detail-scroll { overflow-y: auto" in css
+    assert ".article-page .doc-fixed { max-height: none; overflow: visible" in css
+    assert ".article-page .doc-scroll { overflow: visible" in css
+
+
+@then("좁은 화면의 글 화면에서 RSS Hub 바는 본문 위에 겹쳐 있고 스크롤하면 숨는다")
+def _overlay_bar(world):
+    css = narrow_css(world)
+    assert ".article-page .mobilebar { position: fixed" in css
+    assert ".article-page .mobilebar.bar-hidden { transform: translateY(-100%)" in css
+
+
+@then("화면 스크립트는 스크롤이 멈추면 바를 다시 보인다")
+def _bar_returns(world):
+    script = world.get("/static/app.js").text
+    assert "bar-hidden" in script and "setTimeout" in script.split("bar-hidden")[1][:400]
+
+
+@then(
+    "숨겨진 목록으로 링크가 남아 있고 화면 스크립트는 왼쪽 가장자리 스와이프로 그 주소로 이동한다"
+)
+def _swipe(world, ctx):
+    assert re.search(r'<a class="back" href="[^"]+">', ctx.html)
+    script = world.get("/static/app.js").text
+    assert "touchstart" in script and "a.back" in script and "EDGE_SWIPE" in script
+
+
+@then("특정 주제로 메뉴 버튼은 좁은 화면에서 점 세 개 아이콘만 보인다")
+def _more_menu(world, ctx):
+    summary = ctx.html.split('<summary class="menu-button')[1].split("</summary>")[0]
+    assert 'aria-label="특정 주제로"' in summary and 'class="menu-label"' in summary
+    assert "i-more" in summary
+    assert ".menu-label { display: none" in narrow_css(world)

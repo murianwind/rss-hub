@@ -44,6 +44,10 @@ ICONS: dict[str, str] = {
     "check": '<path d="m5 12 5 5 9-10"/>',
     "list": '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
     "external": '<path d="M14 4h6v6M20 4l-9 9M18 14v5H5V6h5"/>',
+    "more": (
+        '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/>'
+        '<circle cx="19" cy="12" r="1.6"/>'
+    ),
     "grip": (
         '<circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/>'
         '<circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/>'
