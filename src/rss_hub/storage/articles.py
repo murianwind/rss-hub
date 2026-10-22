@@ -266,10 +266,12 @@ class ArticleRepository:
             row = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
         return None if row is None else _article(row)
 
-    def list_by_status(self, status: str) -> list[Article]:
+    def list_by_status(self, status: str, limit: int = -1) -> list[Article]:
+        """상태가 같은 글을 오래된 순으로. limit이 음수이면 모두."""
         with self._db.connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM articles WHERE status = ? ORDER BY published_dt, id", (status,)
+                "SELECT * FROM articles WHERE status = ? ORDER BY published_dt, id LIMIT ?",
+                (status, limit),
             ).fetchall()
         return [_article(row) for row in rows]
 

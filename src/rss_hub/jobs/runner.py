@@ -110,6 +110,20 @@ class JobRunner:
             started.append(job.name)
         return started
 
+    def run_now(self, name: str) -> str:
+        """작업을 차례와 상관없이 지금 시작한다. 돌려주는 값: started, busy(실행 중), unknown."""
+        job = next((j for j in self._jobs if j.name == name), None)
+        if job is None:
+            return "unknown"
+        with self._lock:
+            if self._stop.is_set() or name in self._running:
+                return "busy"
+            self._running.add(name)
+            self._skip_marker.pop(name, None)
+        self._records.mark_started(name, None)
+        self._remember(self._spawn(partial(self._execute, job)))
+        return "started"
+
     def _due(self, job: Job, now: datetime) -> object | None:
         record = self._records.get(job.name)
         if isinstance(job, SlotJob):

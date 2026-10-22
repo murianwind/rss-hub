@@ -216,6 +216,7 @@ def create_app(
             usage=LlmUsageRepository(database, app_clock),
             clock=app_clock,
             sender=sender,
+            runner=lambda: app.state.runner,
         )
     )
     app.include_router(build_article_router(articles))

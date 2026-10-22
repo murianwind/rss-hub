@@ -406,3 +406,66 @@ def test_no_address_notice_once_the_address_is_set(client, service, tmp_path):
     make_ready_article(tmp_path)
     service.update({"service_base_url": BASE})
     assert "서비스 주소 필요" not in client.get("/status").text
+
+
+# ---------- 상태 화면의 대기 글 이유 ----------
+
+
+def article_of(**override):
+    from datetime import UTC, datetime
+
+    from rss_hub.storage.articles import Article
+
+    values = {
+        "id": 1,
+        "feed_id": 1,
+        "guid": "g",
+        "title": "t",
+        "link": "https://x.example.com/1",
+        "content_html": "",
+        "published_raw": "",
+        "published_dt": datetime(2026, 10, 16, tzinfo=UTC),
+        "published_date": "2026-10-16",
+        "discovered_at": datetime(2026, 10, 16, tzinfo=UTC),
+        "status": "ready",
+        "retry_count": 0,
+        "title_ko": None,
+        "summary_ko": None,
+        "llm_topics": None,
+        "llm_model": None,
+    }
+    return Article(**(values | override))
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "expected"),
+    [
+        ({"sending": True, "base_url": "", "has_default": True, "has_key": True}, "서비스 주소"),
+        ({"sending": True, "base_url": BASE, "has_default": False, "has_key": True}, "기본 웹훅"),
+        ({"sending": True, "base_url": BASE, "has_default": True, "has_key": True}, "발송 차례"),
+        ({"sending": False, "base_url": BASE, "has_default": True, "has_key": False}, "원문 제목"),
+        ({"sending": False, "base_url": BASE, "has_default": True, "has_key": True}, "요약 차례"),
+    ],
+)
+def test_a_waiting_article_says_why_it_has_not_gone_out(kwargs, expected):
+    from rss_hub.web.admin import _why_waiting
+
+    assert expected in _why_waiting(article_of(), **kwargs)
+
+
+def test_a_retried_summary_says_how_many_times():
+    from rss_hub.web.admin import _why_waiting
+
+    why = _why_waiting(
+        article_of(retry_count=2, status="collected"),
+        sending=False,
+        base_url=BASE,
+        has_default=True,
+        has_key=True,
+    )
+    assert "2번 다시 시도" in why
+
+
+def test_the_run_notice_ignores_unknown_values(client):
+    assert "알 수 없는" not in client.get("/status?run=nonsense.started").text
+    assert "작업을 시작했습니다" not in client.get("/status?run=deliver.bogus").text

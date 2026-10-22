@@ -102,7 +102,7 @@ def test_the_status_page_lists_the_jobs_with_their_last_success_and_skips(env):
     html = env.client.get("/status").text
     for label in ("수집", "요약", "발송"):
         assert label in html
-    assert "마지막 성공" in html and "건너뜀 1회" in html
+    assert "마지막 성공" in html and "겹침으로 넘김 1회" in html
 
 
 def test_an_idle_service_shows_zero_everywhere(env):

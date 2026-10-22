@@ -79,3 +79,11 @@ def test_token_numbers_are_stored_for_later_analysis(usage, tmp_path):
 
 def test_empty_day_has_an_empty_breakdown(db, usage):
     assert usage_breakdown(db, date(2026, 1, 1)) == {}
+
+
+def test_a_day_is_split_by_outcome(usage):
+    usage.record(model="a", outcome="success", status=200)
+    usage.record(model="a", outcome="rate_limited", status=429)
+    usage.record(model="b", outcome="rate_limited", status=429)
+    assert usage.count_day_by_outcome(date(2026, 10, 16)) == {"success": 1, "rate_limited": 2}
+    assert usage.count_day_by_outcome(date(2026, 10, 15)) == {}
