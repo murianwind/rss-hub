@@ -17,6 +17,7 @@ from functools import partial
 from typing import Any
 
 from rss_hub.domain.jobs import due_slot, interval_due
+from rss_hub.jobs.progress import JobProgress
 from rss_hub.services.clock import Clock
 from rss_hub.storage.job_runs import JobRunRepository
 
@@ -28,6 +29,7 @@ class SlotJob:
     name: str
     run: Callable[[], object]
     interval_minutes: Callable[[], int]
+    run_now: Callable[[], object] | None = None  # "지금 실행"이 쓰는 일(없으면 run)
 
 
 @dataclass(frozen=True)
@@ -57,7 +59,10 @@ class JobRunner:
         spawn: Callable[[Callable[[], None]], Any] = start_thread,
         stop_event: threading.Event | None = None,
         tick_seconds: float = 1.0,
+        describe: Callable[[str, object], str] = lambda name, result: "",
+        progress: JobProgress | None = None,
     ) -> None:
+        self._progress = progress or JobProgress()
         self._jobs = tuple(jobs)
         self._clock = clock
         self._records = records
@@ -65,6 +70,7 @@ class JobRunner:
         self._spawn = spawn
         self._stop = stop_event or threading.Event()
         self._tick_seconds = tick_seconds
+        self._describe = describe
         self._lock = threading.Lock()
         self._running: set[str] = set()
         self._threads: list[threading.Thread] = []
@@ -121,8 +127,13 @@ class JobRunner:
             self._running.add(name)
             self._skip_marker.pop(name, None)
         self._records.mark_started(name, None)
-        self._remember(self._spawn(partial(self._execute, job)))
+        action = job.run_now if isinstance(job, SlotJob) and job.run_now else job.run
+        self._remember(self._spawn(partial(self._execute, job, action)))
         return "started"
+
+    def progress_of(self, name: str) -> tuple[int, int] | None:
+        """실행 중인 작업이 (마친 개수, 전체 개수)를 알리고 있으면 그 값."""
+        return self._progress.get(name)
 
     def _due(self, job: Job, now: datetime) -> object | None:
         record = self._records.get(job.name)
@@ -144,17 +155,19 @@ class JobRunner:
         if isinstance(thread, threading.Thread):
             self._threads = [t for t in self._threads if t.is_alive()] + [thread]
 
-    def _execute(self, job: Job) -> None:
+    def _execute(self, job: Job, action: Callable[[], object] | None = None) -> None:
         error: str | None = None
+        result = ""
         try:
-            job.run()
+            result = self._describe(job.name, (action or job.run)())
         except Exception as caught:
             error = type(caught).__name__
             logger.error("작업이 실패했습니다: %s (%s)", job.name, error)
         finally:
             try:
-                self._records.mark_finished(job.name, error)
+                self._records.mark_finished(job.name, error, result)
             finally:
+                self._progress.clear(job.name)
                 with self._lock:
                     self._running.discard(job.name)
 
@@ -164,6 +177,7 @@ class JobRunner:
         """배경 스레드에서 1초마다 tick()을 부른다."""
         if self._loop is not None:
             return
+        self._records.recover_interrupted()  # 지난 실행이 끝나지 못하고 남긴 "실행 중"을 푼다
         self._loop = threading.Thread(target=self._run_loop, name="rss-hub-scheduler")
         self._loop.start()
 

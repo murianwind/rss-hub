@@ -16,7 +16,7 @@ from rss_hub.services.ports import WebhookSender
 from rss_hub.services.settings import SettingsService
 from rss_hub.storage.articles import STATUS_COLLECTED, STATUS_READY, Article, ArticleRepository
 from rss_hub.storage.feeds import FeedRepository
-from rss_hub.storage.job_runs import JobRunRepository
+from rss_hub.storage.job_runs import STATUS_RUNNING, JobRunRepository
 from rss_hub.storage.llm_usage import LlmUsageRepository
 from rss_hub.web.setting_groups import SETTINGS_ACCORDIONS, keys_of, sections
 from rss_hub.web.ui import done
@@ -71,14 +71,25 @@ def _local(moment: datetime | None, zone: tzinfo) -> str:
 PENDING_SHOWN = 8  # 상태 화면에 보여 줄 대기 글 수(종류마다)
 RUNNABLE_JOBS = {"collect": "수집", "summarize": "요약", "deliver": "발송"}
 RUN_NOTICES = {
-    "started": "{label} 작업을 시작했습니다. 결과는 아래 작업 표에서 볼 수 있습니다.",
+    "started": "{label} 작업을 시작했습니다. 결과는 작업 기록에 남습니다.",
     "busy": "{label} 작업은 이미 실행 중입니다. 끝난 뒤에 다시 눌러 주세요.",
     "unavailable": "작업 실행기가 꺼져 있어 지금 실행할 수 없습니다.",
 }
 
 
+JOB_UNITS = {"collect": "개", "summarize": "건", "deliver": "건"}  # 진행 "2/5건"의 단위
+
+
 class JobStarter(Protocol):
     def run_now(self, name: str) -> str: ...
+
+    def progress_of(self, name: str) -> tuple[int, int] | None: ...
+
+
+def _progress_text(starter: JobStarter | None, name: str) -> str:
+    """실행 중인 작업이 알린 진행("2/5건"). 알리지 않았으면 빈 글자."""
+    found = None if starter is None else starter.progress_of(name)
+    return "" if found is None else f"{found[0]}/{found[1]}{JOB_UNITS.get(name, '')}"
 
 
 def _why_waiting(
@@ -238,6 +249,10 @@ def build_admin_router(
             "ready_count": counts.get(STATUS_READY, 0),
             "collected_count": counts.get(STATUS_COLLECTED, 0),
             **_llm_today(usage, clock),
+            "feed_count": len(feed_names),
+            "jobs_running": any(
+                name in runs and runs[name].last_status == STATUS_RUNNING for name in JOB_LABELS
+            ),
             "pending": pending,
             "run_notice": _run_notice(run),
             "failing_feeds": failing,
@@ -250,6 +265,9 @@ def build_admin_router(
                     if name in runs
                     else "",
                     "status": runs[name].last_status if name in runs else "",
+                    "running": name in runs and runs[name].last_status == STATUS_RUNNING,
+                    "progress": _progress_text(runner(), name),
+                    "result": runs[name].last_result if name in runs else "",
                     "skipped": runs[name].skipped_count if name in runs else 0,
                 }
                 for name, label in JOB_LABELS.items()

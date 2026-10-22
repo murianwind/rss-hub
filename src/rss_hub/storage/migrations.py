@@ -276,6 +276,10 @@ MIGRATIONS: tuple[str, ...] = (
     """
     ALTER TABLE articles ADD COLUMN published_kind TEXT NOT NULL DEFAULT 'exact';
     """,
+    # 18: 작업이 끝날 때 처리 결과를 한 줄로 남긴다(상태 화면에서 "무슨 일이 있었나"를 보여 준다)
+    """
+    ALTER TABLE job_runs ADD COLUMN last_result TEXT NOT NULL DEFAULT '';
+    """,
 )
 
 

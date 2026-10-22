@@ -69,7 +69,14 @@ class FakeWebhookSender:
 
 
 class DeliveryEnv:
-    def __init__(self, tmp_path, *, register_webhooks: bool = True, system_webhook: bool = True):
+    def __init__(
+        self,
+        tmp_path,
+        *,
+        register_webhooks: bool = True,
+        system_webhook: bool = True,
+        progress=lambda done, total: None,
+    ):
         self.db = Database(tmp_path / "rss_hub.db")
         self.clock = FakeClock(KST_14_00)
         self.settings = SettingsService(self.db, self.clock)
@@ -98,6 +105,7 @@ class DeliveryEnv:
             clock=self.clock,
             sleep=self.sleeps.append,
             stop_requested=lambda: self.stop_flag,
+            progress=progress,
         )
         self.webhooks: dict[str, int] = {}
         self.settings.update({"service_base_url": BASE_URL})

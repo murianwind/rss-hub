@@ -28,6 +28,12 @@ class FakeRunner:
         self.shutdowns.append(timeout)
         return True
 
+    def progress_of(self, name):
+        return None
+
+    def run_now(self, name):
+        return "started"
+
 
 class Env:
     def __init__(self, tmp_path):

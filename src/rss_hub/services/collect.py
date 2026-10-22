@@ -7,7 +7,7 @@
 """
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time
 
@@ -63,7 +63,9 @@ class CollectService:
         settings: SettingsService,
         clock: Clock,
         pages: PageFeedSource | None = None,
+        progress: Callable[[int, int], None] = lambda done, total: None,
     ) -> None:
+        self._progress = progress
         self._pages = pages
         self._feeds = feeds
         self._articles = articles
@@ -113,7 +115,8 @@ class CollectService:
         baseline = 0
         failed: list[tuple[int, str]] = []
 
-        for feed in feeds:
+        for done, feed in enumerate(feeds):
+            self._progress(done, len(feeds))
             try:
                 new_articles, recorded = self._check(feed, config, local)
             except FetchError as error:
@@ -126,9 +129,14 @@ class CollectService:
             else:
                 added += new_articles
                 baseline += recorded
+        self._progress(len(feeds), len(feeds))
         return CollectReport(
             checked=len(feeds), added=added, baseline_recorded=baseline, failed=tuple(failed)
         )
+
+    def run_all(self) -> CollectReport:
+        """슬롯과 상관없이 모든 피드를 지금 점검한다(상태 화면의 "지금 수집")."""
+        return self.collect_feeds(self._feeds.list_all())
 
     def _check(self, feed: Feed, config: AppSettings, local: datetime) -> tuple[int, int]:
         """피드 하나를 점검하고 (새로 저장한 글 수, 기준선으로 기록한 글 수)를 돌려준다."""

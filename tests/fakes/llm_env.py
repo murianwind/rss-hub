@@ -22,7 +22,7 @@ DEFAULT_WEBHOOK = "https://discord.com/api/webhooks/222/DEFAULTTOKEN"
 
 
 class LlmEnv:
-    def __init__(self, tmp_path, *, configured: bool = True):
+    def __init__(self, tmp_path, *, configured: bool = True, progress=lambda done, total: None):
         self.db = Database(tmp_path / "rss_hub.db")
         self.clock = FakeClock(NOON_UTC)
         self.settings = SettingsService(self.db, self.clock)
@@ -51,6 +51,7 @@ class LlmEnv:
             settings=self.settings,
             topics=self.topics,
             clock=self.clock,
+            progress=progress,
         )
         self.settings.update({"model_chain": "model-a,model-b"})
         self.feed_id = self.feeds.add("https://feed.example.com/rss", "피드", status=STATUS_ACTIVE)

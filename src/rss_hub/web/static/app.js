@@ -1111,3 +1111,39 @@ document.addEventListener(
     if (event.target.id) sync(event.target.form || document);
   });
 })();
+
+/* ---------- 상태 화면: 실행 중인 작업이 있으면 끝날 때까지 작업 표를 스스로 갱신한다 ---------- */
+(function () {
+  var jobs = document.querySelector("[data-jobs]");
+  var current = document.querySelector("[data-current]");
+  if (!jobs || !current || !window.fetch) return;
+
+  function swap(target, source) {
+    // 문자열을 HTML로 쓰지 않고, 파싱된 문서의 노드를 그대로 옮겨 붙인다
+    target.replaceChildren.apply(target, document.importNode(source, true).childNodes);
+  }
+
+  function poll() {
+    if (jobs.getAttribute("data-jobs-running") !== "1") return;
+    fetch(window.location.pathname, { credentials: "same-origin", cache: "no-store" })
+      .then(function (response) {
+        return response.ok ? response.text() : null;
+      })
+      .then(function (text) {
+        if (!text) return;
+        var doc = new DOMParser().parseFromString(text, "text/html");
+        var next = doc.querySelector("[data-jobs]");
+        var nextCurrent = doc.querySelector("[data-current]");
+        if (!next || !nextCurrent) return;
+        swap(jobs, next);
+        swap(current, nextCurrent);
+        jobs.setAttribute("data-jobs-running", next.getAttribute("data-jobs-running"));
+      })
+      .catch(function () {})
+      .then(function () {
+        window.setTimeout(poll, 1500);
+      });
+  }
+
+  window.setTimeout(poll, 1500);
+})();
