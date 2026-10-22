@@ -311,7 +311,10 @@ def test_the_article_page_has_no_source_label_and_has_the_unread_button(world):
     article = world.article(world.f_news)
     html = world.get(f"/a/{article}").text
     assert "출처:" not in html and 'class="source"' not in html
-    assert 'name="state" value="unread"' in html and ">읽지 않음으로</button>" in html
+    assert (
+        'name="state" value="unread"' in html
+        and '<span class="label-long">읽지 않음으로</span>' in html
+    )
 
 
 def test_opening_the_article_marks_it_read_even_when_the_list_was_not_used(world):

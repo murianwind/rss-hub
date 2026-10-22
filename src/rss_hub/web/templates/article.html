@@ -2,17 +2,17 @@
 {% block title %}{{ title }} · RSS Hub{% endblock %}
 {% block main %}
 <header class="detailbar">
-  <a class="back" href="{{ back }}">{{ icon('arrow-left') }}<span>목록으로 돌아가기</span></a>
+  <a class="back" href="{{ back }}">{{ icon('arrow-left') }}<span class="label-long">목록으로 돌아가기</span><span class="label-short">목록</span></a>
   <div class="detail-actions">
     <form method="post" action="/a/{{ article.id }}/bookmark">
       <input type="hidden" name="on" value="{{ 0 if bookmarked else 1 }}">
       <input type="hidden" name="next" value="{{ here }}">
-      <button type="submit" class="compact" aria-pressed="{{ 'true' if bookmarked else 'false' }}">{{ icon('bookmark', 'fill' if bookmarked else '') }} {{ '북마크 해제' if bookmarked else '북마크' }}</button>
+      <button type="submit" class="compact" aria-pressed="{{ 'true' if bookmarked else 'false' }}" aria-label="{{ '북마크 해제' if bookmarked else '북마크' }}" title="{{ '북마크 해제' if bookmarked else '북마크' }}">{{ icon('bookmark', 'fill' if bookmarked else '') }}<span class="label-long"> {{ '북마크 해제' if bookmarked else '북마크' }}</span></button>
     </form>
     <form method="post" action="/a/{{ article.id }}/read">
       <input type="hidden" name="state" value="unread">
       <input type="hidden" name="next" value="{{ back }}">
-      <button type="submit" class="compact" title="읽지 않은 글로 되돌리고 목록으로 갑니다">읽지 않음으로</button>
+      <button type="submit" class="compact" title="읽지 않은 글로 되돌리고 목록으로 갑니다"><span class="label-long">읽지 않음으로</span><span class="label-short">읽지 않음</span></button>
     </form>
   </div>
 </header>
@@ -47,7 +47,7 @@
     </div>
     <h1>{% if has_original %}<a class="title-link" href="/a/{{ article.id }}/original" target="_blank" rel="noopener noreferrer" title="원문으로 이동">{{ title }}{{ icon('external') }}</a>{% else %}{{ title }}{% endif %}</h1>
     {% if show_original_title %}<p class="hint">{{ article.title }}</p>{% endif %}
-    {% if article.summary_ko %}<div class="panel doc-summary"><strong>요약</strong><p>{{ article.summary_ko }}</p></div>{% endif %}
+    {% if article.summary_ko %}<details class="panel doc-summary" open><summary>요약</summary><p>{{ article.summary_ko }}</p></details>{% endif %}
     {% if fulltext_state == 'failed' %}<div class="banner" role="status">원문 전문을 가져오지 못해 RSS 본문을 보여 줍니다{% if fulltext_reason %}: {{ fulltext_reason }}{% endif %}</div>{% endif %}
     {% if fulltext_state in ('ok', 'failed') %}<form method="post" action="/a/{{ article.id }}/fulltext" class="doc-tools"><input type="hidden" name="next" value="{{ here }}"><button type="submit" class="back">{{ icon('refresh') }}<span>전문 다시 가져오기</span></button></form>{% endif %}
     </div>

@@ -169,7 +169,7 @@ SETTING_DEFS: tuple[SettingDef, ...] = (
         "on",
         _choice(AUTO_READ_CHOICES),
         AUTO_READ_CHOICES,
-        help="글 목록에서 스크롤로 지나간 글을 읽음으로 표시",
+        help="글 목록에서 화면 위로 스크롤해 지나간 글만 읽음으로 표시(보이기만 해서는 안 함)",
     ),
     SettingDef(
         "article_retention_days",

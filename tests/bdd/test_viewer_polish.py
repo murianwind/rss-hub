@@ -127,7 +127,7 @@ def _open(world, ctx):
 def _top_bar(ctx):
     html = ctx.response.text
     assert "출처" not in html and html.count("목록으로 돌아가기") == 1
-    assert ">읽지 않음으로</button>" in html
+    assert '<span class="label-long">읽지 않음으로</span>' in html
 
 
 @then('제목은 원문으로 가는 새 창 링크이고 "원문 보기" 버튼과 가져온 전문 안내 문구는 없다')

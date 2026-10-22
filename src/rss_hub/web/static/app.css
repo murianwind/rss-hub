@@ -567,3 +567,14 @@ details.acc-limit[open] > summary { margin-bottom: 8px; }
 
 .run-actions { gap: 12px; }
 .run-row .hint.running { color: var(--accent); font-weight: 600; }
+
+.label-short { display: none; }
+.doc-summary > summary { cursor: pointer; font-weight: 700; }
+.doc-summary[open] > summary { margin-bottom: 4px; }
+.doc-summary p { margin: 0; }
+@media (max-width: 820px) {
+  .detailbar { flex-wrap: nowrap; gap: 6px; min-height: 48px; }
+  .detail-actions { flex-wrap: nowrap; flex: none; }
+  .label-long { display: none; }
+  .label-short { display: inline; }
+}

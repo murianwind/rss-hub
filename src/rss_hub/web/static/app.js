@@ -427,14 +427,12 @@
       });
     };
 
-    // 목록이 한 화면에 다 들어오면 전부, 아니면 화면 가운데 위로 올라온 글을 읽음 처리한다
+    // 글이 목록 위쪽 가장자리를 완전히 넘어갔을 때만 읽음 처리한다(화면에 보이기만 해서는 처리하지 않는다)
     var inspect = function () {
       queued = false;
       var area = scrollBox.getBoundingClientRect();
-      var middle = area.top + area.height / 2;
-      var fits = scrollBox.scrollHeight <= scrollBox.clientHeight + 1;
       cardList.querySelectorAll("article.card.unread:not([data-keep])").forEach(function (card) {
-        if (fits || card.getBoundingClientRect().top < middle) {
+        if (card.getBoundingClientRect().bottom <= area.top) {
           setCardRead(card, true);
           waiting.add(card.getAttribute("data-id"));
         }
@@ -1146,4 +1144,12 @@ document.addEventListener(
   }
 
   window.setTimeout(poll, 1500);
+})();
+
+/* ---------- 좁은 화면에서는 글의 요약을 접어 두어 본문 자리를 넓힌다 ---------- */
+(function () {
+  var summary = document.querySelector("details.doc-summary");
+  if (summary && window.matchMedia && window.matchMedia("(max-width: 820px)").matches) {
+    summary.open = false;
+  }
 })();
