@@ -19,20 +19,20 @@ def feed_order(world):
 # ---------- 순서 ----------
 
 
-def test_the_dragged_order_is_saved_and_the_sidebar_follows_it(world):
-    world.feeds.set_feed_category(
-        world.f_news, None
-    )  # RSS 피드 목록에는 카테고리 없는 피드만 나온다
-    assert feed_order(world) == [str(world.f_news), str(world.f_free)]
-    response = post(world, "/ui/reorder", kind="feed", ids=f"{world.f_free},{world.f_news}")
-    assert response.status_code == 200 and response.text == "ok"
-    assert feed_order(world) == [str(world.f_free), str(world.f_news)]
+def test_feeds_cannot_be_reordered_by_dragging(world):
+    world.feeds.set_feed_category(world.f_news, None)
+    before = feed_order(world)
+    assert (
+        post(world, "/ui/reorder", kind="feed", ids=f"{world.f_free},{world.f_news}").status_code
+        == 400
+    )
+    assert feed_order(world) == before and 'data-reorder="feed"' not in world.get("/reader").text
 
 
 @pytest.mark.parametrize("ids", ["", "abc", "1,,x", "999", "1,1", "1;2", "-1"])
 def test_a_bad_order_is_refused_and_nothing_changes(world, ids):
     before = feed_order(world)
-    response = post(world, "/ui/reorder", kind="feed", ids=ids)
+    response = post(world, "/ui/reorder", kind="category", ids=ids)
     assert response.status_code == 400 and feed_order(world) == before
 
 

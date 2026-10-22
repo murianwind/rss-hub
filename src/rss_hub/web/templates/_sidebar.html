@@ -18,7 +18,7 @@
       <details class="sec" id="sec-rss" {% if 'rss' in ui_open %}open{% endif %}>
         <summary title="RSS 피드" data-drop-category="">{{ icon('rss') }}<span class="sec-title">RSS 피드</span>
           <span class="sec-actions">{{ plus('feed', 'RSS 피드') }}{{ icon('chevron-down', 'chev') }}</span></summary>
-        <ul class="sec-body" data-reorder="feed" data-drop-category="">
+        <ul class="sec-body" data-drop-category="">
           <li><a class="nav-item" href="/reader" title="전체 글" {% if scope_kind == 'all' %}aria-current="page"{% endif %}>{{ icon('list') }}<span class="sb-text">전체 글</span>{{ badge('all', ui_side.all_unread, 0) }}</a></li>
           {% for f in ui_side.feeds if not f.category_id %}
           <li class="nav-row{% if f.unread %} has-unread{% endif %}" draggable="true" data-drag-kind="feed" data-drag-id="{{ f.id }}">{{ grip() }}{{ dot(f) }}<a class="nav-item" href="/reader/feed/{{ f.id }}" title="{{ f.name }}" {% if scope_kind == 'feed' and scope_id == f.id %}aria-current="page"{% endif %}><span class="sb-text">{{ f.name }}</span>{{ badge('feed:' ~ f.id, f.unread, 0) }}</a>{{ refresh(f.id) }}{{ actions('feed', f.id, f.name) }}</li>

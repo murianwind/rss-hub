@@ -296,27 +296,19 @@ def _both_uncategorized(world):
     world.feeds.set_feed_category(world.f_news, None)
 
 
-@when(parsers.re(r'사이트 순서를 "(?P<a>[^"]+)", "(?P<b>[^"]+)"로 저장한다'))
-def _save_order(world, a, b):
-    assert (
-        post(
-            world, "/ui/reorder", kind="feed", ids=f"{feed_id(world, a)},{feed_id(world, b)}"
-        ).status_code
-        == 200
-    )
+@then("RSS 피드 목록에는 순서를 끌어 바꾸는 기능이 없다")
+def _no_feed_reorder(world):
+    html = world.get("/reader").text
+    assert 'data-reorder="feed"' not in html and 'data-reorder="category"' in html
 
 
-@then(parsers.re(r'사이드바의 RSS 피드는 "(?P<a>[^"]+)", "(?P<b>[^"]+)" 순서다'))
-def _order_is(world, a, b):
-    assert feed_order(world) == [feed_id(world, a), feed_id(world, b)]
-
-
-@when("잘못된 순서(없는 번호, 중복, 알 수 없는 종류)를 보낸다")
+@when("사이트 순서 저장 요청과 잘못된 순서(없는 번호, 중복, 알 수 없는 종류)를 보낸다")
 def _bad_orders(world, ctx):
     ctx.before = feed_order(world)
     ctx.responses = [
-        post(world, "/ui/reorder", kind="feed", ids="999"),
-        post(world, "/ui/reorder", kind="feed", ids=f"{world.f_news},{world.f_news}"),
+        post(world, "/ui/reorder", kind="feed", ids=f"{world.f_free},{world.f_news}"),
+        post(world, "/ui/reorder", kind="category", ids="999"),
+        post(world, "/ui/reorder", kind="category", ids=f"{world.news},{world.news}"),
         post(world, "/ui/reorder", kind="articles", ids=str(world.f_news)),
     ]
 
@@ -438,7 +430,7 @@ def _cross_site(world, ctx):
     ctx.responses = [
         world.client.post(
             "/ui/reorder",
-            data={"kind": "feed", "ids": f"{world.f_free},{world.f_news}"},
+            data={"kind": "category", "ids": str(world.news)},
             headers=cross,
         ),
         world.client.post(

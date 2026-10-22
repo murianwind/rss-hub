@@ -240,8 +240,7 @@ class ReaderRepository:
                 "SELECT feed_id, COUNT(*) AS total, SUM(read_at IS NULL) AS unread, "
                 "MAX(published_dt) AS latest FROM articles "
                 f"WHERE status IN ({marks}) GROUP BY feed_id) c ON c.feed_id = f.id "
-                "ORDER BY COALESCE(c.unread, 0) > 0 DESC, c.latest DESC, "
-                "f.sort_order, LOWER(f.name), f.id",
+                "ORDER BY COALESCE(c.unread, 0) > 0 DESC, c.latest DESC, LOWER(f.name), f.id",
                 statuses,
             ).fetchall()
             category_rows = conn.execute(

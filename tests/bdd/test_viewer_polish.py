@@ -419,10 +419,7 @@ def _share_css(world):
 
 @then("RSS 피드 목록은 카테고리에서 끌어다 놓으면 카테고리를 빼는 드롭 대상이다")
 def _rss_drop_target(world):
-    assert (
-        '<ul class="sec-body" data-reorder="feed" data-drop-category="">'
-        in world.get("/reader").text
-    )
+    assert '<ul class="sec-body" data-drop-category="">' in world.get("/reader").text
     assert "target.contains(dragged)" in world.client.get("/static/app.js").text
 
 

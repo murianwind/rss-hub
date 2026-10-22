@@ -524,7 +524,7 @@ def test_the_rss_list_says_no_feed_when_none_are_registered(world):
 
 def test_the_rss_list_is_also_a_drop_target_that_removes_the_category(world):
     html = world.get("/reader").text
-    assert '<ul class="sec-body" data-reorder="feed" data-drop-category="">' in html
+    assert '<ul class="sec-body" data-drop-category="">' in html
     assert (
         'data-drop-category=""' in html.split('id="sec-rss"')[1].split("<ul")[0]
     )  # 머리 줄도 그대로

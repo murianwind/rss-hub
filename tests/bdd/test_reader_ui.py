@@ -367,7 +367,7 @@ def _opened(ctx, open):
         names[k]
         for k in re.findall(r'<details class="sec" id="sec-(\w+)" open>', ctx.response.text)
     }
-    assert opened == (set() if open == "없음" else {open})
+    assert opened == {part.strip() for part in open.split("와")}
 
 
 @then("사이드바는 접힌 상태로 그려진다")
