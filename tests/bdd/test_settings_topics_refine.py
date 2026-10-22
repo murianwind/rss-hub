@@ -15,7 +15,7 @@ from tests.keywords.browser import BROWSER, FRAGMENT, post
 from tests.keywords.models import scan
 from tests.keywords.page import text_of
 
-bind(globals(), "25_settings_topics_refine.feature", [f"STP-{n:02d}" for n in range(1, 23)])
+bind(globals(), "25_settings_topics_refine.feature", [f"STP-{n:02d}" for n in range(1, 25)])
 
 KEY = "sk-or-v1-abcdefghijklmnop"
 PAGES = {
@@ -440,3 +440,37 @@ def _name_only_notice(ctx):
 @then('"게임" 카드에는 주제 이름만으로 판단한다는 안내가 없다')
 def _no_name_only_notice(ctx):
     assert NAME_ONLY_NOTICE not in topic_card(ctx.html, "게임")
+
+
+@when("같은 알림 반복 보내기를 켜고 Discord 화면을 연다")
+def _repeat_on_and_open(world, ctx):
+    world.parts.settings.update({"alert_repeat": "on"})
+    ctx.response = world.get("/discord")
+    ctx.html = ctx.response.text
+
+
+def interval_field(html):
+    """반복 간격 입력을 감싼 칸의 여는 태그."""
+    return (
+        html.split('id="alert_cooldown_hours"')[0].rsplit('<div class="field', 1)[1].split(">")[0]
+    )
+
+
+@then("반복 간격 칸은 숨겨져 있고 반복 보내기 선택에 연결되어 있다")
+def _interval_hidden(ctx):
+    tag = interval_field(ctx.html)
+    assert "hidden" in tag and 'data-show-when="alert_repeat=on"' in tag
+
+
+@then("반복 간격 칸이 보인다")
+def _interval_shown(ctx):
+    tag = interval_field(ctx.html)
+    assert "hidden" not in tag and 'data-show-when="alert_repeat=on"' in tag
+
+
+@then("웹훅 역할의 입력 칸은 위 정렬이 아니라 아래 기준으로 맞춰진다")
+def _bottom_aligned(world):
+    css = world.get("/static/app.css").text
+    rule = css.split(".inline-fields { ", 1)[1].split("}", 1)[0]
+    assert "align-items: stretch" in rule
+    assert ".inline-fields .field > :is(input, select) { margin-top: auto; }" in css

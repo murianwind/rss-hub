@@ -43,6 +43,7 @@ class SettingDef:
     validate: Callable[[str], str]
     choices: tuple[tuple[str, str], ...] = ()  # (값, 이름). 있으면 선택 상자로 그린다
     help: str = ""  # 입력 칸 아래에 보여 주는 한 줄 설명
+    show_when: tuple[str, str] | None = None  # (다른 설정 키, 값): 그 값일 때만 입력 칸을 보인다
 
 
 def _bounded(maximum: int) -> Callable[[str], str]:
@@ -239,7 +240,8 @@ SETTING_DEFS: tuple[SettingDef, ...] = (
         "반복 간격(시간)",
         "6",
         _bounded(168),
-        help="반복 보내기를 켰을 때만 적용. 같은 알림을 다시 보내기까지 기다리는 시간(1~168)",
+        help="같은 알림을 다시 보내기까지 기다리는 시간(1~168)",
+        show_when=("alert_repeat", "on"),
     ),
 )
 SETTING_BY_KEY = {d.key: d for d in SETTING_DEFS}

@@ -1033,3 +1033,17 @@ document.addEventListener(
       });
   });
 })();
+
+/* ---------- 다른 설정 값에 따라 보이는 입력 칸(data-show-when="키=값") ---------- */
+(function () {
+  function sync(root) {
+    root.querySelectorAll("[data-show-when]").forEach(function (field) {
+      var rule = field.getAttribute("data-show-when").split("=");
+      var control = document.getElementById(rule[0]);
+      if (control) field.hidden = control.value !== rule[1];
+    });
+  }
+  document.addEventListener("change", function (event) {
+    if (event.target.id) sync(event.target.form || document);
+  });
+})();

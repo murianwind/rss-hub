@@ -18,6 +18,7 @@ has_next
 last_error
 unlinked_webhooks  # backup_result.html
 help  # SettingDef.help: _ui.html이 입력 칸 설명으로 보여 준다
+show_when  # SettingDef.show_when: _ui.html이 data-show-when으로 그린다
 plain  # 요약 보고서의 필드(시험이 단언한다)
 
 # uvicorn이 "rss_hub.main:create_service_app --factory"로 불러온다
