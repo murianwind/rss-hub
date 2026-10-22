@@ -84,7 +84,7 @@ def test_a_start_that_cannot_create_the_topic_is_logged_and_the_server_still_ans
 def test_the_page_lists_topic_cards_and_opens_forms_in_the_top_panel(client, topics):
     html = client.get("/topics").text
     ott = only(topics, "OTT")
-    assert 'class="topic-card"' in html and "netflix" in html
+    assert 'class="topic-card"' in html and "드라마" in html and "외 " in html
     assert 'href="/panel/add/topic?next=%2Ftopics" data-panel' in html
     assert f'href="/panel/settings/topic/{ott.id}?next=%2Ftopics" data-panel' in html
     assert 'action="/topics/add"' not in html

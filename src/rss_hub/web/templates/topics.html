@@ -3,7 +3,7 @@
 {% block content %}
 <div class="settings-page">
 <h1>주제 알림</h1>
-<p class="note">글이 어떤 주제에 해당하면, 원래 가는 웹훅에 더해 그 주제의 웹훅으로도 한 번 더 보냅니다. 글에 주제의 키워드가 하나라도 있으면 후보가 됩니다. OpenRouter 키가 있고 주제에 설명을 적었다면, 후보가 된 글을 LLM이 설명으로 한 번 더 확인합니다.</p>
+<p class="note">글이 어떤 주제에 해당하면, 원래 가는 웹훅에 더해 그 주제의 웹훅으로도 한 번 더 보냅니다. 글의 제목이나 본문에 주제의 키워드가 하나라도 있으면 후보가 됩니다. OpenRouter 키가 있으면 요약하면서 LLM이 후보 중 실제로 해당하는 글만 한 번 더 고르고(호출이 늘지 않습니다), 키가 없으면 키워드만으로 정합니다.</p>
 
 {% if notice %}<div class="banner" role="status">{{ notice }}</div>{% endif %}
 {% if error %}<div class="banner error" role="alert">{{ error }}</div>{% endif %}
@@ -23,10 +23,11 @@
     </div>
   </div>
   {% if t.keywords %}
-  <p class="topic-keywords">{% for k in t.keywords %}<span class="chip">{{ k }}</span>{% endfor %}</p>
+  <p class="topic-keywords">{% for k in t.keywords[:5] %}<span class="chip">{{ k }}</span>{% endfor %}{% if t.keywords | length > 5 %}<span class="hint">외 {{ t.keywords | length - 5 }}개</span>{% endif %}</p>
   {% else %}
   <p class="hint">키워드를 입력하세요. 키워드가 없는 주제는 글을 고르지 못합니다([설정]에서 입력).</p>
   {% endif %}
+  {% if has_llm_key and not t.description %}<p class="hint">설명이 없어 LLM이 주제 이름만으로 판단합니다. 부정확할 수 있으니 [설정]에서 설명을 적어 주세요.</p>{% endif %}
   <p class="hint">웹훅 {{ webhook_names.get(t.webhook_id, '지정 안 함') if t.webhook_id else '지정 안 함' }} · 직접 넣은 글 {{ s.manual | length }}개 · 싫어요 {{ s.rejected | length }}개</p>
   {% if s.count %}
   <details class="suggest-acc">

@@ -40,6 +40,7 @@ def build_topic_router(
             "probe_body": probe_input[1],
             "webhook_names": {w.id: w.name for w in settings.list_webhooks()},
             "topics": cards,
+            "has_llm_key": settings.has_openrouter_key(),
             "error": error,
             "notice": notice,
         }

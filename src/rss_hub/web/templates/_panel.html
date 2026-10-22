@@ -55,7 +55,7 @@
         <select id="p_wh" name="webhook_id"><option value="">지정 안 함(추가 알림 없음, 읽기 화면에만 모음)</option>{% for w in webhooks %}<option value="{{ w.id }}">{{ w.name }}</option>{% endfor %}</select></div>
       <div class="field wide"><label for="p_kw">키워드 <span class="hint">필수. 쉼표나 줄바꿈으로 구분. 글에 키워드가 하나라도 있어야 이 주제의 후보가 됩니다</span></label><textarea id="p_kw" name="keywords" rows="2" required></textarea></div>
       {% if has_llm_key %}
-      <div class="field wide"><label for="p_desc">설명 <span class="hint">선택. 키워드가 맞은 글을 LLM이 이 설명으로 한 번 더 확인합니다. 비우면 키워드만 씁니다</span></label><input id="p_desc" name="description" maxlength="200"></div>
+      <div class="field wide"><label for="p_desc">설명 <span class="hint">선택. 비우면 LLM이 주제 이름만으로 판단해 부정확할 수 있습니다</span></label><input id="p_desc" name="description" maxlength="200"></div>
       {% endif %}
       <div class="row wide"><button type="submit" class="primary">{{ icon('check') }} 등록하기</button><a class="button" href="{{ next }}" data-action="close-panel">취소</a></div>
     </form>
@@ -109,7 +109,7 @@
         <select id="p_twh" name="webhook_id"><option value="">지정 안 함(추가 알림 없음, 읽기 화면에만 모음)</option>{% for w in webhooks %}<option value="{{ w.id }}" {% if t.webhook_id == w.id %}selected{% endif %}>{{ w.name }}</option>{% endfor %}</select></div>
       <div class="field wide"><label for="p_tkw">키워드 <span class="hint">필수. 쉼표나 줄바꿈으로 구분</span></label><textarea id="p_tkw" name="keywords" rows="3" required>{{ t.keywords | join(', ') }}</textarea></div>
       {% if has_llm_key %}
-      <div class="field wide"><label for="p_tdesc">설명 <span class="hint">선택. 키워드가 맞은 글을 LLM이 이 설명으로 한 번 더 확인합니다</span></label><input id="p_tdesc" name="description" value="{{ t.description }}" maxlength="200"></div>
+      <div class="field wide"><label for="p_tdesc">설명 <span class="hint">선택.{% if not t.description %} 비우면 LLM이 주제 이름만으로 판단해 부정확할 수 있습니다{% else %} 키워드가 맞은 글을 LLM이 이 설명으로 판단합니다{% endif %}</span></label><input id="p_tdesc" name="description" value="{{ t.description }}" maxlength="200"></div>
       {% endif %}
       <div class="row wide"><button type="submit" class="primary">저장</button><a class="button" href="{{ next }}" data-action="close-panel">닫기</a></div>
     </form>
