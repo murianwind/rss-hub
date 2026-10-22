@@ -120,19 +120,20 @@ def test_a_valid_key_without_counters_still_says_valid(parts):
     assert "키가 유효합니다" in html and "오늘 무료 모델 호출" not in html
 
 
-def test_a_rejected_key_is_saved_and_the_reason_is_an_error_banner(parts):
+def test_a_rejected_key_is_not_saved_and_the_reason_is_an_error_banner(parts):
     parts.llm.key_check = KeyCheck(valid=False, reason="OpenRouter가 키를 거부했습니다(HTTP 401)")
     html = save_key(parts).text
-    assert "키 확인에 실패했습니다: OpenRouter가 키를 거부했습니다(HTTP 401)" in html
-    assert 'class="banner error"' in html and parts.settings.has_openrouter_key()
+    assert "키 확인에 실패해 저장하지 않았습니다: OpenRouter가 키를 거부했습니다(HTTP 401)" in html
+    assert 'class="banner error"' in html and not parts.settings.has_openrouter_key()
 
 
-def test_an_unknown_result_is_a_neutral_banner_not_an_error(parts):
+def test_an_unknown_result_is_a_neutral_banner_and_nothing_is_saved(parts):
     parts.llm.key_check = KeyCheck(
         valid=None, reason="OpenRouter에 연결하지 못했습니다(ReadTimeout)"
     )
     html = save_key(parts).text
     assert "연결하지 못했습니다(ReadTimeout)" in html and 'class="banner error"' not in html
+    assert not parts.settings.has_openrouter_key()
 
 
 def test_the_key_is_never_shown_and_there_is_no_separate_check_button(parts):

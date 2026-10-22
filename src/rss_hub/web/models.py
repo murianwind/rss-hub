@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from fastapi import APIRouter, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from rss_hub.domain.benchmark import (
@@ -14,7 +14,6 @@ from rss_hub.domain.benchmark import (
     format_tokens,
     recommend,
 )
-from rss_hub.domain.settings_rules import SettingError
 from rss_hub.services.model_benchmark import MAX_MODELS, BenchmarkRunner
 from rss_hub.services.model_chain import MAX_CHAIN, ModelChainService
 from rss_hub.services.model_scan import ModelScanService
@@ -87,7 +86,7 @@ def progress_view(run: RunInfo | None, calls: Sequence[CallRecord]) -> dict[str,
 
 
 def _key_result(check: KeyCheck) -> tuple[str, str]:
-    """키를 저장한 직후 확인한 결과(채팅 호출이 아니라서 호출 한도를 쓰지 않는다)."""
+    """저장 전에 키를 확인한 결과(채팅 호출이 아니라서 호출 한도를 쓰지 않는다)."""
     if check.valid:
         usage = (
             f"(오늘 무료 모델 호출 {check.used}/{check.limit})"
@@ -96,7 +95,7 @@ def _key_result(check: KeyCheck) -> tuple[str, str]:
         )
         return "ok", f"저장했습니다 · 키가 유효합니다{usage}"
     kind = "error" if check.valid is False else "warn"
-    return kind, f"저장했습니다. 다만 키 확인에 실패했습니다: {check.reason}"
+    return kind, f"키 확인에 실패해 저장하지 않았습니다: {check.reason}"
 
 
 def build_model_router(
@@ -199,11 +198,21 @@ def build_model_router(
     @router.post("/settings/openrouter-key", response_class=HTMLResponse)
     async def save_key(request: Request) -> Response:
         form = await request.form()
-        try:
-            settings.set_openrouter_key(str(form.get("openrouter_key", "")))
-        except SettingError as error:
-            return page(request, error=error.message, status_code=400)
-        return page(request, test_result=_key_result(llm_client.check_key()))
+        candidate = str(form.get("openrouter_key", "")).strip()
+        wants_json = "application/json" in request.headers.get("accept", "")
+        kind, message = (
+            ("error", "값이 비어 있음")
+            if not candidate
+            else _key_result(llm_client.check_key(candidate))
+        )
+        saved = kind == "ok"
+        if saved:
+            settings.set_openrouter_key(candidate)
+        if wants_json:
+            return JSONResponse({"ok": saved, "kind": kind, "message": message})
+        if not candidate:
+            return page(request, error=message, status_code=400)
+        return page(request, test_result=(kind, message))
 
     @router.post("/settings/openrouter-key/delete", response_class=HTMLResponse)
     async def delete_key(request: Request) -> Response:

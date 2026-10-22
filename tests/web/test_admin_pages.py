@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from rss_hub.web.app import create_app
 from tests.fakes.clock import FakeClock
+from tests.fakes.llm_client import FakeLlmClient
 
 WEBHOOK = "https://discord.com/api/webhooks/123/abcDEF"
 KEY = "sk-or-test-1234567890"
@@ -13,7 +14,7 @@ BASE = "https://rss.example.com"
 
 @pytest.fixture
 def app(tmp_path):
-    return create_app(data_dir=tmp_path, clock=FakeClock())
+    return create_app(data_dir=tmp_path, clock=FakeClock(), llm_client=FakeLlmClient())
 
 
 @pytest.fixture

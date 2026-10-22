@@ -991,3 +991,45 @@ document.addEventListener(
   },
   true
 );
+
+/* ---------- OpenRouter 키: 화면을 새로 그리지 않고 확인하고, 통과해야 저장한다 ---------- */
+(function () {
+  var form = document.querySelector("[data-key-form]");
+  if (!form || !window.fetch) return;
+  var message = document.querySelector("[data-key-message]");
+  var button = form.querySelector("button[type='submit']");
+  form.addEventListener("submit", function (event) {
+    event.preventDefault();
+    var label = button.textContent;
+    button.disabled = true;
+    button.textContent = "확인 중…";
+    message.hidden = true;
+    fetch(form.action, {
+      method: "POST",
+      body: new URLSearchParams(new FormData(form)),
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+    })
+      .then(function (response) { return response.json(); })
+      .then(function (data) {
+        if (data.ok) {
+          var url = new URL(window.location.href);
+          url.searchParams.set("toast", "saved");
+          window.location.assign(url.toString());
+          return;
+        }
+        message.textContent = data.message;
+        message.className = data.kind === "error" ? "banner error" : "banner";
+        message.hidden = false;
+      })
+      .catch(function () {
+        message.textContent = "서버에 연결하지 못해 저장하지 않았습니다. 잠시 뒤 다시 시도하세요.";
+        message.className = "banner error";
+        message.hidden = false;
+      })
+      .then(function () {
+        button.disabled = false;
+        button.textContent = label;
+      });
+  });
+})();

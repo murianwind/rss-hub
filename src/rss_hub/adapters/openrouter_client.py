@@ -208,9 +208,9 @@ class OpenRouterClient:
             return None
         return parse_free_models(body)
 
-    def check_key(self) -> KeyCheck:
-        """GET /key만 호출한다(채팅 호출이 아니고 호출 한도를 쓰지 않는다)."""
-        key = self._key_provider()
+    def check_key(self, api_key: str | None = None) -> KeyCheck:
+        """GET /key만 호출한다(채팅 호출이 아니고 한도를 쓰지 않는다). 키를 주면 그 키를 쓴다."""
+        key = api_key or self._key_provider()
         if not key:
             return KeyCheck(valid=False, reason="OpenRouter 키가 설정되지 않았습니다")
         try:
