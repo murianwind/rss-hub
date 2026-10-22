@@ -15,7 +15,7 @@ from tests.keywords.browser import BROWSER, FRAGMENT, post
 from tests.keywords.models import scan
 from tests.keywords.page import text_of
 
-bind(globals(), "25_settings_topics_refine.feature", [f"STP-{n:02d}" for n in range(1, 21)])
+bind(globals(), "25_settings_topics_refine.feature", [f"STP-{n:02d}" for n in range(1, 23)])
 
 KEY = "sk-or-v1-abcdefghijklmnop"
 PAGES = {
@@ -426,3 +426,17 @@ def _truncated_keywords(ctx, name, shown, more):
     card = topic_card(ctx.html, name)
     assert card.count('<span class="chip">') == shown and more in card
     assert "word5" in card and "word6" not in card
+
+
+NAME_ONLY_NOTICE = "주제 이름만으로 판단"
+
+
+@then('추가 패널과 수정 패널과 "게임" 카드에 주제 이름만으로 판단한다는 안내가 있다')
+def _name_only_notice(ctx):
+    assert NAME_ONLY_NOTICE in ctx.pages["추가"] and NAME_ONLY_NOTICE in ctx.pages["수정"]
+    assert NAME_ONLY_NOTICE in topic_card(ctx.html, "게임")
+
+
+@then('"게임" 카드에는 주제 이름만으로 판단한다는 안내가 없다')
+def _no_name_only_notice(ctx):
+    assert NAME_ONLY_NOTICE not in topic_card(ctx.html, "게임")

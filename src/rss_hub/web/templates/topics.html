@@ -27,6 +27,7 @@
   {% else %}
   <p class="hint">키워드를 입력하세요. 키워드가 없는 주제는 글을 고르지 못합니다([설정]에서 입력).</p>
   {% endif %}
+  {% if has_llm_key and not t.description %}<p class="hint">설명이 없어 LLM이 주제 이름만으로 판단합니다. 부정확할 수 있으니 [설정]에서 설명을 적어 주세요.</p>{% endif %}
   <p class="hint">웹훅 {{ webhook_names.get(t.webhook_id, '지정 안 함') if t.webhook_id else '지정 안 함' }} · 직접 넣은 글 {{ s.manual | length }}개 · 싫어요 {{ s.rejected | length }}개</p>
   {% if s.count %}
   <details class="suggest-acc">
