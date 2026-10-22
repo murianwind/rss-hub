@@ -480,9 +480,9 @@ input[readonly] { background: var(--panel); color: var(--muted); cursor: default
 .model-scroll { max-height: min(46vh, 420px); overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px; }
 .model-scroll .model-list { margin: 0; }
 .history-scroll { max-height: 320px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; }
-.section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 20px 0 12px; }
 .section-head h2 { margin: 0; }
-.topic-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.topic-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .topic-head h3 { margin: 0; }
 .topic-keywords { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
 .topic-keywords .chip { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; font-size: 12px; }
