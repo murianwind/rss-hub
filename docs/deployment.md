@@ -40,7 +40,7 @@ curl http://localhost:8000/healthz       # {"status":"ok","version":"..."}
 4. OPML 업로드가 413으로 거절되면 Advanced > Custom Nginx Configuration에 `client_max_body_size 10m;`를 넣습니다(nginx 기본 업로드 제한이 작습니다).
 5. 프록시가 `/static/*`을 막거나 `Content-Security-Policy` 헤더를 덮어쓰지 않아야 합니다. 화면 스크립트는 `script-src 'self'` 정책으로 같은 서비스 주소의 `/static`에서 로드됩니다.
 
-**이 서비스에는 인증이 없습니다.** 외부에 열 때는 프록시의 Access List(Basic 인증)나 VPN을 반드시 앞에 두세요. 단, 인증을 걸면 Discord가 알림 안의 링크 미리보기를 가져오지 못합니다.
+**이 서비스에는 인증이 없습니다.** 외부에 열 때는 프록시의 Access List(Basic 인증)나 VPN을 반드시 앞에 두세요. 단, 인증을 걸면 Discord가 알림 안의 링크 미리보기를 가져오지 못합니다. Discord가 미리보기를 가져가느라 글 주소를 열어도 그 글은 읽음 처리되지 않습니다(사람이 브라우저로 열 때만 읽음 처리).
 
 ## 확인 목록
 

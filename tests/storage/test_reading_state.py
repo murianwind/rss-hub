@@ -294,11 +294,8 @@ def test_the_bookmark_count_and_empty_items_are_reported(env):
     assert [t.total for t in side.topics] == [0]
 
 
-def test_the_sidebar_orders_by_the_saved_order_then_by_name(env):
-    with env.db.connect() as conn:
-        conn.execute("UPDATE feeds SET sort_order = 5 WHERE id = ?", (env.a,))
-        conn.execute("UPDATE feeds SET sort_order = 1 WHERE id = ?", (env.b,))
-    assert [f.name for f in env.reader.sidebar().feeds] == ["B 블로그", "A 블로그"]
+def test_the_sidebar_orders_empty_feeds_by_name(env):
+    assert [f.name for f in env.reader.sidebar().feeds] == ["A 블로그", "B 블로그"]
 
 
 def test_an_empty_service_has_an_empty_sidebar(tmp_path):

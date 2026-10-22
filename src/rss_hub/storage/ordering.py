@@ -1,10 +1,10 @@
-"""사이드바의 순서(피드, 카테고리, 주제)를 저장한다. 드래그로 바꾼 순서가 여기에 남는다."""
+"""사이드바의 순서(카테고리, 주제)를 저장한다. 드래그로 바꾼 순서가 여기에 남는다."""
 
 from collections.abc import Sequence
 
 from rss_hub.storage.database import Database
 
-TABLES = {"feed": "feeds", "category": "categories", "topic": "topics"}
+TABLES = {"category": "categories", "topic": "topics"}
 STEP = 10  # 사이에 끼워 넣을 여유
 
 

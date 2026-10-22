@@ -347,19 +347,19 @@ def test_the_all_articles_link_shows_the_unread_total(world):
 def test_the_section_of_the_current_list_starts_open_and_the_others_closed(world):
     topic = world.topics.list_all()[0].id
     cases = {
-        "/reader": None,
-        "/reader/bookmarks": None,
-        f"/reader/feed/{world.f_free}": "rss",
-        f"/reader/category/{world.news}": "categories",
-        f"/reader/topic/{topic}": "topics",
-        "/settings": "settings",
-        "/topics": "settings",
-        "/models": "settings",
+        "/reader": {"rss"},
+        "/reader/bookmarks": {"rss"},
+        f"/reader/feed/{world.f_free}": {"rss"},
+        f"/reader/category/{world.news}": {"rss", "categories"},
+        f"/reader/topic/{topic}": {"rss", "topics"},
+        "/settings": {"settings"},
+        "/topics": {"settings"},
+        "/models": {"settings"},
     }
     for path, section in cases.items():
         html = world.get(path).text
         opened = set(re.findall(r'<details class="sec" id="sec-(\w+)" open>', html))
-        assert opened == ({section} if section else set()), path
+        assert opened == section, path
 
 
 def test_a_feed_inside_a_category_opens_the_category_tree_and_is_marked_current(world):

@@ -40,10 +40,10 @@ def _root(world, ctx):
     ctx.response = world.client.get("/", follow_redirects=True)
 
 
-@then("글 목록 화면으로 이동하고 사이드바의 구역은 모두 접혀 있다")
+@then("글 목록 화면으로 이동하고 사이드바는 RSS 피드 구역만 펼쳐져 있다")
 def _landing(ctx):
     assert ctx.root.status_code == 307 and ctx.root.headers["location"] == "/reader"
-    assert not re.findall(r'<details class="sec" id="sec-\w+" open>', ctx.response.text)
+    assert re.findall(r'<details class="sec" id="sec-(\w+)" open>', ctx.response.text) == ["rss"]
 
 
 @then("북마크 항목은 RSS 피드 구역과 카테고리 구역 사이에 있다")
@@ -419,10 +419,7 @@ def _share_css(world):
 
 @then("RSS 피드 목록은 카테고리에서 끌어다 놓으면 카테고리를 빼는 드롭 대상이다")
 def _rss_drop_target(world):
-    assert (
-        '<ul class="sec-body" data-reorder="feed" data-drop-category="">'
-        in world.get("/reader").text
-    )
+    assert '<ul class="sec-body" data-drop-category="">' in world.get("/reader").text
     assert "target.contains(dragged)" in world.client.get("/static/app.js").text
 
 

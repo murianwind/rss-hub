@@ -18,11 +18,14 @@ def env(tmp_path):
     return db, feeds, topics, OrderRepository(db), ReaderRepository(db, clock), (a, b, c)
 
 
-def test_a_saved_order_decides_the_sidebar_order(env):
+def test_feeds_cannot_be_ordered_by_saving_an_order(env):
     _, _, _, orders, reader, (a, b, c) = env
-    assert [f.id for f in reader.sidebar().feeds] == [a, b, c]  # 저장한 순서가 없으면 이름순
-    assert orders.set_order("feed", [c, a, b]) is True
-    assert [f.id for f in reader.sidebar().feeds] == [c, a, b]
+    assert orders.set_order("feed", [c, a, b]) is False
+    assert [f.id for f in reader.sidebar().feeds] == [
+        a,
+        b,
+        c,
+    ]  # 읽지 않은 글도 발행일도 없으면 이름순
 
 
 def test_categories_and_topics_can_be_ordered_too(env):
@@ -36,7 +39,9 @@ def test_categories_and_topics_can_be_ordered_too(env):
     assert [t.id for t in side.topics if t.id in (t1, t2)] == [t2, t1]
 
 
-@pytest.mark.parametrize("kind", ["", "articles", "feed; DROP TABLE feeds", "FEED"])
+@pytest.mark.parametrize(
+    "kind", ["", "articles", "feed", "category; DROP TABLE categories", "CATEGORY"]
+)
 def test_an_unknown_kind_changes_nothing(env, kind):
     _, _, _, orders, reader, (a, b, c) = env
     assert orders.set_order(kind, [c, b, a]) is False
@@ -44,17 +49,23 @@ def test_an_unknown_kind_changes_nothing(env, kind):
 
 
 def test_a_bad_list_changes_nothing(env):
-    _, _, _, orders, reader, (a, b, c) = env
-    assert orders.set_order("feed", []) is False
-    assert orders.set_order("feed", [c, 999]) is False  # 없는 번호
-    assert orders.set_order("feed", [c, c, b]) is False  # 중복
-    assert [f.id for f in reader.sidebar().feeds] == [a, b, c]
+    _, feeds, _, orders, reader, _ = env
+    first, second = create_category(feeds, "가"), create_category(feeds, "나")
+    assert orders.set_order("category", []) is False
+    assert orders.set_order("category", [second, 999]) is False  # 없는 번호
+    assert orders.set_order("category", [second, second, first]) is False  # 중복
+    assert [c.id for c in reader.sidebar().categories] == [first, second]
 
 
 def test_only_the_listed_items_are_renumbered_and_the_rest_keep_their_place(env):
-    _, _, _, orders, reader, (a, b, c) = env
-    orders.set_order("feed", [c, b])
-    assert [f.id for f in reader.sidebar().feeds][:3] == [a, c, b]  # a는 0이라 앞에 남는다
+    _, feeds, _, orders, reader, _ = env
+    first, second, third = (create_category(feeds, n) for n in ("가", "나", "다"))
+    orders.set_order("category", [third, second])
+    assert [c.id for c in reader.sidebar().categories] == [
+        first,
+        third,
+        second,
+    ]  # 첫째는 0이라 앞에 남는다
 
 
 def test_renaming_a_category_checks_for_duplicates(env):

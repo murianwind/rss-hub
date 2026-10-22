@@ -258,10 +258,8 @@ def test_sidebar_rows_have_a_grip_settings_and_delete_buttons_and_drag_attribute
         and f'data-drag-kind="topic" data-drag-id="{world.topic}"' in html
     )
     for kind in ("feed", "category", "topic"):
-        assert (
-            f'data-reorder="{kind}"' in html
-            and f'href="/panel/add/{kind}?next=%2Freader" data-panel' in html
-        )
+        assert f'href="/panel/add/{kind}?next=%2Freader" data-panel' in html
+        assert (f'data-reorder="{kind}"' in html) == (kind != "feed")
 
 
 def test_categories_and_the_rss_header_are_drop_targets_for_feeds(world):

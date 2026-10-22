@@ -1,9 +1,11 @@
 """화면 공통: 아이콘, 상대 시간, 모든 화면에 들어가는 사이드바 데이터와 토스트 문구."""
 
+import hashlib
 import re
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta, tzinfo
+from pathlib import Path
 from urllib.parse import quote, urlencode
 
 from fastapi import Request
@@ -108,6 +110,40 @@ _SAFE_RETURN = re.compile(
 )
 
 
+PREVIEW_AGENTS = (
+    "bot",  # Discordbot, Slackbot, Twitterbot, Googlebot, bingbot ...
+    "crawler",
+    "spider",
+    "facebookexternalhit",
+    "whatsapp",
+    "telegram",
+    "preview",
+    "embedly",
+    "skypeuripreview",
+    "slurp",
+)
+
+
+def is_preview_request(headers: Mapping[str, str]) -> bool:
+    """링크 미리보기 봇이나 브라우저의 미리 가져오기인가(사람이 연 것이 아니다).
+
+    알림 링크를 미리보기 때문에 가져가는 Discord 같은 봇이 글 주소를 열어도 읽음 처리하면 안 된다.
+    """
+    purpose = f"{headers.get('sec-purpose', '')} {headers.get('purpose', '')}".lower()
+    if "prefetch" in purpose or "prerender" in purpose or headers.get("x-moz") == "prefetch":
+        return True
+    agent = headers.get("user-agent", "").lower()
+    return any(marker in agent for marker in PREVIEW_AGENTS)
+
+
+def asset_version(static_dir: Path, version: str) -> str:
+    """스크립트와 스타일 주소에 붙일 값(버전-파일 내용 값). 내용이 바뀌면 주소가 달라진다."""
+    digest = hashlib.sha1(usedforsecurity=False)
+    for name in ("app.css", "app.js"):
+        digest.update((static_dir / name).read_bytes())
+    return f"{version}-{digest.hexdigest()[:8]}"
+
+
 def icon(name: str, css: str = "") -> Markup:
     """이름으로 아이콘 하나를 그린다(스프라이트의 심볼을 가리킨다)."""
     extra = f" {css}" if css else ""
@@ -203,8 +239,8 @@ def _open_sections(request: Request, scope_kind: str) -> set[str]:
     path = request.url.path
     if path.startswith(SETTINGS_PATHS):
         return {"settings"}
-    sections = {"feed": {"rss"}, "category": {"categories"}, "topic": {"topics"}}
-    return sections.get(scope_kind, set())
+    sections = {"category": {"categories"}, "topic": {"topics"}}
+    return {"rss"} | sections.get(scope_kind, set())
 
 
 def sidebar_width(raw: object) -> int:
@@ -311,6 +347,7 @@ def build_ui_context(
     settings: SettingsService,
     clock: Clock,
     version: str,
+    assets: str,
     model_usage: Callable[[], dict[str, int] | None],
 ) -> Callable[[Request], dict[str, object]]:
     """모든 화면에 사이드바와 공통 값을 넣는다. 키는 ui_로 시작해서 화면 값과 겹치지 않는다."""
@@ -337,6 +374,7 @@ def build_ui_context(
             "ui_auto_read": config.ui_auto_read,
             "ui_font": config.ui_font_size,
             "ui_version": version,
+            "ui_asset_version": assets,
             "ui_model_usage": model_usage(),
         }
 

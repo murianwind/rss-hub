@@ -68,6 +68,7 @@ from rss_hub.web.ui import (
     FAIL_NOTES,
     ModelUsageView,
     ago,
+    asset_version,
     build_ui_context,
     icon,
     qs,
@@ -261,6 +262,7 @@ def create_app(
             settings=service,
             clock=app_clock,
             version=get_version(),
+            assets=asset_version(STATIC_DIR, get_version()),
             model_usage=model_usage,
         )
     )

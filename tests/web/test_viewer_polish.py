@@ -123,9 +123,9 @@ def test_the_unread_wording_is_the_new_one_everywhere_a_user_sees_it(world):
 # ---------- 사이드바: 북마크 위치, 기본 접힘, 숫자 버블, 루트 ----------
 
 
-def test_the_sidebar_starts_collapsed_with_the_bookmark_link_between_rss_and_categories(world):
+def test_only_the_rss_section_starts_open_with_the_bookmark_link_between_rss_and_categories(world):
     html = world.get("/reader").text
-    assert not re.findall(r'<details class="sec" id="sec-\w+" open>', html)
+    assert re.findall(r'<details class="sec" id="sec-(\w+)" open>', html) == ["rss"]
     rss = html.split('id="sec-rss"')[1].split("</details>")[0]
     assert "/reader/bookmarks" not in rss and "전체 글" in rss
     assert (
@@ -524,7 +524,7 @@ def test_the_rss_list_says_no_feed_when_none_are_registered(world):
 
 def test_the_rss_list_is_also_a_drop_target_that_removes_the_category(world):
     html = world.get("/reader").text
-    assert '<ul class="sec-body" data-reorder="feed" data-drop-category="">' in html
+    assert '<ul class="sec-body" data-drop-category="">' in html
     assert (
         'data-drop-category=""' in html.split('id="sec-rss"')[1].split("<ul")[0]
     )  # 머리 줄도 그대로
@@ -544,7 +544,7 @@ def test_unread_counts_and_bold_still_follow_the_feed_in_its_category(world):
 
 def test_the_three_sections_share_the_sidebar_height_and_scroll_inside(world):
     css = world.client.get("/static/app.css").text
-    assert ".sb-body { --sb-free: calc(100vh - 400px); }" in css
+    assert ".sb-body { --sb-free: calc(100vh - 460px); }" in css
     for section in ("rss", "categories", "topics"):
         assert f"#sec-{section} > .sec-body" in css
     assert "overflow-y: auto; overscroll-behavior: contain;" in css

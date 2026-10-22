@@ -45,7 +45,15 @@ def settings_form(world, feed, **override):
 def test_the_state_json_has_every_count_and_feed_state(world):
     world.article(world.f_news)
     state = world.get("/ui/state").json()
-    assert set(state) == {"feeds", "categories", "topics", "all_unread", "bookmarks", "model_usage"}
+    assert set(state) == {
+        "feed_order",
+        "feeds",
+        "categories",
+        "topics",
+        "all_unread",
+        "bookmarks",
+        "model_usage",
+    }
     assert state["feeds"][str(world.f_news)] == {
         "state": "never",
         "error": "",
