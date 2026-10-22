@@ -233,28 +233,52 @@ class _ServerUsageCache:
         self.server: ServerUsage | None = None
 
 
-def model_usage_view(
-    *, usage: LlmUsageRepository, settings: SettingsService, clock: Clock, client: LlmClient
-) -> Callable[[], dict[str, int] | None]:
+class ModelUsageView:
     """사이드바에 보여 줄 모델 잔여 호출 수("남은 호출/한도"). 모델이 설정되어 있을 때만 값이 있다.
 
     값은 OpenRouter가 알려 주는 오늘의 무료 모델 호출 수(같은 키를 쓰는 모든 프로그램의 합계)다.
     서버를 매번 부르지 않도록 1분 동안 재사용하되, 이 서비스가 모델을 부른 기록(llm_usage)이 늘면
-    바로 다시 묻는다(호출 이후 갱신). 서버에서 값을 받지 못하면 표시하지 않는다(None).
+    바로 다시 묻는다(호출 이후 갱신). 새로고침 버튼은 재사용하는 값을 건너뛰고 바로 묻는다.
+    서버에서 값을 받지 못하면 표시하지 않는다(None).
     """
-    cache = _ServerUsageCache()
-    lock = threading.Lock()
 
-    def view() -> dict[str, int] | None:
-        config = settings.snapshot()
-        if not settings.has_openrouter_key() or not any(config.model_chain):
+    def __init__(
+        self,
+        *,
+        usage: LlmUsageRepository,
+        settings: SettingsService,
+        clock: Clock,
+        client: LlmClient,
+    ) -> None:
+        self._usage = usage
+        self._settings = settings
+        self._clock = clock
+        self._client = client
+        self._cache = _ServerUsageCache()
+        self._lock = threading.Lock()
+
+    def __call__(self) -> dict[str, int] | None:
+        return self._read(force=False)
+
+    def refresh(self) -> dict[str, int] | None:
+        return self._read(force=True)
+
+    def _read(self, *, force: bool) -> dict[str, int] | None:
+        config = self._settings.snapshot()
+        if not self._settings.has_openrouter_key() or not any(config.model_chain):
             return None
-        now = clock.now()
-        local = usage.count_day(now.astimezone(UTC).date())  # 게이트웨이와 같은 하루 기준
-        with lock:
-            if cache.at is None or cache.count != local or now - cache.at >= MODEL_USAGE_REFRESH:
+        now = self._clock.now()
+        local = self._usage.count_day(now.astimezone(UTC).date())  # 게이트웨이와 같은 하루 기준
+        cache = self._cache
+        with self._lock:
+            if (
+                force
+                or cache.at is None
+                or cache.count != local
+                or now - cache.at >= MODEL_USAGE_REFRESH
+            ):
                 try:
-                    server = client.server_usage()
+                    server = self._client.server_usage()
                 except Exception:  # 서버를 못 불러도 화면은 그려야 한다
                     server = None
                 cache.at, cache.count, cache.server = now, local, server
@@ -262,8 +286,6 @@ def model_usage_view(
         if server is None:
             return None  # 서버에서 값을 받지 못하면 틀린 값 대신 보여 주지 않는다
         return {"remaining": max(0, server.remaining), "cap": server.limit}
-
-    return view
 
 
 def _current(request: Request) -> str:

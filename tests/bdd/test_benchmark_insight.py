@@ -8,6 +8,7 @@ from pytest_bdd import given, parsers, then, when
 
 from rss_hub.domain.benchmark import SAMPLES
 from rss_hub.domain.models import FreeModel
+from rss_hub.services.model_benchmark import CANCEL_POLL_SECONDS
 from rss_hub.services.ports import LlmErrorKind
 from tests.bdd.binding import bind
 from tests.fakes.llm_client import failure, reply
@@ -250,7 +251,7 @@ def _order(env, later, first):
     # a가 시험 글 두 개에서 한도에 걸린 뒤(글마다 두 번 시도) b가 6번, 그 다음 a가 다시 6번
     assert called[:4] == [first] * 4
     assert called[4:10] == [later] * 6 and called[10:] == [first] * 6
-    assert any(wait >= 60 for wait in env.sleeps_log)
+    assert env.sleeps_log.count(CANCEL_POLL_SECONDS) >= 60  # 60초를 1초씩 나누어 기다린다
 
 
 @then(parsers.parse('"{model}"는 두 번째 시험의 결과로 점수가 매겨진다'))

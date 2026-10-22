@@ -66,10 +66,10 @@ from rss_hub.web.topics import build_topic_router
 from rss_hub.web.ui import (
     DELETE_NOTES,
     FAIL_NOTES,
+    ModelUsageView,
     ago,
     build_ui_context,
     icon,
-    model_usage_view,
     qs,
     sprite,
 )
@@ -248,7 +248,7 @@ def create_app(
     )
     app.include_router(build_feedback_router(topics=topics, articles=articles))
     reader = ReaderRepository(database, app_clock)
-    model_usage = model_usage_view(
+    model_usage = ModelUsageView(
         usage=LlmUsageRepository(database, app_clock),
         settings=service,
         clock=app_clock,

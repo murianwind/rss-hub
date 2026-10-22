@@ -367,6 +367,7 @@ body:not(.sidebar-collapsed).sw-480 .sidebar { width: 480px; }
 .sb-foot { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
 .model-usage { font-size: 12px; color: var(--muted); }
 .model-usage b { color: var(--fg); }
+.model-usage .icon-btn { vertical-align: middle; margin-left: 4px; }
 .sidebar-collapsed .model-usage { display: none; }
 
 
@@ -528,3 +529,9 @@ input[readonly] { background: var(--panel); color: var(--muted); cursor: default
 @media (prefers-reduced-motion: reduce) { .cell-running { animation: none; } }
 :root[data-theme="dark"] .cell-ok { background: #123a24; color: #9be0b5; }
 :root[data-theme="dark"] .cell-failed { background: #4a1d1d; }
+
+.bench-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; }
+.bench-cancel { margin: 0 0 0 auto; }
+.bench-legend { margin: 6px 0; font-size: 12px; }
+details.acc-limit > summary { cursor: pointer; font-weight: 600; }
+details.acc-limit[open] > summary { margin-bottom: 8px; }

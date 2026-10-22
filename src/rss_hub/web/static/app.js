@@ -116,7 +116,7 @@
       } else if (action === "close-toast") {
         var toast = target.closest("[data-toast]");
         if (toast) toast.hidden = true;
-      }
+      } else if (action === "refresh-model-usage") refreshModelUsage(target);
       return;
     }
     // 접힌 사이드바에서 구역 제목을 누르면 먼저 펼친다
@@ -304,6 +304,31 @@
       })
       .catch(function () {
         showToast("다시 읽지 못했습니다.");
+      })
+      .then(function () {
+        button.disabled = false;
+        button.classList.remove("refreshing");
+      });
+  }
+
+  function refreshModelUsage(button) {
+    if (button.disabled) return;
+    button.disabled = true;
+    button.classList.add("refreshing");
+    post("/ui/model-usage/refresh", {})
+      .then(function (result) {
+        var data = null;
+        try {
+          data = JSON.parse(result.text);
+        } catch (error) {
+          data = null;
+        }
+        var usage = document.querySelector("[data-model-usage]");
+        if (data && data.cap && usage) usage.textContent = data.remaining + "/" + data.cap;
+        else showToast("모델 잔여 사용량을 가져오지 못했습니다.");
+      })
+      .catch(function () {
+        showToast("모델 잔여 사용량을 가져오지 못했습니다.");
       })
       .then(function () {
         button.disabled = false;
@@ -932,9 +957,12 @@
     var url = panel.getAttribute("data-url");
     var wasRunning = panel.getAttribute("data-running") === "1";
     var STATUS = { running: "실행 중", done: "완료", failed: "멈춤", interrupted: "중단됨" };
+    var LEGEND = { ok: "성공", failed: "실패", running: "진행 중", pending: "대기", skipped: "건너뜀" };
 
     var render = function (data) {
       panel.hidden = !data.models.length;
+      var cancel = panel.querySelector("[data-bench-cancel]");
+      if (cancel) cancel.hidden = !data.running;
       panel.querySelector("[data-bench-status]").textContent = STATUS[data.status] || "";
       panel.querySelector("[data-bench-count]").textContent = data.done + "/" + data.total;
       panel.querySelector("[data-bench-note]").textContent = data.note ? "· " + data.note : "";
@@ -958,6 +986,18 @@
         row.appendChild(cells);
         holder.appendChild(row);
       });
+      var legend = panel.querySelector("[data-bench-legend]");
+      if (legend) {
+        while (legend.firstChild) legend.removeChild(legend.firstChild);
+        Object.keys(LEGEND).forEach(function (state) {
+          var present = data.models.some(function (model) {
+            return model.cells.some(function (cell) { return cell.state === state; });
+          });
+          if (!present) return;
+          legend.appendChild(make("span", "cell cell-" + state, LEGEND[state]));
+          legend.appendChild(document.createTextNode(" "));
+        });
+      }
     };
 
     var poll = function () {

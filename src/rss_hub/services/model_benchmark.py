@@ -5,6 +5,7 @@
 - 한도에 도달하면 그 자리에서 멈추고, 그때까지 끝낸 모델의 점수만 남긴다.
 """
 
+import threading
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -23,12 +24,14 @@ from rss_hub.domain.validation import validate_summary
 from rss_hub.jobs.runner import start_thread
 from rss_hub.services.llm_gateway import BudgetBlocked, LlmGateway, LlmNotConfigured, LlmOutage
 from rss_hub.services.ports import LlmErrorKind
-from rss_hub.storage.models import RUN_DONE, RUN_FAILED, ModelRepository
+from rss_hub.storage.models import RUN_DONE, RUN_FAILED, RUN_INTERRUPTED, ModelRepository
 
 PACE_SECONDS = 4.5  # 호출 사이 간격(분당 13회 이하)
 RATE_LIMIT_STREAK = 2  # 한도 초과가 이만큼 연달아 나오면 그 모델은 미룬다
 RETRY_WAIT_SECONDS = 60.0  # 미룬 모델을 다시 시험하기 전에 한도가 풀리기를 기다리는 시간
 MAX_MODELS = 5
+CANCELLED = "사용자가 중단했습니다"
+CANCEL_POLL_SECONDS = 1.0  # 기다리는 동안 중단 요청을 확인하는 간격
 
 
 ACCOUNT_PROBLEMS = {
@@ -82,11 +85,22 @@ class BenchmarkService:
         self._retry_wait = retry_wait_seconds
         self._calls_made = 0
         self._peak = 0
+        self._should_stop: Callable[[], bool] = lambda: False
 
-    def run(self, run_id: int, model_ids: Sequence[str]) -> BenchOutcome:
-        """모델을 차례로 시험한다. 한도 초과가 연달아 나오면 미뤘다가 한 번만 다시 시험한다."""
+    def run(
+        self,
+        run_id: int,
+        model_ids: Sequence[str],
+        *,
+        should_stop: Callable[[], bool] = lambda: False,
+    ) -> BenchOutcome:
+        """모델을 차례로 시험한다. 한도 초과가 연달아 나오면 미뤘다가 한 번만 다시 시험한다.
+
+        should_stop이 참이 되면 다음 호출을 하지 않고 멈춘다(끝낸 모델의 점수는 남는다).
+        """
         self._calls_made = 0
         self._peak = 0
+        self._should_stop = should_stop
         scores: dict[str, ModelScore] = {}
         deferred: list[str] = []
         stopped = ""
@@ -97,13 +111,27 @@ class BenchmarkService:
                 except _Deferred:
                     deferred.append(model)
             if deferred:
-                self._sleep(self._retry_wait)  # 한도가 풀리기를 기다린 뒤 한 번만 다시 시험한다
+                self._wait_for_limits()  # 한도가 풀리기를 기다린 뒤 한 번만 다시 시험한다
             for model in deferred:
                 self._models.clear_calls(run_id, model)
                 scores[model] = self._run_model(run_id, model, retry=True)
         except _Stop as stop:
             stopped = stop.message
         return BenchOutcome(tuple(scores[m] for m in model_ids if m in scores), stopped)
+
+    def _check_stop(self) -> None:
+        if self._should_stop():
+            raise _Stop(CANCELLED)
+
+    def _wait_for_limits(self) -> None:
+        """기다리는 동안에도 중단 요청을 확인한다."""
+        waited = 0.0
+        while waited < self._retry_wait:
+            self._check_stop()
+            step = min(CANCEL_POLL_SECONDS, self._retry_wait - waited)
+            self._sleep(step)
+            waited += step
+        self._check_stop()
 
     def _run_model(self, run_id: int, model: str, *, retry: bool) -> ModelScore:
         """한 모델의 시험 글을 모두 보낸다. 한도 초과가 연달아 나오면 첫 시험에서는 미룬다."""
@@ -114,6 +142,7 @@ class BenchmarkService:
                     raise _Deferred
                 self._skip_rest(run_id, model, index)  # 다시 시험해도 같으면 호출하지 않는다
                 break
+            self._check_stop()
             if self._calls_made:
                 self._sleep(self._pace)
             self._calls_made += 1
@@ -197,6 +226,7 @@ class BenchmarkRunner:
         self._service = service
         self._models = models
         self._spawn = spawn
+        self._cancel = threading.Event()
 
     def start(self, model_ids: Sequence[str]) -> StartResult:
         chosen = list(dict.fromkeys(model_ids))
@@ -209,19 +239,29 @@ class BenchmarkRunner:
             return StartResult("invalid", message="목록에 없는 모델이 있습니다. 먼저 스캔하세요")
         if self._models.running_run() is not None:
             return StartResult("busy", message="이미 벤치마크가 실행 중입니다")
+        self._cancel.clear()
         run_id = self._models.start_run(len(chosen) * len(SAMPLES), chosen)
         self._spawn(lambda: self._execute(run_id, chosen))
         return StartResult("started", run_id)
 
     def _execute(self, run_id: int, model_ids: Sequence[str]) -> None:
         try:
-            outcome = self._service.run(run_id, model_ids)
+            outcome = self._service.run(run_id, model_ids, should_stop=self._cancel.is_set)
         except Exception as error:
             self._models.finish_run(
                 run_id, RUN_FAILED, f"예상하지 못한 오류({type(error).__name__})"
             )
             return
-        if outcome.stopped:
+        if outcome.stopped == CANCELLED:
+            self._models.finish_run(run_id, RUN_INTERRUPTED, outcome.stopped)
+        elif outcome.stopped:
             self._models.finish_run(run_id, RUN_FAILED, outcome.stopped)
         else:
             self._models.finish_run(run_id, RUN_DONE, f"{len(outcome.scores)}개 모델 완료")
+
+    def cancel(self) -> bool:
+        """실행 중인 벤치마크에 중단을 요청한다. 실행 중이 아니면 False."""
+        if self._models.running_run() is None:
+            return False
+        self._cancel.set()
+        return True
