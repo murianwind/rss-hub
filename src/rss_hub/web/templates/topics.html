@@ -23,7 +23,7 @@
     </div>
   </div>
   {% if t.keywords %}
-  <p class="topic-keywords">{% for k in t.keywords %}<span class="chip">{{ k }}</span>{% endfor %}</p>
+  <p class="topic-keywords">{% for k in t.keywords[:5] %}<span class="chip">{{ k }}</span>{% endfor %}{% if t.keywords | length > 5 %}<span class="hint">외 {{ t.keywords | length - 5 }}개</span>{% endif %}</p>
   {% else %}
   <p class="hint">키워드를 입력하세요. 키워드가 없는 주제는 글을 고르지 못합니다([설정]에서 입력).</p>
   {% endif %}

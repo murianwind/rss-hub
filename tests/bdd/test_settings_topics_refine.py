@@ -15,7 +15,7 @@ from tests.keywords.browser import BROWSER, FRAGMENT, post
 from tests.keywords.models import scan
 from tests.keywords.page import text_of
 
-bind(globals(), "25_settings_topics_refine.feature", [f"STP-{n:02d}" for n in range(1, 20)])
+bind(globals(), "25_settings_topics_refine.feature", [f"STP-{n:02d}" for n in range(1, 21)])
 
 KEY = "sk-or-v1-abcdefghijklmnop"
 PAGES = {
@@ -414,3 +414,15 @@ def _history(ctx):
     content = ctx.html.split('<div class="page')[1]
     assert '<div class="history-scroll"' in content
     assert "버전" not in content
+
+
+@given(parsers.parse('주제 "{name}"에 키워드가 {count:d}개 있다'))
+def _many_keywords(world, ctx, name, count):
+    ctx.topic = add_topic(world, name, *(f"word{n}" for n in range(1, count + 1)))
+
+
+@then(parsers.parse('"{name}" 카드에는 키워드 {shown:d}개와 "{more}"가 보인다'))
+def _truncated_keywords(ctx, name, shown, more):
+    card = topic_card(ctx.html, name)
+    assert card.count('<span class="chip">') == shown and more in card
+    assert "word5" in card and "word6" not in card
