@@ -11,7 +11,6 @@ from pytest_bdd import given, parsers, then, when
 
 from rss_hub.storage.llm_usage import LlmUsageRepository
 from tests.bdd.binding import bind
-from tests.keywords.browser import post
 from tests.keywords.page import category_section, feed_ids, heading_link, rss_section
 
 bind(globals(), "19_viewer_polish.feature", [f"VPL-{n:02d}" for n in range(1, 17)])
@@ -204,7 +203,7 @@ def server_says(world, used, limit=1000):
 @when("모델 키를 설정하고 서버가 오늘 무료 호출 33회를 알려 준다")
 @given("모델 키가 설정되어 있고 서버가 오늘 무료 호출 33회를 알려 준다")
 def _set_key(world):
-    post(world, "/settings/openrouter-key", openrouter_key=KEY, next="/settings")
+    world.parts.settings.set_openrouter_key(KEY)
     server_says(world, 33)
 
 
