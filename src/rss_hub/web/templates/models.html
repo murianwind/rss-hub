@@ -53,10 +53,6 @@
     <button type="submit" class="primary" data-chain-save disabled>체인 저장</button>
   </div>
 </form>
-<details class="panel">
-  <summary>모델 이름을 직접 입력(고급)</summary>
-  {{ settings_form('/models/settings', '/models', chain_sections, values, errors) }}
-</details>
 
 
 <h2>무료 모델 목록 <span class="hint">{{ catalog | length }}개</span></h2>
