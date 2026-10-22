@@ -4,7 +4,13 @@ from datetime import UTC, datetime
 
 import pytest
 
-from rss_hub.services.page_source import MAX_ARTICLE_CHARS, NO_ITEMS, PageFeedSource, site_of
+from rss_hub.services.page_source import (
+    MAX_ARTICLE_CHARS,
+    NO_ITEMS,
+    ArticleDetails,
+    PageFeedSource,
+    site_of,
+)
 from rss_hub.services.ports import FetchError
 from tests.fakes.clock import FakeClock
 from tests.fakes.discovery_fetcher import FakeDiscoveryFetcher
@@ -84,7 +90,7 @@ def test_a_redirect_makes_relative_links_follow_the_final_address(env):
 def test_the_article_body_is_cleaned_text_from_the_post_page(env):
     pages, source = env
     pages.page(f"{BASE}/news/post-1", article_html(1))
-    html = source.read_article(f"{BASE}/news/post-1")
+    html = source.read_article_details(f"{BASE}/news/post-1", UTC).content
     assert "1번 글의 1번째 본문 문단입니다" in html and "<script" not in html
 
 
@@ -98,7 +104,7 @@ def test_a_post_page_that_cannot_be_read_gives_an_empty_body(env, mode):
         pages.page(url, "<html><body><p>짧음</p></body></html>")
     else:
         pages.fetch_page = lambda _url: (_ for _ in ()).throw(RuntimeError("예상 못한 오류"))
-    assert source.read_article(url) == ""
+    assert source.read_article_details(url, UTC) == ArticleDetails()
 
 
 def test_a_very_long_body_is_cut_to_the_limit(env):
@@ -112,7 +118,7 @@ def test_a_very_long_body_is_cut_to_the_limit(env):
         + ("<p>" + "또 긴 문단입니다. " * 30 + "</p>") * 400
         + "</article></body></html>",
     )
-    assert len(source.read_article(f"{BASE}/news/long")) <= MAX_ARTICLE_CHARS
+    assert len(source.read_article_details(f"{BASE}/news/long", UTC).content) <= MAX_ARTICLE_CHARS
 
 
 @pytest.mark.parametrize(

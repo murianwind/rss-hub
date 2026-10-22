@@ -39,6 +39,7 @@ class World:
         summary=None,
         link=None,
         status="collected",
+        published_kind="exact",
     ):
         self.n += 1
         article_id = self.articles.add(
@@ -51,6 +52,7 @@ class World:
                 "",
                 BASE + timedelta(minutes=minutes),
                 "2026-10-16",
+                published_kind,
             )
         )
         if ko or summary:

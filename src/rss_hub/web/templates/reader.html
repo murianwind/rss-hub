@@ -40,7 +40,7 @@
     <div class="card-top">
       <a class="chip" href="/reader/feed/{{ item.feed_id }}">{{ item.feed_name }}</a>
       {% for name in item.topics %}<span class="chip topic"># {{ name }}</span>{% endfor %}
-      <time class="when" datetime="{{ item.published_dt.isoformat() }}" title="{{ times[item.id] }}">{{ item.published_dt | ago(ui_now, ui_zone) }}</time>
+      {% if times[item.id] %}<time class="when" datetime="{{ item.published_dt.isoformat() }}" title="{{ times[item.id] }}">{{ item.published_dt | ago(ui_now, ui_zone) }}</time>{% endif %}
     </div>
     <h2><a class="title" href="/a/{{ item.id }}?back={{ back | qs }}">{% if not item.read %}<span class="dot" title="읽지 않은 글"></span>{% endif %}{{ item.title }}</a></h2>
     {% if snippets[item.id] %}<p class="snippet">{{ snippets[item.id] }}</p>{% endif %}
@@ -62,6 +62,7 @@
           <button type="submit" class="link-btn" title="이 주제 목록에서만 뺍니다">싫어요(이 주제에서 빼기)</button>
         </form>
         {% endif %}
+        {% if pub_dates[item.id] %}<span class="pub-date" title="원본 글의 발행일">발행 {{ pub_dates[item.id] }}</span>{% endif %}
       </span>
     </div>
   </article>

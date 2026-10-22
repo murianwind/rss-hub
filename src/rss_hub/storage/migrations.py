@@ -271,6 +271,11 @@ MIGRATIONS: tuple[str, ...] = (
         PRIMARY KEY (topic_id, kind, word)
     );
     """,
+    # 17: 글마다 발행일을 얼마나 아는지(exact 시각까지, date 날짜만, unknown 모름).
+    # 예전 글은 모두 시각까지 아는 것으로 본다
+    """
+    ALTER TABLE articles ADD COLUMN published_kind TEXT NOT NULL DEFAULT 'exact';
+    """,
 )
 
 
