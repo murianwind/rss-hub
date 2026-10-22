@@ -239,8 +239,8 @@ def _open_sections(request: Request, scope_kind: str) -> set[str]:
     path = request.url.path
     if path.startswith(SETTINGS_PATHS):
         return {"settings"}
-    sections = {"feed": {"rss"}, "category": {"categories"}, "topic": {"topics"}}
-    return sections.get(scope_kind, set())
+    sections = {"category": {"categories"}, "topic": {"topics"}}
+    return {"rss"} | sections.get(scope_kind, set())
 
 
 def sidebar_width(raw: object) -> int:

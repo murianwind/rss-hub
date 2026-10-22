@@ -396,7 +396,7 @@ body:not(.sidebar-collapsed).sw-480 .sidebar { width: 480px; }
 
 
 /* ---------- 한 화면에 RSS 피드, 카테고리, 주제를 함께: 열린 구역의 목록이 높이를 나눠 쓰고 안에서 스크롤한다 ---------- */
-.sb-body { --sb-free: calc(100vh - 400px); }
+.sb-body { --sb-free: calc(100vh - 460px); }
 #sec-rss > .sec-body, #sec-categories > .sec-body, #sec-topics > .sec-body { overflow-y: auto; overscroll-behavior: contain; }
 #sec-rss > .sec-body { max-height: max(110px, calc(var(--sb-free) * var(--share-rss, 1))); }
 #sec-categories > .sec-body { max-height: max(110px, calc(var(--sb-free) * var(--share-cat, 1))); }

@@ -227,7 +227,9 @@ class ReaderRepository:
     # ---------- 사이드바 ----------
 
     def sidebar(self) -> Sidebar:
-        """사이드바에 그릴 피드, 카테고리, 주제와 개수(전체 글 수와 읽지 않은 글 수)."""
+        """사이드바에 그릴 피드, 카테고리, 주제와 개수(전체 글 수와 읽지 않은 글 수).
+
+        피드는 읽지 않은 글이 있는 곳이 먼저, 그 안에서는 글이 가장 최근에 발행된 곳이 먼저다."""
         marks = ",".join("?" for _ in VIEWABLE_STATUSES)
         statuses = list(VIEWABLE_STATUSES)
         with self._db.connect() as conn:
@@ -235,9 +237,11 @@ class ReaderRepository:
                 "SELECT f.id, f.name, f.category_id, f.fail_count, f.last_error, "
                 "f.last_checked_at, COALESCE(c.total, 0) AS total, "
                 "COALESCE(c.unread, 0) AS unread FROM feeds f LEFT JOIN ("
-                "SELECT feed_id, COUNT(*) AS total, SUM(read_at IS NULL) AS unread FROM articles "
+                "SELECT feed_id, COUNT(*) AS total, SUM(read_at IS NULL) AS unread, "
+                "MAX(published_dt) AS latest FROM articles "
                 f"WHERE status IN ({marks}) GROUP BY feed_id) c ON c.feed_id = f.id "
-                "ORDER BY f.sort_order, LOWER(f.name), f.id",
+                "ORDER BY COALESCE(c.unread, 0) > 0 DESC, c.latest DESC, "
+                "f.sort_order, LOWER(f.name), f.id",
                 statuses,
             ).fetchall()
             category_rows = conn.execute(

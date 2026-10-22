@@ -255,7 +255,27 @@
     });
   }
 
+  // 사이트 줄을 서버가 알려 준 순서(읽지 않은 곳, 최근 발행 순)로 옮기고, 보고 있는 줄이 목록에서 보이게 한다
+  function sortFeeds(order) {
+    var rank = {};
+    order.forEach(function (id, index) {
+      rank[id] = index;
+    });
+    document.querySelectorAll('ul:has(> li[data-drag-kind="feed"])').forEach(function (list) {
+      var rows = Array.prototype.slice.call(list.querySelectorAll(':scope > li[data-drag-kind="feed"]'));
+      var sorted = rows.slice().sort(function (a, b) {
+        return rank[a.getAttribute("data-drag-id")] - rank[b.getAttribute("data-drag-id")];
+      });
+      if (sorted.every(function (row, index) { return row === rows[index]; })) return;
+      sorted.forEach(function (row) {
+        list.appendChild(row);
+      });
+    });
+    document.querySelectorAll("#sec-rss > .sec-body, #sec-categories > .sec-body").forEach(showCurrent);
+  }
+
   function applyState(state) {
+    if (!document.querySelector(".dragging")) sortFeeds(state.feed_order);
     Object.keys(state.feeds).forEach(function (id) {
       var feed = state.feeds[id];
       setCount("feed:" + id, feed.unread, 0);
