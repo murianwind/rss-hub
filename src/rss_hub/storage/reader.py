@@ -190,6 +190,27 @@ class ReaderRepository:
             grouped.setdefault(row["article_id"], []).append(row["name"])
         return {key: tuple(value) for key, value in grouped.items()}
 
+    def unread_count(
+        self,
+        *,
+        feed_id: int | None = None,
+        category_id: int | None = None,
+        topic_id: int | None = None,
+        only: str = "",
+    ) -> int:
+        """범위 안의 읽지 않은 글 수(모두 읽음 버튼이 누를 일이 있는지 보는 데 쓴다)."""
+        where, params = _where(
+            feed_id=feed_id, category_id=category_id, topic_id=topic_id, query="", only=only
+        )
+        with self._db.connect() as conn:
+            return int(
+                conn.execute(
+                    "SELECT COUNT(*) AS n FROM articles a JOIN feeds f ON f.id = a.feed_id "
+                    f"WHERE a.read_at IS NULL AND {where}",
+                    params,
+                ).fetchone()["n"]
+            )
+
     def mark_all_read(
         self,
         *,

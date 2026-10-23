@@ -274,7 +274,19 @@
     document.querySelectorAll("#sec-rss > .sec-body, #sec-categories > .sec-body").forEach(showCurrent);
   }
 
+  // 좁은 화면의 RSS Hub 바에 있는 "모두 읽음"은 이 목록에 읽지 않은 글이 있을 때만 보인다
+  function showMarkAll(state) {
+    var box = document.querySelector("[data-mark-all]");
+    var key = box ? box.getAttribute("data-mark-all") : "";
+    if (!key) return; // 북마크 목록은 상태에 읽지 않은 글 수가 없어 처음 그린 그대로 둔다
+    var parts = key.split(":");
+    var group = { feed: state.feeds, category: state.categories, topic: state.topics }[parts[0]];
+    var unread = parts[0] === "all" ? state.all_unread : group && group[parts[1]] ? group[parts[1]].unread : 0;
+    box.hidden = unread === 0;
+  }
+
   function applyState(state) {
+    showMarkAll(state);
     if (!document.querySelector(".dragging")) sortFeeds(state.feed_order);
     Object.keys(state.feeds).forEach(function (id) {
       var feed = state.feeds[id];
