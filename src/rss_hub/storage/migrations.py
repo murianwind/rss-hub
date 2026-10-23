@@ -4,8 +4,28 @@
 """
 
 import sqlite3
+from collections.abc import Callable
 
-MIGRATIONS: tuple[str, ...] = (
+from rss_hub.domain.text import clean_title
+
+Migration = (
+    str | Callable[[sqlite3.Connection], None]
+)  # SQL 묶음, 또는 SQL만으로 안 되는 데이터 손질
+
+
+def _clean_stored_titles(conn: sqlite3.Connection) -> None:
+    """예전에 그대로 저장된 제목과 사이트 이름의 문자 참조(&middot; 등)와 전각 글자를 다듬는다."""
+    for table, column in (("articles", "title"), ("articles", "title_ko"), ("feeds", "name")):
+        rows = conn.execute(
+            f"SELECT id, {column} FROM {table} WHERE {column} IS NOT NULL"
+        ).fetchall()
+        for row in rows:
+            cleaned = clean_title(row[1])
+            if cleaned != row[1]:
+                conn.execute(f"UPDATE {table} SET {column} = ? WHERE id = ?", (cleaned, row[0]))
+
+
+MIGRATIONS: tuple[Migration, ...] = (
     # 1: 설정, 비밀 값, 변경 이력, 웹훅
     """
     CREATE TABLE settings (
@@ -280,6 +300,8 @@ MIGRATIONS: tuple[str, ...] = (
     """
     ALTER TABLE job_runs ADD COLUMN last_result TEXT NOT NULL DEFAULT '';
     """,
+    # 19: 저장된 제목과 사이트 이름의 문자 참조와 전각 글자를 다듬는다
+    _clean_stored_titles,
 )
 
 
@@ -287,5 +309,8 @@ def apply_migrations(conn: sqlite3.Connection) -> None:
     """아직 적용하지 않은 마이그레이션만 순서대로 적용한다."""
     applied = int(conn.execute("PRAGMA user_version").fetchone()[0])
     for number, script in enumerate(MIGRATIONS[applied:], start=applied + 1):
-        conn.executescript(script)
+        if callable(script):
+            script(conn)
+        else:
+            conn.executescript(script)
         conn.execute(f"PRAGMA user_version = {number}")

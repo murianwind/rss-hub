@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from rss_hub.domain.text import clean_title
+
 
 @dataclass(frozen=True)
 class ArticleFields:
@@ -20,7 +22,7 @@ def _text(value: Any) -> str:
 def extract_article_fields(entry: Mapping[str, Any]) -> ArticleFields:
     """제목, 링크, 본문(summary, 없으면 description의 HTML 원본), 발행 시각 원문."""
     return ArticleFields(
-        title=_text(entry.get("title")),
+        title=clean_title(_text(entry.get("title"))),
         link=_text(entry.get("link")),
         content_html=_text(entry.get("summary") or entry.get("description")),
         published_raw=str(entry.get("published") or entry.get("updated") or ""),

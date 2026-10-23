@@ -15,6 +15,8 @@ import re
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit
 
+from rss_hub.domain.text import unescape_entities
+
 MAX_INPUT_LENGTH = 500_000
 MAX_DEPTH = 40
 MAX_URL_LENGTH = 2048
@@ -154,8 +156,11 @@ class _Cleaner(HTMLParser):
     # ---------- 글자 ----------
 
     def handle_data(self, data: str) -> None:
-        if not self._dropping:
-            self._out.append(html.escape(data))
+        if self._dropping:
+            return
+        in_code = any(tag in ("pre", "code") for tag, _ in self._open)
+        # 사이트가 &amp;middot;처럼 두 번 감싸 보낸 글자를 풀되, 코드 안은 보이는 그대로 둔다
+        self._out.append(html.escape(data if in_code else unescape_entities(data)))
 
 
 def sanitize_html(content: str, base_url: str = "") -> str:
