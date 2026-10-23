@@ -13,6 +13,7 @@ from rss_hub.domain.discovery import describe_fetch_failure, find_feed_links
 from rss_hub.domain.feed_url import FeedUrlError, feed_url_key, validate_feed_url
 from rss_hub.domain.importing import MAX_NAME_LENGTH, MAX_URL_TEXT_LENGTH
 from rss_hub.domain.page_feed import MIN_ITEMS, PageListing, extract_page_items
+from rss_hub.domain.text import clean_title
 from rss_hub.services.page_source import site_of
 from rss_hub.services.ports import DiscoveryFetcher, FetchError, FetchResult
 from rss_hub.storage.feeds import (
@@ -99,7 +100,7 @@ def _host(url: str) -> str:
 
 
 def _title(result: FetchResult, fallback: str, url: str) -> str:
-    return (result.title or fallback or _host(url))[:MAX_NAME_LENGTH]
+    return clean_title(result.title or fallback or _host(url))[:MAX_NAME_LENGTH]
 
 
 class FeedRegistrationService:
@@ -227,7 +228,7 @@ class FeedRegistrationService:
         listing, error_text = self._read_listing(url)
         if listing is None:
             return RegistrationResult(error=error_text)
-        final_name = name or listing.title or _host(url)
+        final_name = clean_title(name or listing.title or _host(url))
         try:
             feed_id = self._feeds.add(
                 url,

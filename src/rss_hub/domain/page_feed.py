@@ -18,6 +18,8 @@ from datetime import date
 from html.parser import HTMLParser
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
+from rss_hub.domain.text import clean_title
+
 MAX_ITEMS = 50  # 한 번에 다루는 글의 최대 수
 MIN_ITEMS = 3  # 등록할 때 글 목록으로 인정하는 최소 글 수
 MAX_ANCHORS = 5000
@@ -228,7 +230,7 @@ def extract_page_items(html: str, page_url: str) -> PageListing:
     except Exception:  # 깨진 HTML에서도 지금까지 읽은 것으로 계속한다
         pass
     base = _clean_url(page_url)
-    page_title = " ".join(parser.title.split())[:MAX_TITLE]
+    page_title = clean_title(parser.title)[:MAX_TITLE]
     if base is None:
         return PageListing(page_title, ())
     host = _host_key(base)
@@ -258,7 +260,8 @@ def extract_page_items(html: str, page_url: str) -> PageListing:
             rows.append((url, title, moment or _iso_date(times.get(url, ""))))
     labelled = _strip_labels([title for _, title, _ in rows], section)
     items = tuple(
-        PageItem(title, url, moment) for (url, _, moment), title in zip(rows, labelled, strict=True)
+        PageItem(clean_title(title), url, moment)
+        for (url, _, moment), title in zip(rows, labelled, strict=True)
     )
     return PageListing(page_title, items[:MAX_ITEMS])
 

@@ -6,6 +6,8 @@ from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
+from rss_hub.domain.text import clean_title, unescape_entities
+
 DEFAULT_FORBIDDEN_PHRASES = ("We need to translate", "Korean summary")
 FORMAT_MARKERS = ("TITLE:", "SUMMARY:")
 
@@ -102,7 +104,7 @@ def validate_summary(
     title, summary = data.get("title_ko"), data.get("summary_ko")
     if not isinstance(title, str) or not isinstance(summary, str):
         return ValidationResult(reason=RejectReason.MISSING_FIELD)
-    title, summary = title.strip(), summary.strip()
+    title, summary = clean_title(title), unescape_entities(summary).strip()
     if not title:
         return ValidationResult(reason=RejectReason.EMPTY_TITLE)
     if not summary:
