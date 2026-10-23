@@ -250,8 +250,13 @@ def _meta_two_lines(world, ctx):
     assert re.search(r'class="chip"[^>]*>[^<]*</a><span class="meta-break"></span>', meta)
     assert '<span class="meta-dot">·</span>' in meta
     narrow = narrow_css(world)
-    assert ".meta-break { flex-basis: 100%; height: 0; margin-top: -6px; }" in narrow
+    assert (
+        ".meta-break { display: block; flex-basis: 100%; height: 0; margin-top: -6px; }" in narrow
+    )
     assert ".meta-dot { display: none; }" in narrow
+    css = world.get("/static/app.css").text
+    # 기본 숨김 규칙이 좁은 화면 규칙보다 뒤에 있으면 같은 우선순위에서 이겨서 줄바꿈이 사라진다
+    assert css.index(".meta-break { display: none; }") < css.index(".meta-break { display: block;")
 
 
 @given("사이트 목록에서 연 글이 있다")
