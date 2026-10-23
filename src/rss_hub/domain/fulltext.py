@@ -46,7 +46,7 @@ _NEGATIVE_TOKEN = re.compile(
 # 이름 안에 이 낱말이 들어 있으면 잡음으로 본다(예: typo-sofia-eyebrow-2, post-meta)
 _NEGATIVE_PART = re.compile(
     r"eyebrow|kicker|byline|dateline|breadcrumb|crumbs|post-meta|entry-meta|article-meta|"
-    r"reading-?time|readtime|paywall",
+    r"reading-?time|readtime|paywall|opengraph|link-?preview|link-?card|oembed",
     re.I,
 )
 _STRUCTURAL = frozenset({"body", "main", "article"})
@@ -274,6 +274,8 @@ _DATE = re.compile(
 )
 MAX_DATE_ZONE = 1500  # 글 맨 앞 이만큼 안의 날짜만 한 줄 날짜로 본다
 MAX_LABEL = 40  # 목록 바로 앞의 짧은 이름표(예: Cybersecurity Guides)
+MAX_PROMO_LABEL = 120  # 주소 줄 바로 앞의 소개 줄(예: [2027년 사업전략을 위한 책])
+_BARE_URL = re.compile(r"^https?://\S+$", re.I)
 LEAD_ZONE = (
     300  # 글 맨 앞 이만큼의 본문이 나오기 전까지가 "앞머리"(분류, 제목, 기자 줄 같은 군더더기 자리)
 )
@@ -378,8 +380,21 @@ def _is_link_row(node: _Node) -> bool:
     return 0 < text <= 300 and links == text and _anchor_count(node) >= 2
 
 
+def _is_bare_url(node: _Node) -> bool:
+    """주소만 적은 줄: 글자가 모두 하나의 링크 안에 있고 그 글자가 주소다(홍보 줄)."""
+    if node.tag not in ("p", "div", "span", "section") or node.dropped:
+        return False
+    text, links, _ = _measure(node)
+    return (
+        0 < text <= 300
+        and links == text
+        and _anchor_count(node) == 1
+        and bool(_BARE_URL.match(_own_text(node, 301)))
+    )
+
+
 def _is_noise_block(node: _Node) -> bool:
-    return _is_noise_list(node) or _is_link_row(node)
+    return _is_noise_list(node) or _is_link_row(node) or _is_bare_url(node)
 
 
 def _sentence_like(text: str) -> bool:
@@ -461,6 +476,8 @@ def _position(walk: _Walk) -> int:
 def _skip_block(node: _Node, walk: _Walk) -> bool:
     """글에 속하지 않는 한 덩어리인가(끝 안내는 walk.cut을 켠다)."""
     if node.tag in ("ul", "ol", "p", "div", "span", "section") and _is_noise_block(node):
+        if _is_bare_url(node) and _position(walk) >= PROMO_ZONE * walk.total:
+            walk.cut = True  # 글 끝의 상품 주소 뒤는 홍보(책 소개, 미리보기 카드)가 이어진다
         return True
     own = _own_text(node, 100)
     if node.tag in _BLOCKS and 0 < len(own) <= 60:
@@ -544,14 +561,13 @@ def _is_label_of_noise(parent: _Node, index: int) -> bool:
     child = parent.children[index]
     if isinstance(child, str) or child.tag not in _BLOCKS:
         return False
-    label = _own_text(child, MAX_LABEL + 1)
-    if (
-        not 0 < len(label) <= MAX_LABEL
-        or _anchor_count(child)
-        or label.endswith((".", "。", "!", "?"))
-    ):
-        return False  # 링크가 있거나 문장으로 끝나면 본문이다(예: "Source: ...")
     following = parent.children[index + 1] if index + 1 < len(parent.children) else None
+    limit = (
+        MAX_PROMO_LABEL if isinstance(following, _Node) and _is_bare_url(following) else MAX_LABEL
+    )
+    label = _own_text(child, limit + 1)
+    if not 0 < len(label) <= limit or _anchor_count(child) or label.endswith((".", "。", "!", "?")):
+        return False  # 링크가 있거나 문장으로 끝나면 본문이다(예: "Source: ...")
     if following is None or isinstance(following, str):
         return False  # 바로 뒤가 글자거나 없으면 이름표가 아니다
     return _is_noise_block(following)

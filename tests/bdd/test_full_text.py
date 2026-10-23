@@ -14,7 +14,7 @@ from tests.fakes.viewer_world import open_world
 from tests.keywords.browser import BROWSER
 from tests.keywords.page import body
 
-bind(globals(), "18_full_text.feature", [f"FTX-{n:02d}" for n in range(1, 14)])
+bind(globals(), "18_full_text.feature", [f"FTX-{n:02d}" for n in range(1, 16)])
 
 LINK = "https://blog.example.com/post/1"
 FULL = "원문 전체에만 있는 본문 문장입니다. " * 30
@@ -379,3 +379,71 @@ def _hbr_result(world, ctx, reason):
     text = visible_text(ctx.response.text)
     assert ctx.rss_first in text and ctx.rss_last in text and reason in ctx.response.text
     assert world.fetcher.page_calls == [LINK]
+
+
+YES24 = "https://www.yes24.com/Product/Goods/197780287"
+KYOBO = "https://product.kyobobook.co.kr/detail/S000221581752"
+
+
+def _og_card(title, desc, url):
+    return (
+        f'<div class="wrap_item item_type_opengraph" data-app="{{}}"><a class="inner_wrap #opengraph" '
+        f'href="{url}" target="_blank" rel="noreferrer"><div class="inner_wrap_text">'
+        f'<strong class="title">{title}</strong><p class="desc">{desc}</p><p class="url">{url}</p>'
+        "</div></a></div>"
+    )
+
+
+@given(
+    "원문 페이지에 본문 뒤로 책 소개 줄과 상품 주소 줄과 링크 미리보기 카드가 붙어 있는 글이 있다"
+)
+def _brunch_like(world, ctx):
+    promo = (
+        '<p class="wrap_item"><span><b><u><span>[2027년 사업전략을 위한 책]</span></u></b></span></p>'
+        f'<p class="wrap_item"><span><a class="link" href="{YES24}"><u><span>{YES24}</span></u></a></span></p>'
+        + _og_card("IT 트렌드 2027 - 예스24", "AI를 쓰는 것만으로는 부족하다", YES24)
+        + '<p class="wrap_item"><span><br/></span></p>'
+        f'<p class="wrap_item"><span><a class="link" href="{KYOBO}"><span>{KYOBO}</span></a></span></p>'
+        + _og_card("IT 트렌드 2027 - 교보문고", "일하는 방식을 바꿔야 돈의 흐름이 보인다", KYOBO)
+        + '<p class="wrap_item"><span><b>➯ 저자의 다른 책 소개</b></span></p>'
+    )
+    page = (
+        f'<html><body><div class="wrap_body"><p class="wrap_item">{FULL}</p>'
+        f'<p class="wrap_item">마지막 본문 문단입니다. {FULL}</p>{promo}</div></body></html>'
+    )
+    world.fetcher.page(LINK, page)
+    ctx.article = world.article(link=LINK)
+
+
+@then("본문의 글은 남고 책 소개 줄과 상품 주소와 미리보기 카드는 하나도 없다")
+def _promo_gone(ctx):
+    html = body(ctx.response.text)
+    assert "마지막 본문 문단입니다" in _plain(html)
+    for noise in (
+        "2027년 사업전략",
+        "yes24",
+        "kyobobook",
+        "예스24",
+        "교보문고",
+        "AI를 쓰는 것만으로는",
+        "저자의 다른 책",
+    ):
+        assert noise not in html, noise
+
+
+@given('원문 페이지에 문장 속 링크와 "출처: 주소" 줄이 들어 있는 글이 있다')
+def _inline_links(world, ctx):
+    page = (
+        f"<html><body><article><p>{FULL}</p>"
+        "<p>자세한 내용은 <a href='https://a.example.com/x'>공식 문서</a>를 보면 된다.</p>"
+        "<p>출처: <a href='https://b.example.com/y'>https://b.example.com/y</a></p>"
+        "</article></body></html>"
+    )
+    world.fetcher.page(LINK, page)
+    ctx.article = world.article(link=LINK)
+
+
+@then("문장 속 링크와 출처 줄이 그대로 남는다")
+def _inline_links_kept(ctx):
+    html = body(ctx.response.text)
+    assert "공식 문서" in html and "출처:" in html and "https://b.example.com/y" in html
