@@ -36,6 +36,13 @@
       <details class="menu">
         <summary class="menu-button" aria-label="특정 주제로">{{ icon('hash', 'menu-desktop') }}{{ icon('more', 'menu-mobile') }}<span class="menu-label"> 특정 주제로</span></summary>
         <div class="menu-list" role="menu">
+          {% if fulltext_state in ('ok', 'failed') %}
+          <form method="post" action="/a/{{ article.id }}/fulltext" class="menu-mobile-only">
+            <input type="hidden" name="next" value="{{ here }}">
+            <button type="submit" role="menuitem">{{ icon('refresh') }}<span>전문 다시 가져오기</span></button>
+          </form>
+          {% endif %}
+          <p class="menu-heading menu-mobile-only">특정 주제로</p>
           {% for t in topics %}
           {% set m = memberships.get(t.id) %}
           {% if not m or m.rejected %}
@@ -54,7 +61,7 @@
     {% if show_original_title %}<p class="hint">{{ article.title }}</p>{% endif %}
     {% if article.summary_ko %}<details class="panel doc-summary" open><summary>요약</summary><p>{{ article.summary_ko }}</p></details>{% endif %}
     {% if fulltext_state == 'failed' %}<div class="banner" role="status">원문 전문을 가져오지 못해 RSS 본문을 보여 줍니다{% if fulltext_reason %}: {{ fulltext_reason }}{% endif %}</div>{% endif %}
-    {% if fulltext_state in ('ok', 'failed') %}<form method="post" action="/a/{{ article.id }}/fulltext" class="doc-tools"><input type="hidden" name="next" value="{{ here }}"><button type="submit" class="back">{{ icon('refresh') }}<span>전문 다시 가져오기</span></button></form>{% endif %}
+    {% if fulltext_state in ('ok', 'failed') %}<form method="post" action="/a/{{ article.id }}/fulltext" class="doc-tools menu-desktop-only"><input type="hidden" name="next" value="{{ here }}"><button type="submit" class="back">{{ icon('refresh') }}<span>전문 다시 가져오기</span></button></form>{% endif %}
     </div>
     <div class="doc-scroll">
     <div class="article-body" {% if lang %}lang="{{ lang }}"{% endif %}>

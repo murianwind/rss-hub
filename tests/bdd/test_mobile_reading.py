@@ -13,7 +13,7 @@ from tests.bdd.binding import bind
 from tests.fakes.delivery_env import DeliveryEnv
 from tests.keywords.browser import BROWSER
 
-bind(globals(), "31_mobile_reading.feature", [f"MOB-{n:02d}" for n in range(1, 13)])
+bind(globals(), "31_mobile_reading.feature", [f"MOB-{n:02d}" for n in range(1, 14)])
 
 APP_JS = Path("src/rss_hub/web/static/app.js")
 
@@ -213,3 +213,25 @@ def _more_menu(world, ctx):
     assert 'aria-label="특정 주제로"' in summary and 'class="menu-label"' in summary
     assert "i-more" in summary
     assert ".menu-label { display: none" in narrow_css(world)
+
+
+@given("전문을 가져온 글이 있다")
+def _with_fulltext(world, ctx):
+    ctx.article = world.article(title="전문 글")
+    world.articles.save_full_text(ctx.article, "<p>전문 본문입니다.</p>")
+
+
+@then("점 세 개 메뉴 안에 전문 다시 가져오기가 있고 따로 보이던 버튼은 좁은 화면에서 숨는다")
+def _refetch_in_menu(world, ctx):
+    menu = ctx.html.split('<details class="menu">')[1].split("</details>")[0]
+    assert f'action="/a/{ctx.article}/fulltext" class="menu-mobile-only"' in menu
+    assert "전문 다시 가져오기" in menu and "menu-desktop-only" in ctx.html
+    css = world.client.get("/static/app.css").text
+    assert ".menu-desktop-only { display: none; }" in css
+    assert ".menu-mobile-only { display: none; }" in css
+
+
+@then("메뉴 목록은 버튼의 오른쪽 끝에 맞춰 열려 화면 밖으로 잘리지 않는다")
+def _menu_right_aligned(world):
+    css = world.client.get("/static/app.css").text
+    assert ".menu-list { left: auto; right: 0; max-width: calc(100vw - 32px); }" in css
