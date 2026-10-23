@@ -13,7 +13,7 @@ from tests.bdd.binding import bind
 from tests.fakes.delivery_env import DeliveryEnv
 from tests.keywords.browser import BROWSER
 
-bind(globals(), "31_mobile_reading.feature", [f"MOB-{n:02d}" for n in range(1, 17)])
+bind(globals(), "31_mobile_reading.feature", [f"MOB-{n:02d}" for n in range(1, 18)])
 
 APP_JS = Path("src/rss_hub/web/static/app.js")
 
@@ -271,3 +271,9 @@ def _swipe_to_all(world, ctx):
     script = world.get("/static/app.js").text
     assert 'swipeTarget.getAttribute("data-swipe-back")' in script
     assert "window.location.href = back;" in script
+
+
+@then("사이트 이름 표시는 알약(타원)이 아니라 모서리가 둥근 사각형이다")
+def _site_chip_rounded_rectangle(world, ctx):
+    assert '<a class="chip" href="/reader/feed/' in ctx.html.split('<div class="doc-meta">')[1]
+    assert ".doc-meta > a.chip { border-radius: 8px; }" in world.get("/static/app.css").text

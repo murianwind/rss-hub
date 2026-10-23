@@ -123,6 +123,7 @@ code { font-size: 0.9em; }
 .card-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .card-top .when { margin-left: auto; }
 .chip { display: inline-block; padding: 0 8px; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 600; text-decoration: none; line-height: 20px; position: relative; z-index: 1; }
+.doc-meta > a.chip { border-radius: 8px; }  /* 글 화면의 사이트 이름은 둥근 사각형 */
 .chip.topic { background: var(--panel); color: var(--muted); }
 .card h2 { margin: 6px 0; font-size: 16px; line-height: 1.45; }
 .card h2 a { color: var(--fg); text-decoration: none; }
