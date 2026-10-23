@@ -13,7 +13,7 @@ from tests.bdd.binding import bind
 from tests.fakes.delivery_env import DeliveryEnv
 from tests.keywords.browser import BROWSER
 
-bind(globals(), "31_mobile_reading.feature", [f"MOB-{n:02d}" for n in range(1, 14)])
+bind(globals(), "31_mobile_reading.feature", [f"MOB-{n:02d}" for n in range(1, 15)])
 
 APP_JS = Path("src/rss_hub/web/static/app.js")
 
@@ -235,3 +235,10 @@ def _refetch_in_menu(world, ctx):
 def _menu_right_aligned(world):
     css = world.client.get("/static/app.css").text
     assert ".menu-list { left: auto; right: 0; max-width: calc(100vw - 32px); }" in css
+
+
+@then("점 세 개 메뉴는 메타 줄의 오른쪽 끝을 기준으로 열린다")
+def _menu_anchored_to_meta_row(world):
+    narrow = narrow_css(world)
+    assert ".doc-meta { position: relative; }" in narrow
+    assert ".doc-meta .menu { position: static; margin-left: auto; }" in narrow
