@@ -276,4 +276,7 @@ def _swipe_to_all(world, ctx):
 @then("사이트 이름 표시는 알약(타원)이 아니라 모서리가 둥근 사각형이다")
 def _site_chip_rounded_rectangle(world, ctx):
     assert '<a class="chip" href="/reader/feed/' in ctx.html.split('<div class="doc-meta">')[1]
-    assert ".doc-meta > a.chip { border-radius: 8px; }" in world.get("/static/app.css").text
+    css = world.get("/static/app.css").text
+    assert "--radius-tag: 7px;" in css and "border-radius: 999px" not in css
+    chip_rule = css.split("\n.chip { ")[1].split("}")[0]
+    assert "border-radius: var(--radius-tag)" in chip_rule
