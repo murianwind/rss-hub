@@ -1210,7 +1210,10 @@ document.addEventListener(
   );
 
   var EDGE_SWIPE = { edge: 24, distance: 70, slope: 0.5 };
-  var back = document.querySelector("a.back");
+  // 글 화면은 어느 목록에서 왔든 전체 글 목록으로 돌아간다(data-swipe-back). 그 밖의 화면은 목록으로 링크를 쓴다
+  var swipeTarget = document.querySelector("[data-swipe-back]");
+  var backLink = document.querySelector("a.back");
+  var back = swipeTarget ? swipeTarget.getAttribute("data-swipe-back") : backLink && backLink.getAttribute("href");
   var start = null;
   document.addEventListener(
     "touchstart",
@@ -1233,7 +1236,7 @@ document.addEventListener(
       var dy = Math.abs(touch.clientY - start.y);
       start = null;
       if (dx >= EDGE_SWIPE.distance && dy <= dx * EDGE_SWIPE.slope) {
-        window.location.href = back.getAttribute("href");
+        window.location.href = back;
       }
     },
     { passive: true }

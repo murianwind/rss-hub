@@ -13,7 +13,7 @@ from tests.bdd.binding import bind
 from tests.fakes.delivery_env import DeliveryEnv
 from tests.keywords.browser import BROWSER
 
-bind(globals(), "31_mobile_reading.feature", [f"MOB-{n:02d}" for n in range(1, 15)])
+bind(globals(), "31_mobile_reading.feature", [f"MOB-{n:02d}" for n in range(1, 17)])
 
 APP_JS = Path("src/rss_hub/web/static/app.js")
 
@@ -242,3 +242,27 @@ def _menu_anchored_to_meta_row(world):
     narrow = narrow_css(world)
     assert ".doc-meta { position: relative; }" in narrow
     assert ".doc-meta .menu { position: static; margin-left: auto; }" in narrow
+
+
+@then("메타 줄은 좁은 화면에서 사이트 이름 뒤에서 줄이 바뀌고 점 구분 글자는 숨는다")
+def _meta_two_lines(world, ctx):
+    meta = ctx.html.split('<div class="doc-meta">')[1]
+    assert re.search(r'class="chip"[^>]*>[^<]*</a><span class="meta-break"></span>', meta)
+    assert '<span class="meta-dot">·</span>' in meta
+    narrow = narrow_css(world)
+    assert ".meta-break { flex-basis: 100%; height: 0; margin-top: -6px; }" in narrow
+    assert ".meta-dot { display: none; }" in narrow
+
+
+@given("사이트 목록에서 연 글이 있다")
+def _from_feed_list(world, ctx):
+    ctx.article = world.article(world.f_news, title="뉴스 글")
+
+
+@then("스와이프로 돌아갈 곳은 전체 글 목록이고 스크립트가 그 주소로 이동한다")
+def _swipe_to_all(world, ctx):
+    response = world.get(f"/a/{ctx.article}?back=/reader/feed/{world.f_news}")
+    assert 'class="doc" data-swipe-back="/reader"' in response.text
+    script = world.get("/static/app.js").text
+    assert 'swipeTarget.getAttribute("data-swipe-back")' in script
+    assert "window.location.href = back;" in script

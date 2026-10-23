@@ -22,11 +22,11 @@
   </div>
 </header>
 <div class="scroll detail-scroll">
-  <article class="doc">
+  <article class="doc" data-swipe-back="/reader">
     <div class="doc-fixed">
     <div class="doc-meta">
-      <a class="chip" href="/reader/feed/{{ feed.id }}">{{ feed.name }}</a>
-      {% if published %}<span>·</span><time datetime="{{ article.published_dt.isoformat() }}">{{ published }}</time>{% endif %}
+      <a class="chip" href="/reader/feed/{{ feed.id }}">{{ feed.name }}</a><span class="meta-break"></span>
+      {% if published %}<span class="meta-dot">·</span><time datetime="{{ article.published_dt.isoformat() }}">{{ published }}</time>{% endif %}
       {% for match in topic_matches %}
       <form method="post" action="/a/{{ article.id }}/topics/{{ match.topic_id }}/reject" class="inline-chip">
         <input type="hidden" name="next" value="{{ here }}">
