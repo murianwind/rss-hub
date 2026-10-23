@@ -132,6 +132,12 @@ def build_reader_router(
             "heading": heading,
             "heading_icon": HEADING_ICONS[scope.kind],
             "page": page,
+            "unread": reader.unread_count(
+                feed_id=scope.ident if scope.kind == "feed" else None,
+                category_id=scope.ident if scope.kind == "category" else None,
+                topic_id=scope.ident if scope.kind == "topic" else None,
+                only=ONLY_BOOKMARKS if scope.kind == "bookmarks" else "",
+            ),
             "base_path": base_path,
             "site_url": site_url if _plain_site(site_url) else "",
             "pages": max(1, -(-page.total // PER_PAGE)),
