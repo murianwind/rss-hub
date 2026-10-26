@@ -10,15 +10,16 @@ from dataclasses import dataclass
 
 from rss_hub.domain.discovery import describe_fetch_failure
 from rss_hub.domain.feed_url import FeedUrlError, validate_feed_url
-from rss_hub.domain.fulltext import extract_main_content
+from rss_hub.domain.fulltext import extract_main_content, find_page_redirect
 from rss_hub.domain.text import strip_html
-from rss_hub.services.ports import FetchError, PageFetcher
+from rss_hub.services.ports import FetchError, PageFetcher, PageResult
 from rss_hub.storage.articles import MAX_FULL_TEXT_CHARS, Article, ArticleRepository
 
 NO_CONTENT = "NoContent"  # 페이지는 받았지만 본문을 찾지 못했다
 SHORTER_THAN_RSS = "ShorterThanRss"  # 페이지 본문이 RSS 본문보다 짧다(유료 벽으로 잘린 페이지 등)
 MIN_RSS_TO_COMPARE = 300  # RSS 본문이 이만큼 되어야 "이미 전문"으로 보고 비교한다
 SHORTER_RATIO = 0.8  # 페이지 본문이 RSS 본문의 이 비율보다 짧으면 RSS 본문을 쓴다
+MAX_SHELL_HOPS = 2  # 스크립트로만 다른 주소로 보내는 껍데기 페이지를 따라가는 최대 횟수
 
 
 @dataclass(frozen=True)
@@ -48,7 +49,7 @@ class FullTextService:
         except FeedUrlError:
             return FullText(None, "skipped", "")  # 원문 주소가 없거나 쓸 수 없으면 기록하지 않는다
         try:
-            page = self._pages.fetch_page(link)
+            page = self._load_page(link)
         except FetchError as error:
             return self._failed(article, error.reason)
         html = extract_main_content(page.text, page.final_url, article.title)
@@ -59,6 +60,21 @@ class FullTextService:
             return self._failed(article, SHORTER_THAN_RSS)  # RSS가 이미 더 완전한 전문이다
         self._articles.save_full_text(article.id, html[:MAX_FULL_TEXT_CHARS])
         return FullText(html[:MAX_FULL_TEXT_CHARS], "ok")
+
+    def _load_page(self, link: str) -> PageResult:
+        """페이지를 가져온다. 스크립트로만 다른 주소로 보내는 짧은 껍데기면 그 주소를 따라간다.
+
+        따라가는 주소도 같은 주소 검사(사설망 차단)를 거치고, 횟수는 MAX_SHELL_HOPS까지다."""
+        page = self._pages.fetch_page(link)
+        for _ in range(MAX_SHELL_HOPS):
+            target = find_page_redirect(page.text, page.final_url)
+            if target is None:
+                break
+            try:
+                page = self._pages.fetch_page(validate_feed_url(target))
+            except FeedUrlError:
+                break
+        return page
 
     def _failed(self, article: Article, reason: str) -> FullText:
         self._articles.save_full_text_failure(article.id, reason)

@@ -14,7 +14,7 @@ from tests.fakes.viewer_world import open_world
 from tests.keywords.browser import BROWSER
 from tests.keywords.page import body
 
-bind(globals(), "18_full_text.feature", [f"FTX-{n:02d}" for n in range(1, 16)])
+bind(globals(), "18_full_text.feature", [f"FTX-{n:02d}" for n in range(1, 19)])
 
 LINK = "https://blog.example.com/post/1"
 FULL = "원문 전체에만 있는 본문 문장입니다. " * 30
@@ -447,3 +447,66 @@ def _inline_links(world, ctx):
 def _inline_links_kept(ctx):
     html = body(ctx.response.text)
     assert "공식 문서" in html and "출처:" in html and "https://b.example.com/y" in html
+
+
+@given(
+    "원문 페이지에 본문 문단 뒤로 이미지와 책 소개 줄과 인용 줄과 상품 주소 줄과 미리보기 카드가 이어지는 글이 있다"
+)
+def _brunch_lead_before_url(world, ctx):
+    promo = (
+        '<div class="wrap_item item_type_img"><img alt="book.png" src="https://img.example.com/b.png"/></div>'
+        '<p class="wrap_item"><span><br/></span></p>'
+        '<p class="wrap_item"><b>➯ 저자의 책 소개 줄입니다</b></p>'
+        '<p class="wrap_item">AI 관련 기업 29곳 상세 분석!</p>'
+        '<p class="wrap_item">“64개 기업 사례를 통해 돈의 흐름을 읽는다.”</p>'
+        f'<p class="wrap_item"><a class="link" href="{YES24}">{YES24}</a></p>'
+        + _og_card("빅테크로 살아남기 - 예스24", "신간 소개", YES24)
+    )
+    page = (
+        f'<html><body><div class="wrap_body"><p class="wrap_item">{FULL}</p>'
+        f'<p class="wrap_item">마지막 본문 문단입니다. {FULL}</p>{promo}</div></body></html>'
+    )
+    world.fetcher.page(LINK, page)
+    ctx.article = world.article(link=LINK)
+
+
+@then("마지막 본문 문단은 남고 이미지와 책 소개와 인용과 상품 주소와 카드는 하나도 없다")
+def _lead_gone(ctx):
+    html = body(ctx.response.text)
+    assert "마지막 본문 문단입니다" in _plain(html)
+    for noise in ("book.png", "➯", "책 소개", "29곳", "64개", "yes24", "빅테크로"):
+        assert noise not in html, noise
+
+
+MOBILE = "https://m.blog.example.com/PostView?no=1"
+
+
+def _shell(target):
+    return f"<script>\n\ttop.location.replace('{target.replace('/', chr(92) + '/')}');\n</script>"
+
+
+@given(
+    "글 주소가 스크립트로 모바일 글 주소로 보내는 짧은 페이지이고 모바일 주소에 본문이 있는 글이 있다"
+)
+def _naver_like(world, ctx):
+    world.fetcher.page(LINK, _shell(MOBILE))
+    world.fetcher.page(MOBILE, PAGE)
+    ctx.article = world.article(link=LINK)
+
+
+@then("모바일 주소의 본문이 전문으로 보이고 두 주소를 한 번씩 요청했다")
+def _followed(world, ctx):
+    assert "원문 전체에만 있는 본문 문장입니다" in body(ctx.response.text)
+    assert world.fetcher.page_calls == [LINK, MOBILE]
+
+
+@given(parsers.parse('글 주소가 "{target}"으로 보내는 짧은 페이지인 글이 있다'))
+def _bad_shell(world, ctx, target):
+    world.fetcher.page(LINK, _shell(LINK if target == "자기 자신" else target))
+    ctx.article = world.article(link=LINK)
+
+
+@then("전문을 가져오지 못했다고 알리고 요청은 세 번을 넘지 않았다")
+def _not_followed(world, ctx):
+    assert "원문 페이지에서 본문을 찾지 못했습니다" in ctx.response.text
+    assert len(world.fetcher.page_calls) <= 3

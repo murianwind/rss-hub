@@ -275,6 +275,8 @@ _DATE = re.compile(
 MAX_DATE_ZONE = 1500  # 글 맨 앞 이만큼 안의 날짜만 한 줄 날짜로 본다
 MAX_LABEL = 40  # 목록 바로 앞의 짧은 이름표(예: Cybersecurity Guides)
 MAX_PROMO_LABEL = 120  # 주소 줄 바로 앞의 소개 줄(예: [2027년 사업전략을 위한 책])
+MAX_PROMO_BLOCK = 200  # 글 끝의 주소 줄 앞에서 홍보로 함께 뺄 수 있는 덩어리 하나의 최대 글자 수
+MAX_PROMO_LEAD = 600  # 그렇게 함께 뺄 수 있는 앞쪽 덩어리 전체의 최대 글자 수
 _BARE_URL = re.compile(r"^https?://\S+$", re.I)
 LEAD_ZONE = (
     300  # 글 맨 앞 이만큼의 본문이 나오기 전까지가 "앞머리"(분류, 제목, 기자 줄 같은 군더더기 자리)
@@ -523,6 +525,36 @@ def _is_repeat(node: _Node, walk: _Walk) -> bool:
     return False
 
 
+def _promo_lead_start(children: list[_Node | str], url_index: int) -> int | None:
+    """글 끝의 주소 줄(url_index) 바로 앞에서 홍보로 함께 뺄 덩어리들이 시작하는 자리.
+
+    주소 줄 앞에는 이미지, 책 소개 줄 같은 짧은 덩어리가 이어지는 일이 많다. 긴 본문 문단을
+    만날 때까지(덩어리마다 MAX_PROMO_BLOCK자, 전체 MAX_PROMO_LEAD자 안에서) 거슬러 올라간다.
+    처음부터 끝까지 짧은 덩어리뿐이면 본문이 통째로 사라지므로 아무것도 빼지 않는다."""
+    budget, start = MAX_PROMO_LEAD, url_index
+    for index in range(url_index - 1, -1, -1):
+        child = children[index]
+        length = len(child.strip()) if isinstance(child, str) else _measure(child)[0]
+        if length > MAX_PROMO_BLOCK or length > budget:
+            break
+        budget -= length
+        start = index
+    return start if start > 0 else None
+
+
+def _promo_tail_start(node: _Node, walk: _Walk) -> int | None:
+    """node의 자식 중 글 끝의 홍보(주소 줄과 그 앞의 짧은 덩어리)가 시작하는 자리. 없으면 None."""
+    passed = _position(walk)
+    for index, child in enumerate(node.children):
+        if isinstance(child, str):
+            passed += len(child.strip())
+        elif _is_bare_url(child) and passed >= PROMO_ZONE * walk.total:
+            return _promo_lead_start(node.children, index)
+        else:
+            passed += _measure(child)[0]
+    return None
+
+
 def _serialize(node: _Node, walk: _Walk, depth: int = 0) -> None:
     if depth > MAX_DEPTH or walk.chars > MAX_OUTPUT_CHARS or walk.cut:
         return
@@ -546,7 +578,11 @@ def _serialize(node: _Node, walk: _Walk, depth: int = 0) -> None:
     walk.emit(f"<{node.tag}{rendered}>")
     if node.tag in _VOID:
         return
+    tail = _promo_tail_start(node, walk)
     for index, child in enumerate(node.children):
+        if tail is not None and index >= tail:
+            walk.cut = True  # 글 끝의 홍보(주소 줄과 그 앞의 소개)는 여기서부터 뺀다
+            break
         if isinstance(child, str):
             walk.text += len(child.strip())
             walk.emit(escape(child, quote=False))
@@ -571,6 +607,33 @@ def _is_label_of_noise(parent: _Node, index: int) -> bool:
     if following is None or isinstance(following, str):
         return False  # 바로 뒤가 글자거나 없으면 이름표가 아니다
     return _is_noise_block(following)
+
+
+# 자바스크립트나 메타 태그로만 다른 주소로 보내는 껍데기 페이지(예: 네이버 블로그의 글 주소)
+MAX_SHELL_LENGTH = 3000  # 이보다 길면 본문이 있는 진짜 페이지로 보고 따라가지 않는다
+_JS_REDIRECT = re.compile(
+    r"""(?:top|window|self|parent|document)?\.?location(?:\.href)?\s*(?:=|\.replace\(|\.assign\()\s*"""
+    r"""(['"])(?P<url>.+?)\1""",
+    re.I,
+)
+_META_REFRESH = re.compile(
+    r"""<meta[^>]+http-equiv\s*=\s*["']?refresh["']?[^>]*content\s*=\s*["']?\s*\d+\s*;\s*url\s*=\s*"""
+    r"""['"]?(?P<url>[^"'>\s]+)""",
+    re.I,
+)
+
+
+def find_page_redirect(html: str, base_url: str) -> str | None:
+    """짧은 껍데기 페이지가 자바스크립트(location.replace 등)나 meta refresh로 보내는 주소.
+
+    브라우저는 따라가지만 이 서비스는 스크립트를 실행하지 않아서 본문을 찾지 못한다. 없으면 None."""
+    if len(html) > MAX_SHELL_LENGTH:
+        return None
+    found = _JS_REDIRECT.search(html) or _META_REFRESH.search(html)
+    if found is None:
+        return None
+    target = urljoin(base_url, found.group("url").replace("\\/", "/").strip())
+    return target if urlsplit(target).scheme in ("http", "https") else None
 
 
 def _plain_length(clean_html: str) -> int:
