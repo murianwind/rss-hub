@@ -32,6 +32,7 @@ from rss_hub.services.model_chain import ModelChainService
 from rss_hub.services.model_scan import ModelScanService
 from rss_hub.services.page_source import PageFeedSource
 from rss_hub.services.ports import DiscoveryFetcher, LlmClient, PageFetcher, WebhookSender
+from rss_hub.services.retranslate import RetranslateService
 from rss_hub.services.settings import SettingsService
 from rss_hub.services.topic_probe import TopicProbe
 from rss_hub.storage.articles import ArticleRepository
@@ -282,6 +283,7 @@ def create_app(
             settings=service,
             templates=templates,
             fulltext=fulltext,
+            retranslate=RetranslateService(articles=articles, gateway=llm.gateway),
         )
     )
     importer = ImportService(

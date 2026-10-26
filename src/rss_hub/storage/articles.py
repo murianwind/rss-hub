@@ -309,6 +309,19 @@ class ArticleRepository:
                 (title_ko, summary_ko, json.dumps(list(topics)), model, STATUS_READY, article_id),
             )
 
+    def save_translation(
+        self, article_id: int, *, title_ko: str, summary_ko: str, model: str
+    ) -> bool:
+        """제목 번역과 요약만 바꾼다(상태, 주제, 발송 여부는 그대로). 글이 없으면 False."""
+        with self._db.connect() as conn:
+            return (
+                conn.execute(
+                    "UPDATE articles SET title_ko = ?, summary_ko = ?, llm_model = ? WHERE id = ?",
+                    (title_ko, summary_ko, model, article_id),
+                ).rowcount
+                > 0
+            )
+
     def bump_retry(self, article_id: int) -> int:
         """불량 응답을 받았을 때 재시도 횟수를 1 올리고 새 값을 돌려준다."""
         with self._db.connect() as conn:
