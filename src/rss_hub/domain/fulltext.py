@@ -46,7 +46,9 @@ _NEGATIVE_TOKEN = re.compile(
 # 이름 안에 이 낱말이 들어 있으면 잡음으로 본다(예: typo-sofia-eyebrow-2, post-meta)
 _NEGATIVE_PART = re.compile(
     r"eyebrow|kicker|byline|dateline|breadcrumb|crumbs|post-meta|entry-meta|article-meta|"
-    r"reading-?time|readtime|paywall|opengraph|link-?preview|link-?card|oembed",
+    r"reading-?time|readtime|paywall|opengraph|link-?preview|link-?card|oembed|"
+    r"ai-?summary|ai-?box|audio-?player|[-_]tts\b|related-(?:content|articles?|posts?|stories|links)|"
+    r"[-_]tout\b",
     re.I,
 )
 _STRUCTURAL = frozenset({"body", "main", "article"})
@@ -221,10 +223,17 @@ def _watch_address(url: str) -> str:
     return url
 
 
+def _is_decorative_video(node: _Node) -> bool:
+    """소리 조절 막대 없이 저절로 재생되거나 반복되는 영상은 움직이는 장식(GIF 대용)이다."""
+    return ("autoplay" in node.attrs or "loop" in node.attrs) and "controls" not in node.attrs
+
+
 def _media_link(node: _Node, base_url: str) -> tuple[str, str] | None:
     """영상, 소리, 영상 프레임이면 (글자, 주소). 쓸 수 없으면 None."""
     tag = node.tag
     if tag not in _FRAME_TAGS and tag not in ("video", "audio"):
+        return None
+    if tag == "video" and _is_decorative_video(node):
         return None
     raw = node.attrs.get("src") or (node.attrs.get("data") if tag == "object" else "")
     if not raw and tag in ("video", "audio"):
@@ -256,7 +265,7 @@ _MARKERS = frozenset({
     "leave a reply", "share this story", "share this article", "share this post", "tags",
     "explore more on these topics", "follow us", "about the author", "about the authors",
     "관련 글", "관련 기사", "관련 포스트", "함께 읽으면 좋은 글", "공유하기", "댓글", "태그",
-    "이전 글", "다음 글",
+    "이전 글", "다음 글", "posted in", "filed under",
 })  # fmt: skip
 _MARKER_PREFIXES = (
     "sign up for", "subscribe to", "subscribe and", "join our", "follow us",
@@ -282,6 +291,7 @@ LEAD_ZONE = (
     300  # 글 맨 앞 이만큼의 본문이 나오기 전까지가 "앞머리"(분류, 제목, 기자 줄 같은 군더더기 자리)
 )
 MAX_FURNITURE = 200  # 앞머리의 군더더기는 이보다 짧은 덩어리
+MIN_BODY_AFTER = 300  # 끝 안내처럼 보이는 줄 뒤에 이만큼의 본문이 더 있으면 글 중간의 상자로 본다
 PROMO_ZONE = 0.75  # 글의 이만큼 이후에 나온 홍보 문단만 뺀다
 _PROMO = re.compile(
     r"^(want more|check out|read more|read next|read also|sign up|subscribe|follow us|"
@@ -464,6 +474,7 @@ class _Walk:
         self.cut = False
         self.seen: set[str] = set()  # 이미 낸 문단(같은 문단을 두 번 내지 않는다)
         self.skipped = 0  # 건너뛴 글자 수(글에서 지나온 위치를 셀 때 낸 글자와 함께 센다)
+        self.top: _Node | None = None  # 본문으로 고른 덩어리(뒤에 본문이 더 있는지 볼 때의 한계)
 
     def emit(self, piece: str) -> None:
         self.out.append(piece)
@@ -475,6 +486,22 @@ def _position(walk: _Walk) -> int:
     return walk.text + walk.skipped
 
 
+def _body_follows(node: _Node, walk: _Walk) -> bool:
+    """node 뒤에 링크가 아닌 본문이 MIN_BODY_AFTER자 이상 더 이어지는가(글 중간에 낀 안내인가)."""
+    current = node
+    while current is not walk.top and current.parent is not None:
+        siblings = current.parent.children
+        later = siblings[siblings.index(current) + 1 :]
+        for sibling in later:
+            if isinstance(sibling, str) or sibling.dropped:
+                continue
+            text, links, _ = _measure(sibling)
+            if text - links >= MIN_BODY_AFTER and links * 5 <= text:
+                return True
+        current = current.parent
+    return False
+
+
 def _skip_block(node: _Node, walk: _Walk) -> bool:
     """글에 속하지 않는 한 덩어리인가(끝 안내는 walk.cut을 켠다)."""
     if node.tag in ("ul", "ol", "p", "div", "span", "section") and _is_noise_block(node):
@@ -484,7 +511,7 @@ def _skip_block(node: _Node, walk: _Walk) -> bool:
     own = _own_text(node, 100)
     if node.tag in _BLOCKS and 0 < len(own) <= 60:
         if _is_marker(own) and _position(walk) >= CUT_AFTER_SHARE * walk.total:
-            walk.cut = True
+            walk.cut = not _body_follows(node, walk)  # 글 중간의 관련 글 상자면 그 덩어리만 뺀다
             return True
         is_title = node.tag in ("h1", "h2", "h3") and _matches_title(own, walk.title)
         if walk.title and not walk.title_done and is_title:
@@ -655,6 +682,7 @@ def extract_main_content(html: str, base_url: str, title: str = "") -> str | Non
     if best is None:
         return None
     walk = _Walk(base_url, title, _measure(best)[0])
+    walk.top = best
     _serialize(best, walk)
     clean = sanitize_html("".join(walk.out), base_url)
     return clean if _plain_length(clean) >= MIN_TEXT_LENGTH else None
