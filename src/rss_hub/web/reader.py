@@ -19,7 +19,9 @@ from fastapi.templating import Jinja2Templates
 from rss_hub.domain.language import detect_language
 from rss_hub.domain.sanitize import sanitize_html
 from rss_hub.domain.text import strip_html
+from rss_hub.services import retranslate as retranslate_module
 from rss_hub.services.fulltext import FullText, FullTextService
+from rss_hub.services.retranslate import RetranslateService, needs_translation
 from rss_hub.services.settings import SettingsService
 from rss_hub.storage.articles import PUBLISHED_DATE, PUBLISHED_UNKNOWN, ArticleRepository
 from rss_hub.storage.feeds import FeedRepository
@@ -75,6 +77,16 @@ def published_text(moment: datetime, kind: str, zone: tzinfo) -> str:
     return local.strftime("%Y-%m-%d" if kind == PUBLISHED_DATE else "%Y-%m-%d %H:%M")
 
 
+RETRANSLATE_TOASTS = {
+    retranslate_module.OK: "retranslated",
+    retranslate_module.KOREAN: "retranslate_korean",
+    retranslate_module.NOT_CONFIGURED: "retranslate_no_key",
+    retranslate_module.BLOCKED: "retranslate_blocked",
+    retranslate_module.OUTAGE: "retranslate_outage",
+    retranslate_module.REJECTED: "retranslate_rejected",
+}
+
+
 def build_reader_router(
     *,
     reader: ReaderRepository,
@@ -84,6 +96,7 @@ def build_reader_router(
     settings: SettingsService,
     templates: Jinja2Templates,
     fulltext: FullTextService,
+    retranslate: RetranslateService,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -269,6 +282,7 @@ def build_reader_router(
             "back": checked_back or f"/reader/feed/{feed.id}",
             "here": here,
             "kept_here": f"{here}{'&' if '?' in here else '?'}kept=1",
+            "can_retranslate": needs_translation(article),
             "is_read": article.read_at is not None,
             "bookmarked": article.bookmarked_at is not None,
         }
@@ -286,6 +300,19 @@ def build_reader_router(
         return RedirectResponse(
             with_toast(target, "fulltext" if result.state == "ok" else "fulltext_failed"),
             status_code=303,
+        )
+
+    @router.post("/a/{article_id}/retranslate")
+    async def retranslate_article(request: Request, article_id: int) -> Response:
+        """제목 번역과 요약을 모델에 다시 요청한다(한국어가 아닌 글만)."""
+        form = await request.form()
+        article = articles.get(article_id)
+        if article is None:
+            return not_found(request, Scope("all"))
+        result = await run_in_threadpool(retranslate.run, article)
+        target = safe_path(form.get("next"), f"/a/{article_id}")
+        return RedirectResponse(
+            with_toast(target, RETRANSLATE_TOASTS[result.state]), status_code=303
         )
 
     return router

@@ -12,7 +12,9 @@ from rss_hub.storage.reader import ReaderRepository, Sidebar
 from rss_hub.web.ui import ModelUsageView
 
 
-def sidebar_state(side: Sidebar, model_usage: dict[str, int] | None = None) -> dict[str, object]:
+def sidebar_state(
+    side: Sidebar, model_usage: dict[str, int | str] | None = None
+) -> dict[str, object]:
     """사이드바의 모든 개수와 피드 상태(스크립트가 화면의 뱃지와 점을 고쳐 쓴다)."""
     return {
         "feed_order": [f.id for f in side.feeds],

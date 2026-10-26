@@ -172,7 +172,10 @@ def test_the_remaining_model_usage_is_shown_only_when_a_model_is_configured(worl
     assert world.get("/ui/state").json()["model_usage"] is None
     configure_model(world)
     assert model_text(world.get("/reader").text) == "967/1000"
-    assert world.get("/ui/state").json()["model_usage"] == {"remaining": 967, "cap": 1000}
+    assert without_time(world.get("/ui/state").json()["model_usage"]) == {
+        "remaining": 967,
+        "cap": 1000,
+    }
 
 
 def test_every_model_call_lowers_the_remaining_number_wherever_it_came_from(world):
@@ -405,6 +408,11 @@ def test_the_fixed_header_and_the_scrolling_body_have_their_own_layout_rules(wor
 # ---------- 모델 잔여 사용량: 서버가 알려 준 값("남은 호출/한도")을 쓴다 ----------
 
 
+def without_time(usage):
+    """갱신 시각은 따로 시험한다(37번 기능)."""
+    return {key: value for key, value in usage.items() if key != "updated"}
+
+
 def server_says(world, used, limit=1000):
     from rss_hub.services.ports import ServerUsage
 
@@ -419,7 +427,10 @@ def test_the_server_numbers_are_shown_with_the_server_limit(world):
     configure_model(world)
     server_says(world, 33)
     assert model_text(world.get("/reader").text) == "967/1000"
-    assert world.get("/ui/state").json()["model_usage"] == {"remaining": 967, "cap": 1000}
+    assert without_time(world.get("/ui/state").json()["model_usage"]) == {
+        "remaining": 967,
+        "cap": 1000,
+    }
 
 
 def test_calls_by_other_programs_with_the_same_key_are_counted_because_the_server_sums_them(world):
@@ -564,4 +575,7 @@ def test_refreshing_the_usage_reports_when_the_server_gives_no_number(world):
     response = post(world, "/ui/model-usage/refresh")
     assert response.status_code == 502 and "error" in response.json()
     server_says(world, 33)
-    assert post(world, "/ui/model-usage/refresh").json() == {"remaining": 967, "cap": 1000}
+    assert without_time(post(world, "/ui/model-usage/refresh").json()) == {
+        "remaining": 967,
+        "cap": 1000,
+    }

@@ -69,6 +69,12 @@ TOASTS = {
     "marked_read": "읽음으로 표시했습니다.",
     "fulltext": "원문에서 전문을 다시 가져왔습니다.",
     "fulltext_failed": "원문에서 전문을 가져오지 못했습니다.",
+    "retranslated": "제목 번역과 요약을 다시 만들었습니다.",
+    "retranslate_korean": "한국어 글은 번역하지 않습니다.",
+    "retranslate_no_key": "OpenRouter 키가 없어 모델을 부를 수 없습니다.",
+    "retranslate_blocked": "오늘 모델 호출 한도에 걸려 요청하지 못했습니다.",
+    "retranslate_outage": "모델이 응답하지 않아 다시 만들지 못했습니다.",
+    "retranslate_rejected": "모델 응답을 쓸 수 없어 이전 내용을 그대로 두었습니다.",
     "saved": "저장했습니다.",
     "added": "추가했습니다.",
     "deleted": "삭제했습니다.",
@@ -273,6 +279,9 @@ class _ServerUsageCache:
         self.server: ServerUsage | None = None
 
 
+MODEL_USAGE_TIME_FORMAT = "%m-%d %H:%M:%S"  # 서버에 물어본 시각(서비스 시간대, 초까지)
+
+
 class ModelUsageView:
     """사이드바에 보여 줄 모델 잔여 호출 수("남은 호출/한도"). 모델이 설정되어 있을 때만 값이 있다.
 
@@ -297,13 +306,13 @@ class ModelUsageView:
         self._cache = _ServerUsageCache()
         self._lock = threading.Lock()
 
-    def __call__(self) -> dict[str, int] | None:
+    def __call__(self) -> dict[str, int | str] | None:
         return self._read(force=False)
 
-    def refresh(self) -> dict[str, int] | None:
+    def refresh(self) -> dict[str, int | str] | None:
         return self._read(force=True)
 
-    def _read(self, *, force: bool) -> dict[str, int] | None:
+    def _read(self, *, force: bool) -> dict[str, int | str] | None:
         config = self._settings.snapshot()
         if not self._settings.has_openrouter_key() or not any(config.model_chain):
             return None
@@ -322,10 +331,14 @@ class ModelUsageView:
                 except Exception:  # 서버를 못 불러도 화면은 그려야 한다
                     server = None
                 cache.at, cache.count, cache.server = now, local, server
-            server = cache.server
+            server, asked_at = cache.server, cache.at
         if server is None:
             return None  # 서버에서 값을 받지 못하면 틀린 값 대신 보여 주지 않는다
-        return {"remaining": max(0, server.remaining), "cap": server.limit}
+        return {
+            "remaining": max(0, server.remaining),
+            "cap": server.limit,
+            "updated": asked_at.astimezone(config.timezone).strftime(MODEL_USAGE_TIME_FORMAT),
+        }
 
 
 def _current(request: Request) -> str:
@@ -348,7 +361,7 @@ def build_ui_context(
     clock: Clock,
     version: str,
     assets: str,
-    model_usage: Callable[[], dict[str, int] | None],
+    model_usage: Callable[[], dict[str, int | str] | None],
 ) -> Callable[[Request], dict[str, object]]:
     """모든 화면에 사이드바와 공통 값을 넣는다. 키는 ui_로 시작해서 화면 값과 겹치지 않는다."""
 

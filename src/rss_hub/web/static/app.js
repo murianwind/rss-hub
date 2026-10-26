@@ -286,6 +286,11 @@
     });
   }
 
+  function showUsageTime(updated) {
+    var stamp = document.querySelector("[data-model-usage-at]");
+    if (stamp && updated) stamp.textContent = updated;
+  }
+
   function applyState(state) {
     showMarkAll(state);
     if (!document.querySelector(".dragging")) sortFeeds(state.feed_order);
@@ -314,6 +319,7 @@
     var usage = document.querySelector("[data-model-usage]");
     if (usage && state.model_usage) {
       usage.textContent = state.model_usage.remaining + "/" + state.model_usage.cap;
+      showUsageTime(state.model_usage.updated);
     }
   }
 
@@ -381,8 +387,10 @@
           data = null;
         }
         var usage = document.querySelector("[data-model-usage]");
-        if (data && data.cap && usage) usage.textContent = data.remaining + "/" + data.cap;
-        else showToast("모델 잔여 사용량을 가져오지 못했습니다.");
+        if (data && data.cap && usage) {
+          usage.textContent = data.remaining + "/" + data.cap;
+          showUsageTime(data.updated);
+        } else showToast("모델 잔여 사용량을 가져오지 못했습니다.");
       })
       .catch(function () {
         showToast("모델 잔여 사용량을 가져오지 못했습니다.");

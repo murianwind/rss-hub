@@ -42,6 +42,12 @@
             <button type="submit" role="menuitem">{{ icon('refresh') }}<span>전문 다시 가져오기</span></button>
           </form>
           {% endif %}
+          {% if can_retranslate %}
+          <form method="post" action="/a/{{ article.id }}/retranslate" class="menu-mobile-only">
+            <input type="hidden" name="next" value="{{ here }}">
+            <button type="submit" role="menuitem">{{ icon('refresh') }}<span>제목 번역·요약 다시 요청</span></button>
+          </form>
+          {% endif %}
           <p class="menu-heading menu-mobile-only">특정 주제로</p>
           {% for t in topics %}
           {% set m = memberships.get(t.id) %}
@@ -61,7 +67,10 @@
     {% if show_original_title %}<p class="hint">{{ article.title }}</p>{% endif %}
     {% if article.summary_ko %}<details class="panel doc-summary" open><summary>요약</summary><p>{{ article.summary_ko }}</p></details>{% endif %}
     {% if fulltext_state == 'failed' %}<div class="banner" role="status">원문 전문을 가져오지 못해 RSS 본문을 보여 줍니다{% if fulltext_reason %}: {{ fulltext_reason }}{% endif %}</div>{% endif %}
-    {% if fulltext_state in ('ok', 'failed') %}<form method="post" action="/a/{{ article.id }}/fulltext" class="doc-tools menu-desktop-only"><input type="hidden" name="next" value="{{ here }}"><button type="submit" class="back">{{ icon('refresh') }}<span>전문 다시 가져오기</span></button></form>{% endif %}
+    {% if fulltext_state in ('ok', 'failed') or can_retranslate %}<div class="doc-tools menu-desktop-only">
+      {% if fulltext_state in ('ok', 'failed') %}<form method="post" action="/a/{{ article.id }}/fulltext"><input type="hidden" name="next" value="{{ here }}"><button type="submit" class="back">{{ icon('refresh') }}<span>전문 다시 가져오기</span></button></form>{% endif %}
+      {% if can_retranslate %}<form method="post" action="/a/{{ article.id }}/retranslate"><input type="hidden" name="next" value="{{ here }}"><button type="submit" class="back" title="모델에 제목 번역과 요약을 다시 요청합니다">{{ icon('refresh') }}<span>제목 번역·요약 다시 요청</span></button></form>{% endif %}
+    </div>{% endif %}
     </div>
     <div class="doc-scroll">
     <div class="article-body" {% if lang %}lang="{{ lang }}"{% endif %}>
