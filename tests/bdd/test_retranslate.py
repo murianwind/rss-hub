@@ -12,12 +12,17 @@ from tests.fakes.llm_client import failure, good, reply
 from tests.fakes.viewer_world import open_world
 from tests.keywords.browser import post
 
-bind(globals(), "38_retranslate.feature", [f"RTR-{n:02d}" for n in range(1, 7)])
+bind(globals(), "38_retranslate.feature", [f"RTR-{n:02d}" for n in range(1, 9)])
 
 KEY = "sk-or-v1-" + "a" * 32
 BUTTON = "제목 번역·요약 다시 요청"
 ENGLISH = "<p>Being authentic as a leader often means showing vulnerability. " * 3 + "</p>"
-OLD_TITLE, OLD_SUMMARY = "이전 제목", "이전 요약"
+ENGLISH_TITLE = "Share More Authentically as a Leader"
+# 번역에 실패해 원문 제목과 본문 발췌로 확정된 글의 값
+OLD_TITLE, OLD_SUMMARY = (
+    ENGLISH_TITLE,
+    "Being authentic as a leader often means showing vulnerability.",
+)
 
 
 @pytest.fixture
@@ -34,7 +39,7 @@ def ctx():
 
 def _english(world, ctx):
     ctx.article = world.article(
-        title="Share More Authentically as a Leader",
+        title=ENGLISH_TITLE,
         content=ENGLISH,
         ko=OLD_TITLE,
         summary=OLD_SUMMARY,
@@ -57,6 +62,23 @@ def _bookmarked(world, ctx):
 def _with_fulltext(world, ctx):
     _english(world, ctx)
     world.articles.save_full_text(ctx.article, "<p>FULLTEXT-MARKER 전문에만 있는 문장입니다.</p>")
+
+
+@given("번역과 요약이 끝난 영어 글이 있다")
+def _translated_english(world, ctx):
+    ctx.article = world.article(
+        title=ENGLISH_TITLE,
+        content=ENGLISH,
+        ko="리더로서 더 진솔하게 나누기",
+        summary="한국어 요약입니다.",
+    )
+
+
+@given("제목은 번역됐지만 요약은 영어 발췌인 영어 글이 있다")
+def _english_summary(world, ctx):
+    ctx.article = world.article(
+        title=ENGLISH_TITLE, content=ENGLISH, ko="리더로서 더 진솔하게 나누기", summary=OLD_SUMMARY
+    )
 
 
 @given("한국어 글이 있다")

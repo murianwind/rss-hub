@@ -21,7 +21,7 @@ from rss_hub.domain.sanitize import sanitize_html
 from rss_hub.domain.text import strip_html
 from rss_hub.services import retranslate as retranslate_module
 from rss_hub.services.fulltext import FullText, FullTextService
-from rss_hub.services.retranslate import RetranslateService, needs_translation
+from rss_hub.services.retranslate import RetranslateService, offers_retranslation
 from rss_hub.services.settings import SettingsService
 from rss_hub.storage.articles import PUBLISHED_DATE, PUBLISHED_UNKNOWN, ArticleRepository
 from rss_hub.storage.feeds import FeedRepository
@@ -282,7 +282,7 @@ def build_reader_router(
             "back": checked_back or f"/reader/feed/{feed.id}",
             "here": here,
             "kept_here": f"{here}{'&' if '?' in here else '?'}kept=1",
-            "can_retranslate": needs_translation(article),
+            "can_retranslate": offers_retranslation(article),
             "is_read": article.read_at is not None,
             "bookmarked": article.bookmarked_at is not None,
         }
