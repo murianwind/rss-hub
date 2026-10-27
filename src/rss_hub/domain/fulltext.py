@@ -714,6 +714,7 @@ def _plain_length(clean_html: str) -> int:
     return len(re.sub(r"\s+", "", re.sub(r"<[^>]*>", "", clean_html)))
 
 
+COVERAGE_COMPLETE = 0.9  # 이 이상이면 RSS 내용이 페이지에 거의 다 있다(잘린 글이 아니다)
 COVERAGE_MIN = 0.6  # RSS 내용 가운데 이 비율 이상이 추출 결과에 있어야 제대로 뽑은 것으로 본다
 MIN_REFERENCE = 100  # RSS 본문이 이만큼(공백과 부호를 뺀 글자 수)은 되어야 비교한다
 SEGMENT_KEY = 24  # RSS 문장을 추출 결과에서 찾을 때 문장 앞에서 이만큼(정규화 글자)만 본다
