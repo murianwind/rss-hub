@@ -630,3 +630,7 @@ details.acc-limit[open] > summary { margin-bottom: 8px; }
 .error-head .link-btn { margin-left: auto; }
 .error-message, .error-detail { overflow-wrap: anywhere; white-space: pre-wrap; }
 .copy-buffer { position: fixed; top: 0; left: 0; opacity: 0; pointer-events: none; }
+
+.pending-list .tag-next { color: var(--accent); font-size: 11px; }
+.pending-list .next-batch { background: var(--accent-soft); }
+.pending-note { color: var(--danger, #b45309); overflow-wrap: anywhere; }

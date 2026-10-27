@@ -332,3 +332,26 @@ def test_run_now_reports_an_unknown_job_and_does_nothing_while_stopping(env):
     assert runner.run_now("nonsense") == "unknown"
     runner.request_stop()
     assert runner.run_now("summarize") == "busy" and env.calls == {}
+
+
+def test_next_run_of_reports_the_next_slot_and_the_next_interval(env):
+    runner = env.runner()
+    assert runner.next_run_of("nothing") is None
+    # 아직 한 번도 실행하지 않았다: 지금 슬롯이 곧 실행되고 요약도 지금
+    now = env.clock.now()
+    assert runner.next_run_of("collect") == now.astimezone(KST).replace(second=0)
+    assert runner.next_run_of("summarize") == now
+    runner.tick()
+    env.clock.advance(seconds=20)
+    # 이번 슬롯은 실행했으니 다음 슬롯(5분 뒤), 요약은 시작한 지 20초 지났으니 40초 뒤
+    assert runner.next_run_of("collect") == (env.clock.now() - timedelta(seconds=20)).astimezone(
+        KST
+    ).replace(second=0) + timedelta(minutes=5)
+    assert runner.next_run_of("summarize") == env.clock.now() + timedelta(seconds=40)
+
+
+def test_next_run_of_is_none_while_the_job_is_running(env):
+    runner = env.runner()
+    with runner._lock:
+        runner._running.add("summarize")
+    assert runner.next_run_of("summarize") is None

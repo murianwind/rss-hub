@@ -39,6 +39,7 @@ from rss_hub.services.topic_probe import TopicProbe
 from rss_hub.storage.articles import ArticleRepository
 from rss_hub.storage.backup import BackupRepository
 from rss_hub.storage.database import Database
+from rss_hub.storage.deliveries import DeliveryRepository
 from rss_hub.storage.error_log import ErrorLogRepository
 from rss_hub.storage.feeds import FeedRepository
 from rss_hub.storage.import_staging import ImportStagingRepository
@@ -225,6 +226,7 @@ def create_app(
             clock=app_clock,
             sender=sender,
             error_log=error_log,
+            deliveries=DeliveryRepository(database, app_clock),
             runner=lambda: app.state.runner,
         )
     )

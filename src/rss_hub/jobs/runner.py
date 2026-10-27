@@ -17,7 +17,7 @@ from functools import partial
 from typing import Any
 
 from rss_hub.domain.error_log import KIND_JOB
-from rss_hub.domain.jobs import due_slot, interval_due
+from rss_hub.domain.jobs import due_slot, interval_due, next_interval_run, next_slot_start
 from rss_hub.jobs.progress import JobProgress
 from rss_hub.services.clock import Clock
 from rss_hub.services.error_log import NO_ERRORS, ErrorRecorder
@@ -139,6 +139,20 @@ class JobRunner:
     def progress_of(self, name: str) -> tuple[int, int] | None:
         """실행 중인 작업이 (마친 개수, 전체 개수)를 알리고 있으면 그 값."""
         return self._progress.get(name)
+
+    def next_run_of(self, name: str) -> datetime | None:
+        """작업이 다음에 실행될 시각. 모르는 작업이거나 지금 실행 중이면 None."""
+        job = next((j for j in self._jobs if j.name == name), None)
+        if job is None or name in self._running:
+            return None
+        now = self._clock.now()
+        record = self._records.get(name)
+        if isinstance(job, SlotJob):
+            last_slot = None if record is None else record.last_slot
+            local = now.astimezone(self._timezone())
+            return next_slot_start(local, last_slot, job.interval_minutes())
+        last = None if record is None else record.last_started_at
+        return next_interval_run(now, last, job.interval_seconds())
 
     def _due(self, job: Job, now: datetime) -> object | None:
         record = self._records.get(job.name)

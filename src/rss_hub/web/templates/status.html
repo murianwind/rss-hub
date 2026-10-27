@@ -21,6 +21,7 @@
       <span class="label">{{ label }}
         {% if running %}<span class="hint block running">실행 중…{% if job.progress %} {{ job.progress }}{% endif %}</span>
         {% elif not waiting %}<span class="hint block">{{ '등록된 피드가 없습니다' if name == 'collect' else '대기 글이 없습니다' }}</span>{% endif %}
+        {% if not running and next_runs.get(name) %}<span class="hint block" data-next-run="{{ name }}">다음 실행 {{ next_runs[name].at }} ({{ next_runs[name].in }}){% if name == 'summarize' and collected_count %} · 한 번에 {{ summarize_batch }}건{% endif %}</span>{% endif %}
       </span>
       <span class="row run-actions">
         {% if count %}<span class="state">{{ count }}</span>{% endif %}
@@ -46,7 +47,7 @@
     {% if rows %}
     <h3 class="acc-sub">{{ heading }} 글{% if (ready_count if kind == 'ready' else collected_count) > rows | length %} <span class="hint">오래된 {{ rows | length }}개만 표시</span>{% endif %}</h3>
     <ul class="pending-list" data-pending="{{ kind }}">
-      {% for a in rows %}<li><span class="pending-title" title="{{ a.title }}">{{ a.title }}</span><span class="hint">{{ a.feed }} · {{ a.why }}</span></li>{% endfor %}
+      {% for a in rows %}<li{% if a.next_batch %} class="next-batch"{% endif %}><span class="pending-title" title="{{ a.title }}">{% if a.next_batch %}<b class="tag-next">다음 차례</b> {% endif %}{{ a.title }}</span><span class="hint">{{ a.feed }} · {{ a.waited }} 수집 · {{ a.why }}</span>{% if a.note %}<span class="hint pending-note">{{ a.note }}</span>{% endif %}</li>{% endfor %}
     </ul>
     {% endif %}
     {% endfor %}

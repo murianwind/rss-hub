@@ -5,7 +5,7 @@
 - 요약과 발송은 마지막 시작 시각으로부터 정해진 초가 지나면 실행한다.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 SLOT_GRACE_SECONDS = 60  # 슬롯이 시작되고 이 시간 안에만 실행한다
 
@@ -33,3 +33,24 @@ def due_slot(
 
 def interval_due(now: datetime, last_started: datetime | None, interval_seconds: int) -> bool:
     return last_started is None or (now - last_started).total_seconds() >= interval_seconds
+
+
+def next_slot_start(
+    local_now: datetime,
+    last_slot: datetime | None,
+    interval_minutes: int,
+    grace_seconds: int = SLOT_GRACE_SECONDS,
+) -> datetime:
+    """다음에 실행될 슬롯의 시작. 지금 실행할 슬롯이 있으면 그 슬롯, 아니면 다음 슬롯."""
+    if due_slot(local_now, last_slot, interval_minutes, grace_seconds) is not None:
+        return latest_slot_start(local_now, interval_minutes)
+    return latest_slot_start(local_now, interval_minutes) + timedelta(minutes=interval_minutes)
+
+
+def next_interval_run(
+    now: datetime, last_started: datetime | None, interval_seconds: int
+) -> datetime:
+    """다음에 실행될 시각. 이미 때가 되었거나 한 번도 실행하지 않았으면 지금."""
+    if last_started is None:
+        return now
+    return max(now, last_started + timedelta(seconds=interval_seconds))
