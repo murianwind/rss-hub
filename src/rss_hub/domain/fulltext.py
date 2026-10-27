@@ -730,19 +730,42 @@ def _visible_text(html: str) -> str:
     return unescape_entities(re.sub(r"<[^>]*>", " ", html))
 
 
+_BLOCK_TAG = re.compile(
+    r"</?(?:p|div|li|ul|ol|h[1-6]|br|hr|tr|blockquote|figure|figcaption|section|article|pre)\b[^>]*>",
+    re.I,
+)
+_URL_ONLY = re.compile(r"^(?:https?://|www\.)\S+$", re.I)
+_FEED_FOOTER = re.compile(
+    r"^the post .+ appeared first on ", re.I
+)  # 워드프레스 피드 끝의 자동 문구
+
+
+def _reference_keys(reference_html: str) -> list[str]:
+    """RSS 본문을 줄과 문장으로 나눠 추출 결과에서 찾을 열쇠(문장 앞부분)로 만든다.
+
+    블록 태그(문단, 목록, 제목, 줄바꿈)에서도 나눠서, 문장 부호 없는 제목과 목록 항목이 앞뒤 글과
+    한 덩어리로 붙지 않게 한다. 주소만 있는 줄과 피드가 끝에 붙이는 자동 문구는 추출기가 일부러
+    빼는 것이라 찾지 않는다."""
+    text = unescape_entities(re.sub(r"<[^>]*>", " ", _BLOCK_TAG.sub("\n", reference_html)))
+    keys = []
+    for line in text.split("\n"):
+        for part in _SENTENCES.split(line):
+            part = " ".join(part.split())
+            if not part or _URL_ONLY.match(part) or _FEED_FOOTER.match(part):
+                continue
+            if len(key := _normal(part)[:SEGMENT_KEY]) >= SEGMENT_KEY:
+                keys.append(key)
+    return keys
+
+
 def reference_coverage(reference_html: str, extracted_html: str) -> float | None:
     """RSS 본문의 문장 가운데 추출 결과에 들어 있는 비율. 비교할 만큼 RSS가 길지 않으면 None.
 
     문장 앞부분(SEGMENT_KEY자)이 추출 결과에 있으면 들어 있는 것으로 센다. RSS가 앞부분만 담은
     요약이어도 그 앞부분이 글에 있으면 되므로 일부만 발행하는 피드도 같은 기준으로 본다."""
-    reference = _visible_text(reference_html)
-    if len(_normal(reference)) < MIN_REFERENCE:
+    if len(_normal(_visible_text(reference_html))) < MIN_REFERENCE:
         return None
-    keys = [
-        key
-        for part in _SENTENCES.split(reference)
-        if len(key := _normal(part)[:SEGMENT_KEY]) >= SEGMENT_KEY
-    ]
+    keys = _reference_keys(reference_html)
     if not keys:
         return None
     haystack = _normal(_visible_text(extracted_html))
