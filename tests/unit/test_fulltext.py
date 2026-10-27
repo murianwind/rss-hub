@@ -7,7 +7,15 @@ import time
 
 import pytest
 
-from rss_hub.domain.fulltext import MIN_TEXT_LENGTH, extract_main_content
+from rss_hub.domain.fulltext import (
+    MAX_SHELL_LENGTH,
+    MIN_TEXT_LENGTH,
+    extract_article,
+    extract_main_content,
+    find_page_redirect,
+    reference_coverage,
+    reference_is_complete,
+)
 
 LONG = "본문 문장입니다. " * 40  # 충분히 긴 본문
 
@@ -858,3 +866,91 @@ def test_a_category_span_in_the_same_block_as_the_text_is_removed_and_the_image_
     html = extract_main_content(page(f"<main>{block}</main>"), "https://x.example.com/p") or ""
     assert "Television" not in re.sub(r"<[^>]+>", " ", html)
     assert "https://cdn.example.com/hero.jpg" in html
+
+
+def test_a_bare_url_after_only_short_blocks_does_not_remove_the_whole_text():
+    """주소 줄 앞이 처음까지 짧은 덩어리뿐이면 본문이 통째로 사라지므로 주소 줄만 뺀다."""
+    paras = [("가나다 " * 30) + f"끝{n}." for n in range(3)]
+    html = page(
+        "<article>" + "".join(f"<p>{para}</p>" for para in paras) + ""
+        "<p><a href='https://a.example.com/x'>https://a.example.com/x</a></p></article>"
+    )
+    text = extract_main_content(html, "https://x.example.com/post")
+    assert text is not None and all(para in text for para in paras)
+    assert "a.example.com" not in text
+
+
+def test_the_walk_back_stops_at_a_long_paragraph_and_at_the_size_budget():
+    paras = [("가나다 " * 47) + f"끝{n}." for n in range(5)]  # 약 190자: 600자 안에서 셋까지 빠진다
+    shorts = "".join(f"<p>{para}</p>" for para in paras)
+    html = page(
+        f"<article><p>{LONG}</p>{shorts}"
+        "<p><a href='https://a.example.com/x'>https://a.example.com/x</a></p></article>"
+    )
+    text = extract_main_content(html, "https://x.example.com/post")
+    assert text is not None and "본문 문장입니다" in text and "a.example.com" not in text
+    assert [para in text for para in paras] == [True, True, False, False, False]
+
+
+NAVER_SHELL = (
+    "<script language='JavaScript'>\n\ttop.location.replace('https:\\/\\/m.blog.naver.com"
+    "\\/PostView.naver?blogId=a&logNo=1');\n</script>"
+)
+
+
+@pytest.mark.parametrize(
+    ("html", "expected"),
+    [
+        (NAVER_SHELL, "https://m.blog.naver.com/PostView.naver?blogId=a&logNo=1"),
+        ("<script>window.location.href = '/next';</script>", "https://a.example.com/next"),
+        ('<script>location = "https://b.example.com/x"</script>', "https://b.example.com/x"),
+        ('<meta http-equiv="refresh" content="0; url=/moved">', "https://a.example.com/moved"),
+        ("<p>그냥 짧은 글입니다.</p>", None),
+        ("<script>location.replace('javascript:alert(1)')</script>", None),
+        ("<script>location.replace('/x')</script>" + "x" * MAX_SHELL_LENGTH, None),
+    ],
+)
+def test_a_short_shell_page_that_only_redirects_gives_its_target(html, expected):
+    assert find_page_redirect(html, "https://a.example.com/post") == expected
+
+
+def sentences(tag, count):
+    return " ".join(
+        f"{tag} {n}번째로 나오는 문장이고 다른 문장과 겹치지 않도록 길게 씁니다."
+        for n in range(count)
+    )
+
+
+def test_the_coverage_is_the_share_of_rss_sentences_found_in_the_extracted_text():
+    reference = f"<p>{sentences('가', 4)}</p>"
+    assert reference_coverage(reference, f"<p>{sentences('가', 4)}</p>") == 1.0
+    assert reference_coverage(reference, f"<p>{sentences('가', 2)}</p>") == 0.5
+    assert reference_coverage(reference, "<p>전혀 다른 글</p>") == 0.0
+
+
+def test_a_short_rss_body_is_not_compared():
+    assert reference_coverage("<p>짧은 요약</p>", "<p>아무 글</p>") is None
+    assert reference_coverage("<p>" + "가 " * 80 + "</p>", "<p>아무 글</p>") is None  # 문장이 없다
+
+
+@pytest.mark.parametrize(
+    ("reference", "expected"),
+    [
+        (sentences("전", 12), True),
+        (sentences("전", 12) + " […]", False),
+        (sentences("전", 12) + " Read more", False),
+        (sentences("전", 12) + "...", False),
+        (sentences("전", 2), False),
+    ],
+)
+def test_the_rss_body_is_complete_only_when_long_and_not_cut_off(reference, expected):
+    assert reference_is_complete(f"<p>{reference}</p>") is expected
+
+
+def test_a_page_whose_text_never_reaches_the_rss_is_returned_with_the_best_coverage():
+    reference = f"<p>{sentences('RSS', 8)}</p>"
+    html = page(f"<article><p>{sentences('딴', 8)}</p></article>")
+    result = extract_article(html, "https://x.example.com/post", "", reference)
+    assert result is not None and result.coverage == 0.0
+    assert extract_article(html, "https://x.example.com/post").coverage is None
+    assert extract_article("", "https://x.example.com/post", "", reference) is None

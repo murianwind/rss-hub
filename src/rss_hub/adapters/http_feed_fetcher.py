@@ -12,7 +12,7 @@ from rss_hub.version import get_version
 
 DEFAULT_TIMEOUT = (4.0, 12.0)  # (연결, 읽기) 초
 DEFAULT_MAX_BYTES = 5_000_000
-MAX_PAGE_BYTES = 1_000_000  # 웹페이지는 피드보다 작게 제한한다
+MAX_PAGE_BYTES = 5_000_000  # 웹페이지(글 페이지는 스크립트와 데이터로 1MB를 넘기도 한다)
 CHUNK_SIZE = 65_536
 
 

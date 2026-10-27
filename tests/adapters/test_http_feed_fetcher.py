@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from rss_hub.adapters.http_feed_fetcher import RequestsFeedFetcher
+from rss_hub.adapters.http_feed_fetcher import MAX_PAGE_BYTES, RequestsFeedFetcher
 from rss_hub.domain.dates import parse_entry_datetime
 from rss_hub.domain.guid import select_guid
 from rss_hub.services.ports import FetchError
@@ -239,8 +239,12 @@ def test_an_error_status_is_a_failure(fetcher, server, status):
     assert info.value.reason == f"HTTP {status}"
 
 
-def test_a_page_over_one_megabyte_is_refused(fetcher, server):
-    server.serve("/big", body=b"x" * 1_100_000)
+def test_a_page_over_the_page_limit_is_refused_but_a_page_over_one_megabyte_is_read(
+    fetcher, server
+):
+    server.serve("/over", body=b"x" * 1_100_000)  # 글 페이지는 스크립트로 1MB를 넘기도 한다
+    assert len(fetcher.fetch_page(server.url("/over")).text) == 1_100_000
+    server.serve("/big", body=b"x" * (MAX_PAGE_BYTES + 1))
     with pytest.raises(FetchError) as info:
         fetcher.fetch_page(server.url("/big"))
     assert info.value.reason == "TooLarge"
