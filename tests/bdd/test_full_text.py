@@ -14,7 +14,7 @@ from tests.fakes.viewer_world import open_world
 from tests.keywords.browser import BROWSER
 from tests.keywords.page import body
 
-bind(globals(), "18_full_text.feature", [f"FTX-{n:02d}" for n in range(1, 25)])
+bind(globals(), "18_full_text.feature", [f"FTX-{n:02d}" for n in range(1, 27)])
 
 LINK = "https://blog.example.com/post/1"
 FULL = "원문 전체에만 있는 본문 문장입니다. " * 30
@@ -641,3 +641,41 @@ def _failure_detail(ctx):
     assert (
         f"(받은 페이지 {len(page)}자, blog.example.com, 다른 주소로 0번 이동)" in ctx.response.text
     )
+
+
+FRAME_TARGET = "https://blog.example.com/PostView?no=1&frame=1"
+
+
+@given(
+    "글 주소가 mainFrame 프레임으로 본문 주소를 가리키는 짧은 페이지이고 그 주소에 본문이 있는 글이 있다"
+)
+def _frame_shell(world, ctx):
+    shell = (
+        "<html><head><title>블로그</title></head><body>"
+        '<iframe id="ad" src="https://ads.example.com/x"></iframe>'
+        '<iframe id="mainFrame" name="mainFrame" src="/PostView?no=1&amp;frame=1"></iframe>'
+        "</body></html>"
+    )
+    world.fetcher.page(LINK, shell)
+    world.fetcher.page(FRAME_TARGET.replace("&frame", "&amp;frame"), PAGE)
+    ctx.article = world.article(link=LINK)
+
+
+@then("본문 프레임 주소의 본문이 전문으로 보이고 두 주소를 한 번씩 요청했다")
+def _frame_followed(world, ctx):
+    assert "원문 전체에만 있는 본문 문장입니다" in body(ctx.response.text)
+    assert len(world.fetcher.page_calls) == 2 and world.fetcher.page_calls[0] == LINK
+
+
+@given("글 주소가 제목이 있고 본문은 없는 짧은 페이지를 돌려주는 글이 있다")
+def _titled_empty(world, ctx):
+    world.fetcher.page(
+        LINK,
+        "<html><head><title>접근 제한 | 블로그</title></head><body><p>로그인이 필요합니다.</p></body></html>",
+    )
+    ctx.article = world.article(link=LINK)
+
+
+@then("실패 안내에 받은 페이지의 제목이 들어 있다")
+def _title_in_failure(ctx):
+    assert ', 제목 "접근 제한 / 블로그")' in ctx.response.text.replace("&#34;", '"')

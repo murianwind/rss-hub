@@ -645,6 +645,7 @@ def _is_label_of_noise(parent: _Node, index: int) -> bool:
 
 
 # 자바스크립트나 메타 태그로만 다른 주소로 보내는 껍데기 페이지(예: 네이버 블로그의 글 주소)
+MAX_INPUT_SCAN = 200_000  # 제목을 찾으려고 앞에서 이만큼만 본다
 MAX_SHELL_LENGTH = 3000  # 이보다 길면 본문이 있는 진짜 페이지로 보고 따라가지 않는다
 _JS_REDIRECT = re.compile(
     r"""(?:top|window|self|parent|document)?\.?location(?:\.href)?\s*(?:=|\.replace\(|\.assign\()\s*"""
@@ -658,17 +659,55 @@ _META_REFRESH = re.compile(
 )
 
 
-def find_page_redirect(html: str, base_url: str) -> str | None:
-    """짧은 껍데기 페이지가 자바스크립트(location.replace 등)나 meta refresh로 보내는 주소.
+_FRAME_TAG = re.compile(r"<(?:iframe|frame)\b[^>]*>", re.I)
+_ATTR = re.compile(r"""([\w-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')""")
+_MAIN_FRAME = re.compile(r"main[-_]?frame|post[-_]?view", re.I)
+_TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
+MAX_TITLE_SHOWN = 60
 
-    브라우저는 따라가지만 이 서비스는 스크립트를 실행하지 않아서 본문을 찾지 못한다. 없으면 None."""
+
+def _main_frame_source(html: str) -> str | None:
+    """프레임으로 글을 담은 껍데기(예: 네이버 블로그의 mainFrame)의 본문 프레임 주소.
+
+    페이지에 보이는 글자가 거의 없을 때만 껍데기로 본다.
+
+    이름이 mainFrame처럼 본문을 가리키는 프레임이 있으면 그것을,
+    없으면 프레임이 하나뿐일 때 그것을 쓴다."""
+    visible = re.sub(r"<(script|style)\b.*?</\1>|<[^>]*>", "", html, flags=re.S | re.I)
+    if len(visible.strip()) >= MIN_TEXT_LENGTH:
+        return (
+            None  # 글자가 있는 페이지에 영상이나 광고 프레임이 하나 끼어 있는 것은 껍데기가 아니다
+        )
+    frames = []
+    for tag in _FRAME_TAG.findall(html):
+        attrs = {m.group(1).lower(): m.group(2) or m.group(3) or "" for m in _ATTR.finditer(tag)}
+        if attrs.get("src"):
+            frames.append(attrs)
+    named = [f for f in frames if _MAIN_FRAME.search(f.get("id", "") + " " + f.get("name", ""))]
+    chosen = named[0] if named else (frames[0] if len(frames) == 1 else None)
+    return None if chosen is None else chosen["src"]
+
+
+def find_page_redirect(html: str, base_url: str) -> str | None:
+    """짧은 껍데기 페이지가 스크립트, meta refresh, 본문 프레임으로 보내는 주소.
+
+    브라우저는 따라가지만 이 서비스는 스크립트를 실행하지 않아 본문을 찾지 못한다. 없으면 None."""
     if len(html) > MAX_SHELL_LENGTH:
         return None
     found = _JS_REDIRECT.search(html) or _META_REFRESH.search(html)
-    if found is None:
+    raw = found.group("url") if found else _main_frame_source(html)
+    if raw is None:
         return None
-    target = urljoin(base_url, found.group("url").replace("\\/", "/").strip())
+    target = urljoin(base_url, raw.replace("\\/", "/").strip())
     return target if urlsplit(target).scheme in ("http", "https") else None
+
+
+def page_title(html: str) -> str:
+    """페이지의 <title>(한 줄로, MAX_TITLE_SHOWN자까지). 없으면 빈 글자."""
+    found = _TITLE.search(html[:MAX_INPUT_SCAN])
+    if found is None:
+        return ""
+    return " ".join(unescape_entities(found.group(1)).split())[:MAX_TITLE_SHOWN]
 
 
 def _plain_length(clean_html: str) -> int:

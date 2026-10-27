@@ -9,9 +9,15 @@
 <div class="banner error" role="alert">서비스 주소 필요: 발송을 기다리는 글이 {{ waiting_for_address }}개 있습니다. <a href="/settings">설정 화면</a>에서 서비스 주소를 지정하세요.</div>
 {% endif %}
 
-<div class="status-grid">
-<section class="status-card panel">
+<div class="status-tabs" data-tabs>
+<div class="tab-bar" role="tablist" aria-label="상태 화면 구역">
+  <a class="tab" role="tab" href="#panel-current" data-tab="panel-current">현재 상태</a>
+  <a class="tab" role="tab" href="#panel-jobs" data-tab="panel-jobs">작업 기록</a>
+  <a class="tab" role="tab" href="#panel-checks" data-tab="panel-checks">설정 점검</a>
+</div>
+<section class="status-card panel tab-panel" id="panel-current" role="tabpanel">
   <h2>현재 상태</h2>
+  <div class="current-main">
   {% set by_name = {} %}{% for j in jobs %}{% set _ = by_name.update({j.name: j}) %}{% endfor %}
   <ul class="checks" data-current>
     {% for name, label, count, button, waiting in (('deliver', '발송 대기 글', ready_count ~ '개', '지금 발송', ready_count), ('summarize', '요약 대기 글', collected_count ~ '개', '지금 요약', collected_count), ('collect', '피드 수집', '', '지금 수집', feed_count)) %}
@@ -40,8 +46,10 @@
   {% endfor %}
   </ul>
   {% endif %}
+  </div>
+  <div class="current-pending">
   {% if pending.ready or pending.collected %}
-  <details class="pending-box">
+  <details class="pending-box" open>
     <summary>대기 중인 글 보기 <span class="hint">발송 {{ ready_count }} · 요약 {{ collected_count }}</span></summary>
     {% for kind, heading, rows in (('ready', '발송 대기', pending.ready), ('collected', '요약 대기', pending.collected)) %}
     {% if rows %}
@@ -53,9 +61,49 @@
     {% endfor %}
   </details>
   {% endif %}
+  </div>
 </section>
 
-<section class="status-card panel error-log" id="error-log">
+<section class="status-card panel tab-panel" id="panel-jobs" role="tabpanel">
+  <h2>작업 기록</h2>
+  <ul class="checks job-list" data-jobs data-jobs-running="{{ 1 if jobs_running else 0 }}">
+  {% for job in jobs %}
+    <li class="check job-row" data-job="{{ job.name }}">
+      <div class="job-main">
+        <span class="job-name">{{ job.label }}</span>
+        {% if job.running %}<span class="state running">실행 중…{% if job.progress %} {{ job.progress }}{% endif %}</span>{% else %}<span class="state {{ 'ok' if job.status == 'ok' else 'todo' }}">{{ job.status or '대기' }}</span>{% endif %}
+      </div>
+      <div class="job-detail hint">
+        마지막 성공 {{ job.last_ok or '없음' }}{% if job.skipped %} · 넘긴 차례 {{ job.skipped }}회{% endif %}
+        {% if job.result %}<br>결과: {{ job.result }}{% endif %}
+      </div>
+    </li>
+  {% endfor %}
+  </ul>
+  <p class="hint">작업이 돌 때마다 남기는 기록입니다. 넘긴 차례: 이전 실행이 끝나기 전에 다음 차례가 와서 건너뛴 횟수로, 글이 밀린다는 뜻이 아닙니다(밀린 글은 왼쪽 대기 글 수에서 봅니다). 처리할 글이 없으면 호출도 메시지도 없이 바로 끝나고 결과에 그렇게 적힙니다.</p>
+</section>
+
+<section class="status-card panel tab-panel" id="panel-checks" role="tabpanel">
+  <h2>설정 점검</h2>
+  <ul class="checks">
+  {% for item in checklist %}
+    <li class="check" data-item="{{ item.key }}" data-ready="{{ 'true' if item.ready else 'false' }}"><span class="label">{{ item.label }}{% if not item.required %}<span class="hint block">선택 · 없으면 번역과 요약 없이 원문 제목과 링크만 알립니다</span>{% endif %}</span><span class="state {{ 'ok' if item.ready else 'todo' }}">{{ '설정됨' if item.ready else ('미설정' if item.required else '선택') }}</span></li>
+  {% endfor %}
+  </ul>
+  {% if all_ready %}
+  <p class="note">필요한 설정이 모두 채워졌습니다.</p>
+  {% else %}
+  <p class="note">아래 항목은 <a href="/settings">설정 화면</a>에서 채워 주세요.</p>
+  {% endif %}
+</section>
+</div>
+
+<div class="status-tabs" data-tabs>
+<div class="tab-bar" role="tablist" aria-label="상태 화면 구역">
+  <a class="tab" role="tab" href="#error-log" data-tab="error-log">오류 기록 <b class="tab-count{% if error_total %} warn{% endif %}">{{ error_total }}</b></a>
+  <a class="tab" role="tab" href="#panel-history" data-tab="panel-history">변경 이력</a>
+</div>
+<section class="status-card panel tab-panel error-log" id="error-log" role="tabpanel">
   <h2>오류 기록 <span class="hint">{{ error_total }}건</span></h2>
   <details class="acc-limit" open>
     <summary>유형별로 보기와 복사</summary>
@@ -86,40 +134,7 @@
   </details>
 </section>
 
-<section class="status-card panel">
-  <h2>작업 기록</h2>
-  <ul class="checks job-list" data-jobs data-jobs-running="{{ 1 if jobs_running else 0 }}">
-  {% for job in jobs %}
-    <li class="check job-row" data-job="{{ job.name }}">
-      <div class="job-main">
-        <span class="job-name">{{ job.label }}</span>
-        {% if job.running %}<span class="state running">실행 중…{% if job.progress %} {{ job.progress }}{% endif %}</span>{% else %}<span class="state {{ 'ok' if job.status == 'ok' else 'todo' }}">{{ job.status or '대기' }}</span>{% endif %}
-      </div>
-      <div class="job-detail hint">
-        마지막 성공 {{ job.last_ok or '없음' }}{% if job.skipped %} · 넘긴 차례 {{ job.skipped }}회{% endif %}
-        {% if job.result %}<br>결과: {{ job.result }}{% endif %}
-      </div>
-    </li>
-  {% endfor %}
-  </ul>
-  <p class="hint">작업이 돌 때마다 남기는 기록입니다. 넘긴 차례: 이전 실행이 끝나기 전에 다음 차례가 와서 건너뛴 횟수로, 글이 밀린다는 뜻이 아닙니다(밀린 글은 왼쪽 대기 글 수에서 봅니다). 처리할 글이 없으면 호출도 메시지도 없이 바로 끝나고 결과에 그렇게 적힙니다.</p>
-</section>
-
-<section class="status-card panel">
-  <h2>설정 점검</h2>
-  <ul class="checks">
-  {% for item in checklist %}
-    <li class="check" data-item="{{ item.key }}" data-ready="{{ 'true' if item.ready else 'false' }}"><span class="label">{{ item.label }}{% if not item.required %}<span class="hint block">선택 · 없으면 번역과 요약 없이 원문 제목과 링크만 알립니다</span>{% endif %}</span><span class="state {{ 'ok' if item.ready else 'todo' }}">{{ '설정됨' if item.ready else ('미설정' if item.required else '선택') }}</span></li>
-  {% endfor %}
-  </ul>
-  {% if all_ready %}
-  <p class="note">필요한 설정이 모두 채워졌습니다.</p>
-  {% else %}
-  <p class="note">아래 항목은 <a href="/settings">설정 화면</a>에서 채워 주세요.</p>
-  {% endif %}
-</section>
-
-<section class="status-card panel">
+<section class="status-card panel tab-panel" id="panel-history" role="tabpanel">
   <h2>변경 이력</h2>
   <div class="history-scroll">
   {% if audit %}

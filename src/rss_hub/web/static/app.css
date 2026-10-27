@@ -544,7 +544,6 @@ details.acc-limit[open] > summary { margin-bottom: 8px; }
 .status-card h2 { margin: 0 0 6px; font-size: 16px; }
 .status-card .checks { margin-bottom: 6px; }
 .status-card .history-scroll { max-height: 120px; }
-.status-grid .status-card:last-child, .status-grid .status-card.error-log { grid-column: 1 / -1; }
 .pending-box { margin-top: 6px; }
 .pending-box > summary { cursor: pointer; font-weight: 600; }
 .pending-box[open] > summary { margin-bottom: 4px; }
@@ -634,3 +633,21 @@ details.acc-limit[open] > summary { margin-bottom: 8px; }
 .pending-list .tag-next { color: var(--accent); font-size: 11px; }
 .pending-list .next-batch { background: var(--accent-soft); }
 .pending-note { color: var(--danger, #b45309); overflow-wrap: anywhere; }
+
+/* ---------- 상태 화면: 탭 카드 두 장(현재 상태·작업 기록·설정 점검 / 오류 기록·변경 이력), 폭은 화면에 맞춘다 ---------- */
+.status-tabs { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 4px 14px 14px; margin-bottom: 12px; }
+.status-tabs .status-card { background: none; border: 0; border-radius: 0; padding: 0; margin: 0; }
+.tab-bar { display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1px solid var(--line-soft); margin: 0 -14px 12px; padding: 0 10px; }
+.tab { display: inline-flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 2px solid transparent; color: var(--muted); font-weight: 600; text-decoration: none; }
+.tab:hover { color: var(--fg); }
+.tab.on { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-count { min-width: 20px; padding: 0 6px; border-radius: var(--radius-tag); background: var(--line-soft); color: var(--muted); font-size: 11px; line-height: 18px; text-align: center; }
+.tab-count.warn { background: var(--accent-soft); color: var(--accent); }
+.tab-panel[hidden] { display: none; }
+.status-tabs.tabs-ready .tab-panel > h2 { display: none; }  /* 탭 이름이 제목을 대신한다 */
+@media (min-width: 1000px) {
+  #panel-current { display: grid; grid-template-columns: minmax(320px, 480px) minmax(0, 1fr); gap: 8px 28px; align-items: start; }
+  #panel-current > h2 { grid-column: 1 / -1; }
+  #panel-jobs .job-list, #panel-checks .checks { max-width: 760px; }
+}
+.current-pending .pending-box { margin-top: 0; }
