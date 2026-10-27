@@ -274,3 +274,13 @@ def test_a_rss_summary_under_the_limit_is_never_compared_with_the_page_length(en
     assert (
         service.ensure(articles.get(limit)).state == "failed"
     )  # 300자 이상이면 비교한다(210 < 240)
+
+
+def test_an_old_failure_record_without_detail_is_described_without_parentheses():
+    from rss_hub.services.fulltext import _describe
+
+    assert _describe("NoContent") == "원문 페이지에서 본문을 찾지 못했습니다"
+    assert _describe("NoContent|x|a.example.com|0") == "원문 페이지에서 본문을 찾지 못했습니다"
+    assert _describe("NoContent|1234|a.example.com|1").endswith(
+        "(받은 페이지 1,234자, a.example.com, 다른 주소로 1번 이동)"
+    )

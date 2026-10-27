@@ -1334,3 +1334,67 @@ document.addEventListener(
     { passive: true }
   );
 })();
+
+/* ---------- 상태 화면: 오류 기록 복사 ---------- */
+(function () {
+  "use strict";
+
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+    return new Promise(function (resolve, reject) {
+      var area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.className = "copy-buffer";
+      document.body.appendChild(area);
+      area.select();
+      var ok = false;
+      try {
+        ok = document.execCommand("copy");
+      } catch (error) {
+        ok = false;
+      }
+      area.remove();
+      if (ok) resolve();
+      else reject(new Error("copy failed"));
+    });
+  }
+
+  function flash(button, text) {
+    var original = button.textContent;
+    button.textContent = text;
+    window.setTimeout(function () {
+      button.textContent = original;
+    }, 1500);
+  }
+
+  document.addEventListener("click", function (event) {
+    var one = event.target.closest ? event.target.closest("[data-copy-row]") : null;
+    var all = event.target.closest ? event.target.closest("[data-copy-all]") : null;
+    var button = one || all;
+    if (!button) return;
+    var text = "";
+    if (one) {
+      var row = one.closest("[data-copy]");
+      text = row ? row.getAttribute("data-copy") : "";
+    } else {
+      var list = document.querySelector(all.getAttribute("data-copy-all"));
+      text = list
+        ? Array.prototype.map
+            .call(list.querySelectorAll("[data-copy]"), function (item) {
+              return item.getAttribute("data-copy");
+            })
+            .join("\n\n")
+        : "";
+    }
+    if (!text) return;
+    copyText(text).then(
+      function () {
+        flash(button, "복사됨");
+      },
+      function () {
+        flash(button, "복사 실패");
+      }
+    );
+  });
+})();

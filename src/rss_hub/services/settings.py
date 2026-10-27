@@ -179,6 +179,13 @@ SETTING_DEFS: tuple[SettingDef, ...] = (
         help="이 기간이 지난 글을 지움(0~3650일, 0이면 계속 보관). 북마크는 남김",
     ),
     SettingDef(
+        "error_log_retention_days",
+        "오류 기록 보관 기간(일)",
+        "14",
+        _bounded(365),
+        help="상태 화면의 오류 기록을 이 기간만 보관하고 지남(1~365일)",
+    ),
+    SettingDef(
         "model_chain",
         "모델 체인",
         DEFAULT_MODEL_CHAIN,
@@ -264,6 +271,7 @@ class AppSettings:
     ui_auto_read: str
     topic_feedback_examples: int
     article_retention_days: int
+    error_log_retention_days: int
     model_chain: tuple[str, ...]
     llm_daily_cap: int
     llm_warn_percent: int
@@ -336,6 +344,7 @@ class SettingsService:
             ui_auto_read=v["ui_auto_read"],
             topic_feedback_examples=int(v["topic_feedback_examples"]),
             article_retention_days=int(v["article_retention_days"]),
+            error_log_retention_days=int(v["error_log_retention_days"]),
             model_chain=tuple(v["model_chain"].split(",")),
             llm_daily_cap=int(v["llm_daily_cap"]),
             llm_warn_percent=int(v["llm_warn_percent"]),

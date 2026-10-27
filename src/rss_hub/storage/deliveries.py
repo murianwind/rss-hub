@@ -100,6 +100,23 @@ class DeliveryRepository:
             ).fetchall()
         return [_delivery(row) for row in rows]
 
+    def pending_attempts(self, article_ids: Sequence[int]) -> dict[int, tuple[int, str]]:
+        """글마다 (못 보낸 발송의 가장 많은 시도 횟수, 마지막 오류). 시도한 적 없는 글은 뺀다."""
+        if not article_ids:
+            return {}
+        marks = ",".join("?" for _ in article_ids)
+        with self._db.connect() as conn:
+            rows = conn.execute(
+                "SELECT article_id, attempts, last_error FROM deliveries "
+                f"WHERE status = ? AND attempts > 0 AND article_id IN ({marks}) ORDER BY id",
+                [STATUS_PENDING, *article_ids],
+            ).fetchall()
+        found: dict[int, tuple[int, str]] = {}
+        for row in rows:
+            before = found.get(row["article_id"], (0, ""))
+            found[row["article_id"]] = (max(before[0], row["attempts"]), row["last_error"] or "")
+        return found
+
     def count_by_status(self) -> dict[str, int]:
         with self._db.connect() as conn:
             rows = conn.execute(

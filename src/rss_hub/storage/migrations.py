@@ -302,6 +302,24 @@ MIGRATIONS: tuple[Migration, ...] = (
     """,
     # 19: 저장된 제목과 사이트 이름의 문자 참조와 전각 글자를 다듬는다
     _clean_stored_titles,
+    # 20: 서버 오류 기록. 같은 날 같은 유형, 대상, 메시지는 한 줄로 묶어 횟수만 센다
+    # (수집이 30분마다 같은 이유로 실패해도 기록이 불어나지 않는다)
+    """
+    CREATE TABLE error_log (
+        id       INTEGER PRIMARY KEY AUTOINCREMENT,
+        day      TEXT NOT NULL,
+        kind     TEXT NOT NULL,
+        source   TEXT NOT NULL,
+        message  TEXT NOT NULL,
+        detail   TEXT NOT NULL DEFAULT '',
+        count    INTEGER NOT NULL DEFAULT 1,
+        first_at TEXT NOT NULL,
+        last_at  TEXT NOT NULL,
+        UNIQUE(day, kind, source, message)
+    );
+    CREATE INDEX error_log_by_last ON error_log(last_at);
+    CREATE INDEX error_log_by_kind ON error_log(kind, last_at);
+    """,
 )
 
 

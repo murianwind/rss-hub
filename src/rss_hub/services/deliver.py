@@ -13,11 +13,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from rss_hub.domain.delivery import SendOutcome, classify_status, pause_after_send, retry_wait
+from rss_hub.domain.error_log import KIND_DELIVER
 from rss_hub.domain.message import article_url, build_message
 from rss_hub.domain.routing import resolve_targets
 from rss_hub.domain.topics import Topic, match_topic
 from rss_hub.services.alerts import AlertService
 from rss_hub.services.clock import Clock
+from rss_hub.services.error_log import NO_ERRORS, ErrorRecorder
 from rss_hub.services.ports import SendResult, WebhookSender
 from rss_hub.services.settings import AppSettings, SettingsService
 from rss_hub.storage.articles import STATUS_READY, Article, ArticleRepository
@@ -75,7 +77,9 @@ class DeliveryService:
         sleep: Callable[[float], None] = time.sleep,
         stop_requested: Callable[[], bool] = lambda: False,
         progress: Callable[[int, int], None] = lambda done, total: None,
+        errors: ErrorRecorder = NO_ERRORS,
     ) -> None:
+        self._errors = errors
         self._stop_requested = stop_requested
         self._progress = progress
         self._topics = topics
@@ -202,11 +206,13 @@ class DeliveryService:
         outcome = classify_status(result.status)
         if outcome is SendOutcome.RATE_LIMITED:
             self._deliveries.record_attempt_failure(delivery.id, "HTTP 429")
+            self._note(delivery, names, "HTTP 429")
             self._sleep(retry_wait(result.retry_after))
             result = self._send(url, message)
             outcome = classify_status(result.status)
             if outcome is SendOutcome.RATE_LIMITED:
                 self._deliveries.record_attempt_failure(delivery.id, "HTTP 429")
+                self._note(delivery, names, "HTTP 429")
                 state.failed += 1
                 state.stopped_early = True  # 이번 실행에서는 더 시도하지 않는다
                 return False
@@ -226,6 +232,7 @@ class DeliveryService:
             return True
 
         self._deliveries.record_attempt_failure(delivery.id, reason)
+        self._note(delivery, names, reason)
         state.failed += 1
         state.consecutive_failures += 1
         if state.consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
@@ -241,11 +248,21 @@ class DeliveryService:
             logger.warning("웹훅 전송 중 예외: %s", type(error).__name__)
             return SendResult(status=0, error=type(error).__name__)
 
+    def _note(
+        self, delivery: Delivery, names: dict[int, str], reason: str, *, permanent: bool = False
+    ) -> None:
+        source = names.get(delivery.webhook_id, f"#{delivery.webhook_id}")
+        suffix = " (다시 시도하지 않음)" if permanent else ""
+        self._errors.record(
+            KIND_DELIVER, source, f"발송하지 못함: {reason}{suffix}", f"글 #{delivery.article_id}"
+        )
+
     def _fail_permanently(
         self, delivery: Delivery, reason: str, names: dict[int, str], state: _Run
     ) -> None:
         self._deliveries.mark_permanent(delivery.id, reason)
         state.permanent += 1
+        self._note(delivery, names, reason, permanent=True)
         name = names.get(delivery.webhook_id, f"#{delivery.webhook_id}")
         self._alerts.notify(
             f"delivery_permanent_{delivery.webhook_id}",

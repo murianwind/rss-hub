@@ -10,16 +10,20 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from rss_hub.domain.delivery import describe_send_failure
+from rss_hub.domain.error_log import KIND_LABELS, SORT_LABELS, SORT_RECENT
 from rss_hub.domain.settings_rules import SettingError, normalize_base_url
+from rss_hub.domain.summary import summary_order
 from rss_hub.services.clock import Clock
 from rss_hub.services.ports import WebhookSender
 from rss_hub.services.settings import SettingsService
 from rss_hub.storage.articles import STATUS_COLLECTED, STATUS_READY, Article, ArticleRepository
+from rss_hub.storage.deliveries import DeliveryRepository
+from rss_hub.storage.error_log import ErrorLogRepository
 from rss_hub.storage.feeds import FeedRepository
 from rss_hub.storage.job_runs import STATUS_RUNNING, JobRunRepository
 from rss_hub.storage.llm_usage import LlmUsageRepository
 from rss_hub.web.setting_groups import SETTINGS_ACCORDIONS, keys_of, sections
-from rss_hub.web.ui import done
+from rss_hub.web.ui import ago, done, until
 
 CONFIRM_MESSAGE = "삭제 확인이 필요합니다"
 _HOST = re.compile(r"^(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)(:\d{1,5})?$")
@@ -68,7 +72,7 @@ def _local(moment: datetime | None, zone: tzinfo) -> str:
     return "" if moment is None else moment.astimezone(zone).strftime("%m-%d %H:%M:%S")
 
 
-PENDING_SHOWN = 8  # 상태 화면에 보여 줄 대기 글 수(종류마다)
+PENDING_SHOWN = 20  # 상태 화면에 보여 줄 대기 글 수(종류마다)
 RUNNABLE_JOBS = {"collect": "수집", "summarize": "요약", "deliver": "발송"}
 RUN_NOTICES = {
     "started": "{label} 작업을 시작했습니다. 결과는 작업 기록에 남습니다.",
@@ -84,6 +88,8 @@ class JobStarter(Protocol):
     def run_now(self, name: str) -> str: ...
 
     def progress_of(self, name: str) -> tuple[int, int] | None: ...
+
+    def next_run_of(self, name: str) -> datetime | None: ...
 
 
 def _progress_text(starter: JobStarter | None, name: str) -> str:
@@ -128,6 +134,8 @@ def build_admin_router(
     usage: LlmUsageRepository,
     clock: Clock,
     sender: WebhookSender,
+    error_log: ErrorLogRepository,
+    deliveries: DeliveryRepository,
     runner: Callable[[], JobStarter | None] = lambda: None,
 ) -> APIRouter:
     router = APIRouter()
@@ -208,7 +216,9 @@ def build_admin_router(
         )
 
     @router.get("/status", response_class=HTMLResponse)
-    def status_page(request: Request, run: str = "") -> HTMLResponse:
+    def status_page(
+        request: Request, run: str = "", kind: str = "", sort: str = ""
+    ) -> HTMLResponse:
         checklist = service.setup_checklist()
         waiting = (
             0 if service.snapshot().base_url else articles.count_by_status().get(STATUS_READY, 0)
@@ -218,22 +228,45 @@ def build_admin_router(
         runs = job_runs.all()
         has_key = service.has_openrouter_key()
         feed_names = {f.id: f.name for f in feeds.list_all()}
+        now = clock.now()
+        waiting_ready = articles.list_by_status(STATUS_READY, PENDING_SHOWN)
+        attempts = deliveries.pending_attempts([a.id for a in waiting_ready])
+        waiting_collected = summary_order(articles.list_by_status(STATUS_COLLECTED))
         pending = {
-            kind: [
-                {
-                    "title": a.title_ko or a.title,
-                    "feed": feed_names.get(a.feed_id, ""),
-                    "why": _why_waiting(
+            STATUS_READY: [
+                _pending_row(
+                    a,
+                    feed_names,
+                    now,
+                    config.timezone,
+                    why=_why_waiting(
                         a,
-                        sending=kind == STATUS_READY,
+                        sending=True,
                         base_url=config.base_url,
                         has_default=config.webhook_default_id is not None,
                         has_key=has_key,
                     ),
-                }
-                for a in articles.list_by_status(kind, PENDING_SHOWN)
-            ]
-            for kind in (STATUS_READY, STATUS_COLLECTED)
+                    note=_attempt_note(attempts.get(a.id)),
+                )
+                for a in waiting_ready
+            ],
+            STATUS_COLLECTED: [
+                _pending_row(
+                    a,
+                    feed_names,
+                    now,
+                    config.timezone,
+                    why=_why_waiting(
+                        a,
+                        sending=False,
+                        base_url=config.base_url,
+                        has_default=config.webhook_default_id is not None,
+                        has_key=has_key,
+                    ),
+                    next_batch=position < config.summarize_batch,
+                )
+                for position, a in enumerate(waiting_collected[:PENDING_SHOWN])
+            ],
         }
         failing = sorted(
             (f for f in feeds.list_all() if f.fail_count > 0), key=lambda f: -f.fail_count
@@ -254,6 +287,8 @@ def build_admin_router(
                 name in runs and runs[name].last_status == STATUS_RUNNING for name in JOB_LABELS
             ),
             "pending": pending,
+            "next_runs": _next_runs(runner(), now, config.timezone),
+            "summarize_batch": config.summarize_batch,
             "run_notice": _run_notice(run),
             "failing_feeds": failing,
             "jobs": [
@@ -276,6 +311,7 @@ def build_admin_router(
             "checklist": checklist,
             "all_ready": all(item.ready for item in checklist if item.required),
             "audit": audit,
+            **_error_log_context(error_log, config.timezone, kind, sort),
         }
         return templates.TemplateResponse(request, "status.html", context)
 
@@ -368,3 +404,86 @@ def build_admin_router(
         return done(form, "/discord?saved=1", "saved")
 
     return router
+
+
+def _error_log_context(
+    error_log: ErrorLogRepository, zone: tzinfo, kind: str, sort: str
+) -> dict[str, Any]:
+    """상태 화면의 오류 기록: 유형별 횟수, 거른 목록, 줄마다 복사할 글자."""
+    chosen_kind = kind if kind in KIND_LABELS else ""
+    chosen_sort = sort if sort in SORT_LABELS else SORT_RECENT
+    counts = error_log.counts_by_kind()
+
+    def stamp(moment: datetime) -> str:
+        return moment.astimezone(zone).strftime("%m-%d %H:%M:%S")
+
+    rows = []
+    for e in error_log.list(kind=chosen_kind, sort=chosen_sort):
+        times = stamp(e.last_at) if e.count == 1 else f"{stamp(e.first_at)} ~ {stamp(e.last_at)}"
+        label = KIND_LABELS.get(e.kind, e.kind)
+        lines = [f"[{label}] {e.source}", e.message, f"{times} · {e.count}회"]
+        rows.append(
+            {
+                "kind": e.kind,
+                "label": label,
+                "source": e.source,
+                "message": e.message,
+                "detail": e.detail,
+                "count": e.count,
+                "time": stamp(e.last_at),
+                "clip": "\n".join([*lines, e.detail] if e.detail else lines),
+            }
+        )
+    return {
+        "error_rows": rows,
+        "error_total": sum(counts.values()),
+        "error_kinds": [(k, KIND_LABELS[k], counts.get(k, 0)) for k in KIND_LABELS],
+        "error_kind": chosen_kind,
+        "error_sort": chosen_sort,
+        "error_sorts": list(SORT_LABELS.items()),
+    }
+
+
+def _pending_row(
+    article: Article,
+    feed_names: dict[int, str],
+    now: datetime,
+    zone: tzinfo,
+    *,
+    why: str,
+    note: str = "",
+    next_batch: bool = False,
+) -> dict[str, Any]:
+    """상태 화면의 대기 글 한 줄: 제목, 피드, 왜 기다리는지, 얼마나 기다렸는지."""
+    return {
+        "title": article.title_ko or article.title,
+        "feed": feed_names.get(article.feed_id, ""),
+        "why": why,
+        "waited": ago(article.discovered_at, now, zone),
+        "note": note,
+        "next_batch": next_batch,
+    }
+
+
+def _attempt_note(found: tuple[int, str] | None) -> str:
+    """발송을 시도했다가 못 보낸 글의 시도 횟수와 마지막 오류."""
+    if found is None:
+        return ""
+    count, error = found
+    return f"{count}번 시도했지만 보내지 못함" + (f": {error}" if error else "")
+
+
+def _next_runs(
+    starter: JobStarter | None, now: datetime, zone: tzinfo
+) -> dict[str, dict[str, str]]:
+    """수집, 요약, 발송이 다음에 실행될 시각(실행 중이거나 실행기가 없으면 빠진다)."""
+    found: dict[str, dict[str, str]] = {}
+    for name in RUNNABLE_JOBS:
+        moment = None if starter is None else starter.next_run_of(name)
+        if moment is None:
+            continue
+        local = moment.astimezone(zone)
+        same_day = local.date() == now.astimezone(zone).date()
+        text = local.strftime("%H:%M:%S" if same_day else "%m-%d %H:%M")
+        found[name] = {"at": text, "in": until(moment, now)}
+    return found

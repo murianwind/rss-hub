@@ -13,7 +13,9 @@ from datetime import UTC, date, datetime, time
 
 from rss_hub.domain.activity import measure_activity
 from rss_hub.domain.dates import parse_entry_datetime
+from rss_hub.domain.discovery import describe_fetch_failure
 from rss_hub.domain.entries import extract_article_fields
+from rss_hub.domain.error_log import KIND_COLLECT
 from rss_hub.domain.guid import select_guid
 from rss_hub.domain.schedule import (
     FeedRef,
@@ -23,6 +25,7 @@ from rss_hub.domain.schedule import (
     slot_for,
 )
 from rss_hub.services.clock import Clock
+from rss_hub.services.error_log import NO_ERRORS, ErrorRecorder
 from rss_hub.services.page_source import PageFeedSource
 from rss_hub.services.ports import FeedFetcher, FetchError
 from rss_hub.services.settings import AppSettings, SettingsService
@@ -64,7 +67,9 @@ class CollectService:
         clock: Clock,
         pages: PageFeedSource | None = None,
         progress: Callable[[int, int], None] = lambda done, total: None,
+        errors: ErrorRecorder = NO_ERRORS,
     ) -> None:
+        self._errors = errors
         self._progress = progress
         self._pages = pages
         self._feeds = feeds
@@ -121,10 +126,16 @@ class CollectService:
                 new_articles, recorded = self._check(feed, config, local)
             except FetchError as error:
                 self._feeds.record_failure(feed.id, error.reason)
+                self._errors.record(
+                    KIND_COLLECT, feed.name, describe_fetch_failure(error.reason), error.reason
+                )
                 failed.append((feed.id, error.reason))
             except Exception as error:  # 한 피드의 예상 못한 오류가 슬롯 전체를 막지 않게 한다
                 logger.exception("피드 점검 중 예상하지 못한 오류: feed_id=%s", feed.id)
                 self._feeds.record_failure(feed.id, type(error).__name__)
+                self._errors.record(
+                    KIND_COLLECT, feed.name, type(error).__name__, f"예상하지 못한 오류: {error}"
+                )
                 failed.append((feed.id, type(error).__name__))
             else:
                 added += new_articles

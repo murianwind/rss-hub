@@ -25,6 +25,15 @@ def needs_translation(article: Article) -> bool:
     return not is_korean(f"{article.title} {article.content_html}")
 
 
+def offers_retranslation(article: Article) -> bool:
+    """글 화면에 다시 요청 버튼을 보일 글: 원문이 한국어가 아니고 제목이나 요약이 한국어가 아니다.
+
+    제목과 요약이 모두 한국어면(번역이 된 글) 보이지 않는다.
+    요약이 영어 발췌이거나 비어 있으면 보인다."""
+    translated = is_korean(article.title_ko) and is_korean(article.summary_ko)
+    return needs_translation(article) and not translated
+
+
 @dataclass(frozen=True)
 class Retranslation:
     state: str

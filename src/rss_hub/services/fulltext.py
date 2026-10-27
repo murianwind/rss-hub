@@ -7,8 +7,10 @@
 """
 
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 from rss_hub.domain.discovery import describe_fetch_failure
+from rss_hub.domain.error_log import KIND_FULLTEXT
 from rss_hub.domain.feed_url import FeedUrlError, validate_feed_url
 from rss_hub.domain.fulltext import (
     COVERAGE_MIN,
@@ -17,6 +19,7 @@ from rss_hub.domain.fulltext import (
     reference_is_complete,
 )
 from rss_hub.domain.text import strip_html
+from rss_hub.services.error_log import NO_ERRORS, ErrorRecorder
 from rss_hub.services.ports import FetchError, PageFetcher, PageResult
 from rss_hub.storage.articles import MAX_FULL_TEXT_CHARS, Article, ArticleRepository
 
@@ -36,9 +39,16 @@ class FullText:
 
 
 class FullTextService:
-    def __init__(self, *, articles: ArticleRepository, pages: PageFetcher) -> None:
+    def __init__(
+        self,
+        *,
+        articles: ArticleRepository,
+        pages: PageFetcher,
+        errors: ErrorRecorder = NO_ERRORS,
+    ) -> None:
         self._articles = articles
         self._pages = pages
+        self._errors = errors
 
     def ensure(self, article: Article, *, force: bool = False) -> FullText:
         """저장된 전문이 있으면 그것을, 없으면 처음 한 번 가져온다(force면 다시 가져온다)."""
@@ -55,12 +65,14 @@ class FullTextService:
         except FeedUrlError:
             return FullText(None, "skipped", "")  # 원문 주소가 없거나 쓸 수 없으면 기록하지 않는다
         try:
-            page = self._load_page(link)
+            page, hops = self._load_page(link)
         except FetchError as error:
             return self._failed(article, error.reason)
         extraction = extract_article(page.text, page.final_url, article.title, article.content_html)
         if extraction is None:
-            return self._failed(article, NO_CONTENT)
+            host = urlsplit(page.final_url).hostname or ""
+            # 왜 못 찾았는지 사람이 가늠할 수 있게 받은 페이지의 크기, 주소, 따라간 횟수를 남긴다
+            return self._failed(article, f"{NO_CONTENT}|{len(page.text)}|{host}|{hops}")
         html = extraction.html
         if (
             extraction.coverage is not None
@@ -74,11 +86,12 @@ class FullTextService:
         self._articles.save_full_text(article.id, html[:MAX_FULL_TEXT_CHARS])
         return FullText(html[:MAX_FULL_TEXT_CHARS], "ok")
 
-    def _load_page(self, link: str) -> PageResult:
-        """페이지를 가져온다. 스크립트로만 다른 주소로 보내는 짧은 껍데기면 그 주소를 따라간다.
+    def _load_page(self, link: str) -> tuple[PageResult, int]:
+        """(페이지, 따라간 횟수). 스크립트로만 다른 주소로 보내는 짧은 껍데기면 그 주소를 따라간다.
 
         따라가는 주소도 같은 주소 검사(사설망 차단)를 거치고, 횟수는 MAX_SHELL_HOPS까지다."""
         page = self._pages.fetch_page(link)
+        hops = 0
         for _ in range(MAX_SHELL_HOPS):
             target = find_page_redirect(page.text, page.final_url)
             if target is None:
@@ -87,16 +100,27 @@ class FullTextService:
                 page = self._pages.fetch_page(validate_feed_url(target))
             except FeedUrlError:
                 break
-        return page
+            hops += 1
+        return page, hops
 
     def _failed(self, article: Article, reason: str) -> FullText:
         self._articles.save_full_text_failure(article.id, reason)
-        return FullText(None, "failed", _describe(reason))
+        message = _describe(reason)
+        self._errors.record(KIND_FULLTEXT, article.title, message, f"{reason} · {article.link}")
+        return FullText(None, "failed", message)
+
+
+def _no_content_detail(reason: str) -> str:
+    """ "NoContent|받은 글자 수|주소|따라간 횟수"에서 괄호 설명을 만든다(옛 기록은 설명 없이)."""
+    parts = reason.split("|")
+    if len(parts) != 4 or not parts[1].isdigit() or not parts[3].isdigit():
+        return ""
+    return f"(받은 페이지 {int(parts[1]):,}자, {parts[2]}, 다른 주소로 {parts[3]}번 이동)"
 
 
 def _describe(reason: str) -> str:
-    if reason == NO_CONTENT:
-        return "원문 페이지에서 본문을 찾지 못했습니다"
+    if reason.split("|")[0] == NO_CONTENT:
+        return "원문 페이지에서 본문을 찾지 못했습니다" + _no_content_detail(reason)
     if reason == MISMATCH:
         return "원문 페이지에서 뽑은 글이 RSS 내용과 맞지 않습니다"
     if reason == SHORTER_THAN_RSS:

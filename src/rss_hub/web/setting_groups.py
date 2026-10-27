@@ -16,6 +16,7 @@ SETTING_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "default_max_entries",
             "baseline_archive_count",
             "article_retention_days",
+            "error_log_retention_days",
         ),
     ),
     (

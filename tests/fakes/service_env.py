@@ -31,6 +31,9 @@ class FakeRunner:
     def progress_of(self, name):
         return None
 
+    def next_run_of(self, name):
+        return None
+
     def run_now(self, name):
         return "started"
 

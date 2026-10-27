@@ -241,6 +241,20 @@ def ago(moment: datetime, now: datetime, zone: tzinfo) -> str:
     return moment.astimezone(zone).strftime("%Y-%m-%d")
 
 
+def until(moment: datetime, now: datetime) -> str:
+    """ "3분 뒤"처럼 읽기 쉬운 남은 시간. 지금이거나 지났으면 "곧"."""
+    seconds = int((moment - now).total_seconds())
+    if seconds < 5:
+        return "곧"
+    if seconds < 60:
+        return f"{seconds}초 뒤"
+    if seconds < 3600:
+        return f"{seconds // 60}분 뒤"
+    if seconds < 86400:
+        return f"{seconds // 3600}시간 뒤"
+    return f"{seconds // 86400}일 뒤"
+
+
 def _open_sections(request: Request, scope_kind: str) -> set[str]:
     path = request.url.path
     if path.startswith(SETTINGS_PATHS):
