@@ -10,6 +10,7 @@ import pytest
 from rss_hub.domain.fulltext import (
     MAX_SHELL_LENGTH,
     MIN_TEXT_LENGTH,
+    _reference_keys,
     extract_article,
     extract_main_content,
     find_page_redirect,
@@ -954,3 +955,18 @@ def test_a_page_whose_text_never_reaches_the_rss_is_returned_with_the_best_cover
     assert result is not None and result.coverage == 0.0
     assert extract_article(html, "https://x.example.com/post").coverage is None
     assert extract_article("", "https://x.example.com/post", "", reference) is None
+
+
+def test_reference_lines_split_at_blocks_and_skip_urls_and_feed_footers():
+    lines = [
+        "첫 줄에는 충분히 긴 문장이 한 줄 들어 있습니다 그래서 열쇠가 됩니다",
+        "둘째 줄도 충분히 긴 문장입니다 그래서 열쇠가 됩니다 여기에도",
+        "제목 없는 목록의 항목도 문장 부호 없이 길게 적습니다 그래서 열쇠가 됩니다",
+    ]
+    reference = (
+        f"<p>{lines[0]}<br>{lines[1]}</p><ul><li>{lines[2]}</li></ul>"
+        '<p><a href="https://a.example.com/x">https://a.example.com/x</a></p>'
+        '<p>The post <a href="x">제목</a> appeared first on <a href="y">사이트</a>.</p>'
+    )
+    assert len(_reference_keys(reference)) == 3  # 주소 줄과 자동 문구는 뺀다
+    assert reference_coverage(reference, f"<p>{' '.join(lines)}</p>") == 1.0

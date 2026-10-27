@@ -204,3 +204,9 @@ Feature: 글 전문: 원문 페이지에서 본문을 가져와 보여 준다
       | https://blog.naver.com/skim209/224358894904                              |
       | https://m.blog.naver.com/skim209/224358894904                            |
       | https://blog.naver.com/PostView.naver?blogId=skim209&logNo=224358894904  |
+
+  @FTX-28
+  Scenario: 문장 부호 없는 제목과 목록과 주소 줄이 있는 워드프레스 글도 RSS 내용과 맞는 것으로 본다
+    Given RSS 본문이 제목, 문장 부호 없는 목록, 주소 줄, 피드의 자동 문구를 담은 전문이고 원문 페이지도 같은 글인 글이 있다
+    When 그 글을 연다
+    Then 원문 페이지의 전문이 보이고 맞지 않는다는 안내는 없다
