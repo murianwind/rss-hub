@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 from rss_hub.domain.discovery import describe_fetch_failure
+from rss_hub.domain.error_log import KIND_FULLTEXT
 from rss_hub.domain.feed_url import FeedUrlError, validate_feed_url
 from rss_hub.domain.fulltext import (
     COVERAGE_MIN,
@@ -18,6 +19,7 @@ from rss_hub.domain.fulltext import (
     reference_is_complete,
 )
 from rss_hub.domain.text import strip_html
+from rss_hub.services.error_log import NO_ERRORS, ErrorRecorder
 from rss_hub.services.ports import FetchError, PageFetcher, PageResult
 from rss_hub.storage.articles import MAX_FULL_TEXT_CHARS, Article, ArticleRepository
 
@@ -37,9 +39,16 @@ class FullText:
 
 
 class FullTextService:
-    def __init__(self, *, articles: ArticleRepository, pages: PageFetcher) -> None:
+    def __init__(
+        self,
+        *,
+        articles: ArticleRepository,
+        pages: PageFetcher,
+        errors: ErrorRecorder = NO_ERRORS,
+    ) -> None:
         self._articles = articles
         self._pages = pages
+        self._errors = errors
 
     def ensure(self, article: Article, *, force: bool = False) -> FullText:
         """저장된 전문이 있으면 그것을, 없으면 처음 한 번 가져온다(force면 다시 가져온다)."""
@@ -96,7 +105,9 @@ class FullTextService:
 
     def _failed(self, article: Article, reason: str) -> FullText:
         self._articles.save_full_text_failure(article.id, reason)
-        return FullText(None, "failed", _describe(reason))
+        message = _describe(reason)
+        self._errors.record(KIND_FULLTEXT, article.title, message, f"{reason} · {article.link}")
+        return FullText(None, "failed", message)
 
 
 def _no_content_detail(reason: str) -> str:

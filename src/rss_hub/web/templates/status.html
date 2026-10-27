@@ -54,6 +54,37 @@
   {% endif %}
 </section>
 
+<section class="status-card panel error-log" id="error-log">
+  <h2>오류 기록 <span class="hint">{{ error_total }}건</span></h2>
+  <details class="acc-limit" open>
+    <summary>유형별로 보기와 복사</summary>
+    <div class="error-tools">
+      <div class="chips" role="group" aria-label="유형">
+        <a class="chip-link{% if not error_kind %} on{% endif %}" href="/status?sort={{ error_sort }}#error-log">전체 <b>{{ error_total }}</b></a>
+        {% for key, label, n in error_kinds %}<a class="chip-link{% if error_kind == key %} on{% endif %}{% if not n %} dim{% endif %}" href="/status?kind={{ key }}&amp;sort={{ error_sort }}#error-log">{{ label }} <b>{{ n }}</b></a>{% endfor %}
+      </div>
+      <div class="chips" role="group" aria-label="정렬">
+        {% for key, label in error_sorts %}<a class="chip-link{% if error_sort == key %} on{% endif %}" href="/status?{% if error_kind %}kind={{ error_kind }}&amp;{% endif %}sort={{ key }}#error-log">{{ label }}</a>{% endfor %}
+        <button type="button" class="compact" data-copy-all="[data-error-list]"{% if not error_rows %} disabled{% endif %}>목록 복사</button>
+      </div>
+    </div>
+    {% if error_rows %}
+    <ul class="error-list" data-error-list>
+      {% for e in error_rows %}
+      <li class="error-row" data-kind="{{ e.kind }}" data-copy="{{ e.clip }}">
+        <div class="error-head"><span class="state todo">{{ e.label }}</span><b class="error-source">{{ e.source }}</b><span class="hint">{{ e.time }}{% if e.count > 1 %} · {{ e.count }}회{% endif %}</span><button type="button" class="link-btn" data-copy-row title="이 줄을 복사">복사</button></div>
+        <div class="error-message">{{ e.message }}</div>
+        {% if e.detail %}<div class="hint error-detail">{{ e.detail }}</div>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="note">{{ '이 유형의 ' if error_kind else '' }}기록된 오류가 없습니다.</p>
+    {% endif %}
+    <p class="hint">수집, 전문 가져오기, 요약, 발송, LLM 호출, 작업 실행의 실패를 모읍니다. 같은 날의 같은 오류는 한 줄로 묶어 횟수를 세고, 설정의 오류 기록 보관 기간이 지나면 지웁니다. 최대 300줄까지 보여 줍니다.</p>
+  </details>
+</section>
+
 <section class="status-card panel">
   <h2>작업 기록</h2>
   <ul class="checks job-list" data-jobs data-jobs-running="{{ 1 if jobs_running else 0 }}">

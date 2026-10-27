@@ -16,9 +16,11 @@ from datetime import datetime, tzinfo
 from functools import partial
 from typing import Any
 
+from rss_hub.domain.error_log import KIND_JOB
 from rss_hub.domain.jobs import due_slot, interval_due
 from rss_hub.jobs.progress import JobProgress
 from rss_hub.services.clock import Clock
+from rss_hub.services.error_log import NO_ERRORS, ErrorRecorder
 from rss_hub.storage.job_runs import JobRunRepository
 
 logger = logging.getLogger(__name__)
@@ -61,7 +63,9 @@ class JobRunner:
         tick_seconds: float = 1.0,
         describe: Callable[[str, object], str] = lambda name, result: "",
         progress: JobProgress | None = None,
+        errors: ErrorRecorder = NO_ERRORS,
     ) -> None:
+        self._errors = errors
         self._progress = progress or JobProgress()
         self._jobs = tuple(jobs)
         self._clock = clock
@@ -101,6 +105,7 @@ class JobRunner:
                 logger.error(
                     "작업 일정을 계산하지 못했습니다: %s (%s)", job.name, type(error).__name__
                 )
+                self._errors.record(KIND_JOB, job.name, "작업 일정을 계산하지 못함", str(error))
                 continue
             if due is None:
                 continue
@@ -163,6 +168,7 @@ class JobRunner:
         except Exception as caught:
             error = type(caught).__name__
             logger.error("작업이 실패했습니다: %s (%s)", job.name, error)
+            self._errors.record(KIND_JOB, job.name, error, str(caught))
         finally:
             try:
                 self._records.mark_finished(job.name, error, result)

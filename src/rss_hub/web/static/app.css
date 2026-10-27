@@ -544,7 +544,7 @@ details.acc-limit[open] > summary { margin-bottom: 8px; }
 .status-card h2 { margin: 0 0 6px; font-size: 16px; }
 .status-card .checks { margin-bottom: 6px; }
 .status-card .history-scroll { max-height: 120px; }
-.status-grid .status-card:last-child { grid-column: 1 / -1; }
+.status-grid .status-card:last-child, .status-grid .status-card.error-log { grid-column: 1 / -1; }
 .pending-box { margin-top: 6px; }
 .pending-box > summary { cursor: pointer; font-weight: 600; }
 .pending-box[open] > summary { margin-bottom: 4px; }
@@ -616,3 +616,17 @@ details.acc-limit[open] > summary { margin-bottom: 8px; }
 .menu-heading { margin: 6px 10px 2px; color: var(--muted); font-size: 11px; font-weight: 700; }
 .menu-list button .icon { width: 14px; height: 14px; margin-right: 6px; vertical-align: -2px; }
 @media (prefers-reduced-motion: reduce) { .article-page .mobilebar { transition: none; } }
+
+/* ---------- 상태 화면: 오류 기록 ---------- */
+.error-tools { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.error-tools .chips { align-items: center; }
+.chip-link.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.chip-link.dim { opacity: 0.55; }
+.error-list { list-style: none; margin: 0 0 6px; padding: 0; max-height: 420px; overflow-y: auto; border: 1px solid var(--line-soft); border-radius: 8px; }
+.error-row { padding: 6px 10px; border-bottom: 1px solid var(--line-soft); }
+.error-row:last-child { border-bottom: 0; }
+.error-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.error-source { overflow-wrap: anywhere; }
+.error-head .link-btn { margin-left: auto; }
+.error-message, .error-detail { overflow-wrap: anywhere; white-space: pre-wrap; }
+.copy-buffer { position: fixed; top: 0; left: 0; opacity: 0; pointer-events: none; }

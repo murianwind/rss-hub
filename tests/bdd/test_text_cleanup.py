@@ -128,6 +128,7 @@ def _old_db(env, ctx):
             "UPDATE articles SET title = ?, title_ko = ? WHERE id = ?",
             ("제목&middot;하나", "제목&amp;middot;둘", ctx.article),
         )
+        conn.execute("DROP TABLE error_log")  # 19번 이후의 마이그레이션이 다시 만든다
         conn.execute("PRAGMA user_version = 18")
 
 

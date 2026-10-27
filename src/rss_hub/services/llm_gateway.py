@@ -17,8 +17,10 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 
 from rss_hub.domain.budget import BudgetBlock, check_budget, warn_reached
+from rss_hub.domain.error_log import KIND_LLM
 from rss_hub.services.alerts import AlertService
 from rss_hub.services.clock import Clock
+from rss_hub.services.error_log import NO_ERRORS, ErrorRecorder
 from rss_hub.services.ports import (
     CallOptions,
     LlmCallError,
@@ -92,7 +94,9 @@ class LlmGateway:
         alerts: AlertService,
         clock: Clock,
         sleep: Callable[[float], None] = time.sleep,
+        errors: ErrorRecorder = NO_ERRORS,
     ) -> None:
+        self._errors = errors
         self._client = client
         self._usage = usage
         self._settings = settings
@@ -194,6 +198,8 @@ class LlmGateway:
 
     def _record_failure(self, model: str, error: LlmCallError) -> None:
         self._usage.record(model=model, outcome=error.kind.value, status=error.status)
+        status = f" (HTTP {error.status})" if error.status else ""
+        self._errors.record(KIND_LLM, model, f"{error.kind.value}{status}", str(error))
         self._warn_if_needed()
 
     def _warn_if_needed(self) -> None:

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from rss_hub.domain.budget import BudgetBlock
+from rss_hub.domain.error_log import KIND_SUMMARIZE
 from rss_hub.domain.keywords import find_keywords, split_keywords
 from rss_hub.domain.korean import is_korean
 from rss_hub.domain.prompts import build_summary_prompt, summary_excerpt
@@ -21,6 +22,7 @@ from rss_hub.domain.text import fallback_excerpt, strip_html
 from rss_hub.domain.topics import Topic, is_candidate
 from rss_hub.domain.validation import validate_summary
 from rss_hub.services.clock import Clock
+from rss_hub.services.error_log import NO_ERRORS, ErrorRecorder
 from rss_hub.services.llm_gateway import BudgetBlocked, LlmGateway, LlmNotConfigured, LlmOutage
 from rss_hub.services.settings import SettingsService
 from rss_hub.services.topic_examples import load_examples
@@ -55,7 +57,9 @@ class SummarizeService:
         topics: TopicRepository,
         clock: Clock,
         progress: Callable[[int, int], None] = lambda done, total: None,
+        errors: ErrorRecorder = NO_ERRORS,
     ) -> None:
+        self._errors = errors
         self._progress = progress
         self._topics = topics
         self._articles = articles
@@ -95,17 +99,20 @@ class SummarizeService:
                 outcome = self._summarize(article)
             except BudgetBlocked as stop:
                 blocked = stop.reason
+                self._note(article, "호출 예산에 막혀 요약하지 못함", stop.reason.value)
                 break
             except LlmNotConfigured:
                 return SummarizeReport(considered=len(targets), waiting_for_setup=True)
-            except LlmOutage:
+            except LlmOutage as stop_outage:
                 outage = True
+                self._note(article, "모델이 응답하지 않음", str(stop_outage))
                 if overdue:
                     self._finalize_fallback(article)
                     fallback += 1
                 continue
-            except Exception:
+            except Exception as error_caught:
                 logger.exception("글 요약 중 예상하지 못한 오류: article_id=%s", article.id)
+                self._note(article, "요약 중 예상하지 못한 오류", type(error_caught).__name__)
                 outcome = "rejected" if self._register_failure(article) == "retry" else "fallback"
 
             if outcome == "ready":
@@ -164,6 +171,8 @@ class SummarizeService:
             answer.content, answer.finish_reason, valid_topic_ids={t.id for t in topics}
         )
         if result.draft is None:
+            reason = result.reason.value if result.reason else ""
+            self._note(article, f"모델 응답을 쓸 수 없음({reason})", answer.model)
             return "rejected" if self._register_failure(article) == "retry" else "fallback"
 
         title = article.title if is_korean(f"{article.title} {plain}") else result.draft.title_ko
@@ -202,7 +211,11 @@ class SummarizeService:
             return "fallback"
         return "retry"
 
+    def _note(self, article: Article, message: str, detail: str = "") -> None:
+        self._errors.record(KIND_SUMMARIZE, article.title, message, detail)
+
     def _finalize_fallback(self, article: Article) -> None:
+        self._note(article, "번역하지 못해 원문 제목과 본문 발췌로 확정")
         self._articles.finalize_fallback(
             article.id,
             title_ko=article.title,

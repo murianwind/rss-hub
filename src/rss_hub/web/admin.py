@@ -10,11 +10,13 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from rss_hub.domain.delivery import describe_send_failure
+from rss_hub.domain.error_log import KIND_LABELS, SORT_LABELS, SORT_RECENT
 from rss_hub.domain.settings_rules import SettingError, normalize_base_url
 from rss_hub.services.clock import Clock
 from rss_hub.services.ports import WebhookSender
 from rss_hub.services.settings import SettingsService
 from rss_hub.storage.articles import STATUS_COLLECTED, STATUS_READY, Article, ArticleRepository
+from rss_hub.storage.error_log import ErrorLogRepository
 from rss_hub.storage.feeds import FeedRepository
 from rss_hub.storage.job_runs import STATUS_RUNNING, JobRunRepository
 from rss_hub.storage.llm_usage import LlmUsageRepository
@@ -128,6 +130,7 @@ def build_admin_router(
     usage: LlmUsageRepository,
     clock: Clock,
     sender: WebhookSender,
+    error_log: ErrorLogRepository,
     runner: Callable[[], JobStarter | None] = lambda: None,
 ) -> APIRouter:
     router = APIRouter()
@@ -208,7 +211,9 @@ def build_admin_router(
         )
 
     @router.get("/status", response_class=HTMLResponse)
-    def status_page(request: Request, run: str = "") -> HTMLResponse:
+    def status_page(
+        request: Request, run: str = "", kind: str = "", sort: str = ""
+    ) -> HTMLResponse:
         checklist = service.setup_checklist()
         waiting = (
             0 if service.snapshot().base_url else articles.count_by_status().get(STATUS_READY, 0)
@@ -276,6 +281,7 @@ def build_admin_router(
             "checklist": checklist,
             "all_ready": all(item.ready for item in checklist if item.required),
             "audit": audit,
+            **_error_log_context(error_log, config.timezone, kind, sort),
         }
         return templates.TemplateResponse(request, "status.html", context)
 
@@ -368,3 +374,41 @@ def build_admin_router(
         return done(form, "/discord?saved=1", "saved")
 
     return router
+
+
+def _error_log_context(
+    error_log: ErrorLogRepository, zone: tzinfo, kind: str, sort: str
+) -> dict[str, Any]:
+    """상태 화면의 오류 기록: 유형별 횟수, 거른 목록, 줄마다 복사할 글자."""
+    chosen_kind = kind if kind in KIND_LABELS else ""
+    chosen_sort = sort if sort in SORT_LABELS else SORT_RECENT
+    counts = error_log.counts_by_kind()
+
+    def stamp(moment: datetime) -> str:
+        return moment.astimezone(zone).strftime("%m-%d %H:%M:%S")
+
+    rows = []
+    for e in error_log.list(kind=chosen_kind, sort=chosen_sort):
+        times = stamp(e.last_at) if e.count == 1 else f"{stamp(e.first_at)} ~ {stamp(e.last_at)}"
+        label = KIND_LABELS.get(e.kind, e.kind)
+        lines = [f"[{label}] {e.source}", e.message, f"{times} · {e.count}회"]
+        rows.append(
+            {
+                "kind": e.kind,
+                "label": label,
+                "source": e.source,
+                "message": e.message,
+                "detail": e.detail,
+                "count": e.count,
+                "time": stamp(e.last_at),
+                "clip": "\n".join([*lines, e.detail] if e.detail else lines),
+            }
+        )
+    return {
+        "error_rows": rows,
+        "error_total": sum(counts.values()),
+        "error_kinds": [(k, KIND_LABELS[k], counts.get(k, 0)) for k in KIND_LABELS],
+        "error_kind": chosen_kind,
+        "error_sort": chosen_sort,
+        "error_sorts": list(SORT_LABELS.items()),
+    }

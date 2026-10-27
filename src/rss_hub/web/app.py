@@ -24,6 +24,7 @@ from rss_hub.runtime import build_llm_services
 from rss_hub.services.backup import BackupService
 from rss_hub.services.clock import Clock, SystemClock
 from rss_hub.services.collect import CollectService
+from rss_hub.services.error_log import ErrorRecorder
 from rss_hub.services.feed_registration import FeedRegistrationService
 from rss_hub.services.fulltext import FullTextService
 from rss_hub.services.importer import ImportService
@@ -38,6 +39,7 @@ from rss_hub.services.topic_probe import TopicProbe
 from rss_hub.storage.articles import ArticleRepository
 from rss_hub.storage.backup import BackupRepository
 from rss_hub.storage.database import Database
+from rss_hub.storage.error_log import ErrorLogRepository
 from rss_hub.storage.feeds import FeedRepository
 from rss_hub.storage.import_staging import ImportStagingRepository
 from rss_hub.storage.job_runs import JobRunRepository
@@ -207,7 +209,11 @@ def create_app(
     sender = webhook_sender or RequestsWebhookSender()
     client = llm_client or OpenRouterClient(service.get_openrouter_key)
     topics = TopicRepository(database, app_clock)
-    llm = build_llm_services(database, app_clock, service, client=client, sender=sender)
+    error_log = ErrorLogRepository(database, app_clock)
+    errors = ErrorRecorder(error_log)
+    llm = build_llm_services(
+        database, app_clock, service, client=client, sender=sender, errors=errors
+    )
     app.include_router(
         build_admin_router(
             service,
@@ -218,6 +224,7 @@ def create_app(
             usage=LlmUsageRepository(database, app_clock),
             clock=app_clock,
             sender=sender,
+            error_log=error_log,
             runner=lambda: app.state.runner,
         )
     )
@@ -273,7 +280,7 @@ def create_app(
         build_panel_router(feeds=feeds, topics=topics, settings=service, templates=templates)
     )
     fetcher = feed_fetcher or RequestsFeedFetcher()
-    fulltext = FullTextService(articles=articles, pages=page_fetcher or fetcher)
+    fulltext = FullTextService(articles=articles, pages=page_fetcher or fetcher, errors=errors)
     app.include_router(
         build_reader_router(
             reader=reader,
@@ -314,6 +321,7 @@ def create_app(
         settings=service,
         clock=app_clock,
         pages=page_source,
+        errors=errors,
     )
     app.include_router(
         build_live_router(reader=reader, feeds=feeds, collector=collector, model_usage=model_usage)

@@ -7,12 +7,14 @@ from rss_hub.domain.keywords import DEFAULT_OTT_KEYWORDS
 from rss_hub.domain.topics import TopicFields
 from rss_hub.services.alerts import AlertService
 from rss_hub.services.deliver import DeliveryService
+from rss_hub.services.error_log import ErrorRecorder
 from rss_hub.services.ports import SendResult
 from rss_hub.services.settings import SettingsService
 from rss_hub.storage.alerts import AlertRepository
 from rss_hub.storage.articles import ArticleRepository, NewArticle
 from rss_hub.storage.database import Database
 from rss_hub.storage.deliveries import DeliveryRepository
+from rss_hub.storage.error_log import ErrorLogRepository
 from rss_hub.storage.feeds import STATUS_ACTIVE, FeedRepository
 from rss_hub.storage.topics import TopicRepository
 from tests.fakes.clock import FakeClock
@@ -83,6 +85,7 @@ class DeliveryEnv:
         self.feeds = FeedRepository(self.db, self.clock)
         self.articles = ArticleRepository(self.db, self.clock)
         self.deliveries = DeliveryRepository(self.db, self.clock)
+        self.error_log = ErrorLogRepository(self.db, self.clock)
         self.topics = TopicRepository(self.db, self.clock)
         self.sender = FakeWebhookSender()
         self.notifier = FakeNotifier()
@@ -106,6 +109,7 @@ class DeliveryEnv:
             sleep=self.sleeps.append,
             stop_requested=lambda: self.stop_flag,
             progress=progress,
+            errors=ErrorRecorder(self.error_log),
         )
         self.webhooks: dict[str, int] = {}
         self.settings.update({"service_base_url": BASE_URL})
