@@ -191,3 +191,16 @@ Feature: 글 전문: 원문 페이지에서 본문을 가져와 보여 준다
     Given 글 주소가 제목이 있고 본문은 없는 짧은 페이지를 돌려주는 글이 있다
     When 그 글을 연다
     Then 실패 안내에 받은 페이지의 제목이 들어 있다
+
+  @FTX-27
+  Scenario Outline: 네이버 블로그 글은 껍데기를 거치지 않고 본문이 있는 모바일 글 주소를 바로 가져온다
+    Given 글 주소가 "<글 주소>"이고 모바일 글 주소에만 본문이 있는 글이 있다
+    When 그 글을 연다
+    Then 모바일 글 주소를 한 번만 요청했고 본문이 전문으로 보인다
+
+    Examples:
+      | 글 주소                                                                  |
+      | https://blog.naver.com/skim209/224358894904?fromRss=true&trackingCode=rss |
+      | https://blog.naver.com/skim209/224358894904                              |
+      | https://m.blog.naver.com/skim209/224358894904                            |
+      | https://blog.naver.com/PostView.naver?blogId=skim209&logNo=224358894904  |

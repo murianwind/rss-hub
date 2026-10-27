@@ -14,7 +14,7 @@ from tests.fakes.viewer_world import open_world
 from tests.keywords.browser import BROWSER
 from tests.keywords.page import body
 
-bind(globals(), "18_full_text.feature", [f"FTX-{n:02d}" for n in range(1, 27)])
+bind(globals(), "18_full_text.feature", [f"FTX-{n:02d}" for n in range(1, 28)])
 
 LINK = "https://blog.example.com/post/1"
 FULL = "원문 전체에만 있는 본문 문장입니다. " * 30
@@ -679,3 +679,18 @@ def _titled_empty(world, ctx):
 @then("실패 안내에 받은 페이지의 제목이 들어 있다")
 def _title_in_failure(ctx):
     assert ', 제목 "접근 제한 / 블로그")' in ctx.response.text.replace("&#34;", '"')
+
+
+NAVER_MOBILE = "https://m.blog.naver.com/PostView.naver?blogId=skim209&logNo=224358894904"
+
+
+@given(parsers.parse('글 주소가 "{link}"이고 모바일 글 주소에만 본문이 있는 글이 있다'))
+def _naver_link(world, ctx, link):
+    world.fetcher.page(NAVER_MOBILE, PAGE)  # 다른 주소는 가져오지 않는다(없으면 404 오류)
+    ctx.article = world.article(link=link)
+
+
+@then("모바일 글 주소를 한 번만 요청했고 본문이 전문으로 보인다")
+def _naver_direct(world, ctx):
+    assert world.fetcher.page_calls == [NAVER_MOBILE]
+    assert "원문 전체에만 있는 본문 문장입니다" in body(ctx.response.text)

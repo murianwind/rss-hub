@@ -19,6 +19,7 @@ from rss_hub.domain.fulltext import (
     page_title,
     reference_is_complete,
 )
+from rss_hub.domain.page_urls import reading_url
 from rss_hub.domain.text import strip_html
 from rss_hub.services.error_log import NO_ERRORS, ErrorRecorder
 from rss_hub.services.ports import FetchError, PageFetcher, PageResult
@@ -66,7 +67,7 @@ class FullTextService:
         except FeedUrlError:
             return FullText(None, "skipped", "")  # 원문 주소가 없거나 쓸 수 없으면 기록하지 않는다
         try:
-            page, hops = self._load_page(link)
+            page, hops = self._load_page(reading_url(link))
         except FetchError as error:
             return self._failed(article, error.reason)
         extraction = extract_article(page.text, page.final_url, article.title, article.content_html)
