@@ -291,7 +291,91 @@
     if (stamp && updated) stamp.textContent = updated;
   }
 
+  // ---------- 수집으로 새 글이 들어오면 목록 맨 위에 끼워 넣는다(화면을 통째로 다시 불러오지 않는다) ----------
+  var knownArticles = null; // 지금까지 본 전체 글 수(처음 받은 상태가 기준)
+  var pendingNew = 0; // 보고 있는 자리가 맨 위가 아니라서 아직 끼워 넣지 못한 새 글 수
+  var fetchingNew = false;
+  var TOP_NEAR = 40; // 이 안쪽(px)이면 맨 위로 본다
+
+  function listScrollBox() {
+    return document.querySelector(".list") ? document.querySelector(".main .scroll") : null;
+  }
+
+  function noteArticles(state) {
+    var total = 0;
+    Object.keys(state.feeds).forEach(function (id) {
+      total += state.feeds[id].total;
+    });
+    if (knownArticles !== null && total > knownArticles) pendingNew += total - knownArticles;
+    knownArticles = total;
+    if (pendingNew) showNewArticles();
+  }
+
+  function onFirstPage() {
+    var page = new URL(window.location.href).searchParams.get("page");
+    return !page || page === "1";
+  }
+
+  function showNewArticles() {
+    var box = listScrollBox();
+    if (!box || fetchingNew || !onFirstPage()) return;
+    if (box.scrollTop > TOP_NEAR) return; // 읽던 자리를 밀어내지 않고, 맨 위로 올라오면 그때 끼워 넣는다
+    fetchingNew = true;
+    fetch(window.location.href, { credentials: "same-origin" })
+      .then(function (response) {
+        return response.ok ? response.text() : null;
+      })
+      .then(function (text) {
+        if (!text) return;
+        var doc = new DOMParser().parseFromString(text, "text/html");
+        var list = document.querySelector(".list");
+        var fresh = Array.prototype.filter.call(doc.querySelectorAll(".list > article.card"), function (card) {
+          return !list.querySelector('article.card[data-id="' + card.getAttribute("data-id") + '"]');
+        });
+        pendingNew = 0;
+        if (!fresh.length) return;
+        var empty = list.querySelector(":scope > .empty");
+        if (empty) empty.remove();
+        var first = list.querySelector(":scope > article.card");
+        var anchor = first || list.querySelector(":scope > .pager");
+        fresh.forEach(function (card) {
+          list.insertBefore(document.importNode(card, true), anchor);
+        });
+        var pill = document.querySelector(".viewbar .pill");
+        var nextPill = doc.querySelector(".viewbar .pill");
+        if (pill && nextPill) pill.textContent = nextPill.textContent;
+        showToast("새 글 " + fresh.length + "개를 불러왔습니다.");
+      })
+      .catch(function () {})
+      .then(function () {
+        fetchingNew = false;
+      });
+  }
+
+  (function watchNewArticles() {
+    var box = listScrollBox();
+    if (box) {
+      box.addEventListener(
+        "scroll",
+        function () {
+          if (pendingNew && box.scrollTop <= TOP_NEAR) showNewArticles();
+        },
+        { passive: true }
+      );
+    }
+    // 화면을 연 직후의 글 수를 기준으로 삼는다(30초 뒤 첫 갱신까지 들어온 글도 놓치지 않는다)
+    fetch("/ui/state", { credentials: "same-origin" })
+      .then(function (response) {
+        return response.ok ? response.json() : null;
+      })
+      .then(function (state) {
+        if (state) noteArticles(state);
+      })
+      .catch(function () {});
+  })();
+
   function applyState(state) {
+    noteArticles(state);
     showMarkAll(state);
     if (!document.querySelector(".dragging")) sortFeeds(state.feed_order);
     Object.keys(state.feeds).forEach(function (id) {
