@@ -202,13 +202,11 @@ def _unknown(ctx):
     assert ctx.response.status_code == 404
 
 
-@then("현재 상태, 작업 기록, 설정 점검, 변경 이력이 격자 칸으로 나뉘어 있다")
+@then("현재 상태, 작업 기록, 설정 점검, 변경 이력은 탭 카드 두 장의 패널로 나뉘어 있다")
 def _grid(world, ctx):
-    assert 'class="status-grid"' in ctx.html
+    assert ctx.html.count('<div class="status-tabs" data-tabs>') == 2
     cards = re.findall(r'<section class="status-card[^"]*"[^>]*>\s*<h2>([^<]+)</h2>', ctx.html)
     assert cards == ["현재 상태", "작업 기록", "설정 점검", "변경 이력"]
-    css = world.get("/static/app.css").text
-    assert ".status-grid {" in css and "grid-template-columns" in css.split(".status-grid {")[1]
 
 
 def current_state(html):

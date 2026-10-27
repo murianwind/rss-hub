@@ -1235,19 +1235,85 @@ document.addEventListener(
   });
 })();
 
-/* ---------- 상태 화면: 실행 중인 작업이 있으면 끝날 때까지 작업 표를 스스로 갱신한다 ---------- */
+/* ---------- 상태 화면: 탭 ---------- */
+(function () {
+  var TAB_KEY = "rsshub.status.tab";
+  var groups = document.querySelectorAll("[data-tabs]");
+
+  function activate(group, id) {
+    group.querySelectorAll("[data-tab]").forEach(function (tab) {
+      var on = tab.getAttribute("data-tab") === id;
+      tab.classList.toggle("on", on);
+      tab.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    group.querySelectorAll(".tab-panel").forEach(function (panel) {
+      panel.hidden = panel.id !== id;
+    });
+  }
+
+  function remembered() {
+    try {
+      return JSON.parse(window.sessionStorage.getItem(TAB_KEY) || "{}");
+    } catch (error) {
+      return {};
+    }
+  }
+
+  groups.forEach(function (group, index) {
+    var tabs = group.querySelectorAll("[data-tab]");
+    if (!tabs.length) return;
+    var ids = Array.prototype.map.call(tabs, function (tab) {
+      return tab.getAttribute("data-tab");
+    });
+    var hash = window.location.hash.replace("#", "");
+    var chosen = ids.indexOf(hash) >= 0 ? hash : remembered()[index];
+    if (ids.indexOf(chosen) < 0) chosen = ids[0];
+    group.classList.add("tabs-ready");
+    activate(group, chosen);
+    group.addEventListener("click", function (event) {
+      var tab = event.target.closest ? event.target.closest("[data-tab]") : null;
+      if (!tab) return;
+      event.preventDefault();
+      var id = tab.getAttribute("data-tab");
+      activate(group, id);
+      var saved = remembered();
+      saved[index] = id;
+      try {
+        window.sessionStorage.setItem(TAB_KEY, JSON.stringify(saved));
+      } catch (error) {
+        /* 저장하지 못해도 탭은 동작한다 */
+      }
+    });
+  });
+})();
+
+/* ---------- 상태 화면: 다음 실행 시각은 늘 최신으로, 실행 중인 작업이 있으면 끝날 때까지 작업 표도 갱신한다 ---------- */
 (function () {
   var jobs = document.querySelector("[data-jobs]");
   var current = document.querySelector("[data-current]");
   if (!jobs || !current || !window.fetch) return;
+  var RUNNING_MS = 1500;
+  var IDLE_MS = 10000;
 
   function swap(target, source) {
     // 문자열을 HTML로 쓰지 않고, 파싱된 문서의 노드를 그대로 옮겨 붙인다
     target.replaceChildren.apply(target, document.importNode(source, true).childNodes);
   }
 
+  // 펼쳐 둔 대기 글 목록을 접지 않도록, 실행 중이 아닐 때는 다음 실행 시각 글자만 고친다
+  function refreshNextRuns(doc) {
+    document.querySelectorAll("[data-next-run]").forEach(function (hint) {
+      var fresh = doc.querySelector('[data-next-run="' + hint.getAttribute("data-next-run") + '"]');
+      if (fresh && fresh.textContent !== hint.textContent) hint.textContent = fresh.textContent;
+    });
+  }
+
   function poll() {
-    if (jobs.getAttribute("data-jobs-running") !== "1") return;
+    var running = jobs.getAttribute("data-jobs-running") === "1";
+    if (!running && document.visibilityState === "hidden") {
+      window.setTimeout(poll, IDLE_MS);
+      return;
+    }
     fetch(window.location.pathname, { credentials: "same-origin", cache: "no-store" })
       .then(function (response) {
         return response.ok ? response.text() : null;
@@ -1258,17 +1324,22 @@ document.addEventListener(
         var next = doc.querySelector("[data-jobs]");
         var nextCurrent = doc.querySelector("[data-current]");
         if (!next || !nextCurrent) return;
-        swap(jobs, next);
-        swap(current, nextCurrent);
-        jobs.setAttribute("data-jobs-running", next.getAttribute("data-jobs-running"));
+        var nowRunning = next.getAttribute("data-jobs-running") === "1";
+        if (running || nowRunning) {
+          swap(jobs, next);
+          swap(current, nextCurrent);
+          jobs.setAttribute("data-jobs-running", next.getAttribute("data-jobs-running"));
+        } else {
+          refreshNextRuns(doc);
+        }
       })
       .catch(function () {})
       .then(function () {
-        window.setTimeout(poll, 1500);
+        window.setTimeout(poll, jobs.getAttribute("data-jobs-running") === "1" ? RUNNING_MS : IDLE_MS);
       });
   }
 
-  window.setTimeout(poll, 1500);
+  window.setTimeout(poll, jobs.getAttribute("data-jobs-running") === "1" ? RUNNING_MS : IDLE_MS);
 })();
 
 /* ---------- 좁은 화면에서는 글의 요약을 접어 두어 본문 자리를 넓힌다 ---------- */

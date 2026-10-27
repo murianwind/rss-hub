@@ -16,8 +16,10 @@ from rss_hub.domain.fulltext import (
     COVERAGE_MIN,
     extract_article,
     find_page_redirect,
+    page_title,
     reference_is_complete,
 )
+from rss_hub.domain.page_urls import reading_url
 from rss_hub.domain.text import strip_html
 from rss_hub.services.error_log import NO_ERRORS, ErrorRecorder
 from rss_hub.services.ports import FetchError, PageFetcher, PageResult
@@ -65,14 +67,15 @@ class FullTextService:
         except FeedUrlError:
             return FullText(None, "skipped", "")  # 원문 주소가 없거나 쓸 수 없으면 기록하지 않는다
         try:
-            page, hops = self._load_page(link)
+            page, hops = self._load_page(reading_url(link))
         except FetchError as error:
             return self._failed(article, error.reason)
         extraction = extract_article(page.text, page.final_url, article.title, article.content_html)
         if extraction is None:
             host = urlsplit(page.final_url).hostname or ""
             # 왜 못 찾았는지 사람이 가늠할 수 있게 받은 페이지의 크기, 주소, 따라간 횟수를 남긴다
-            return self._failed(article, f"{NO_CONTENT}|{len(page.text)}|{host}|{hops}")
+            title = page_title(page.text).replace("|", "/")
+            return self._failed(article, f"{NO_CONTENT}|{len(page.text)}|{host}|{hops}|{title}")
         html = extraction.html
         if (
             extraction.coverage is not None
@@ -111,11 +114,12 @@ class FullTextService:
 
 
 def _no_content_detail(reason: str) -> str:
-    """ "NoContent|받은 글자 수|주소|따라간 횟수"에서 괄호 설명을 만든다(옛 기록은 설명 없이)."""
-    parts = reason.split("|")
-    if len(parts) != 4 or not parts[1].isdigit() or not parts[3].isdigit():
+    """ "NoContent|글자 수|주소|따라간 횟수|제목"에서 괄호 설명을 만든다(옛 기록은 있는 만큼)."""
+    parts = reason.split("|", 4)
+    if len(parts) < 4 or not parts[1].isdigit() or not parts[3].isdigit():
         return ""
-    return f"(받은 페이지 {int(parts[1]):,}자, {parts[2]}, 다른 주소로 {parts[3]}번 이동)"
+    title = f', 제목 "{parts[4]}"' if len(parts) == 5 and parts[4] else ""
+    return f"(받은 페이지 {int(parts[1]):,}자, {parts[2]}, 다른 주소로 {parts[3]}번 이동{title})"
 
 
 def _describe(reason: str) -> str:
