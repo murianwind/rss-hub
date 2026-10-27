@@ -10,11 +10,17 @@ from dataclasses import dataclass
 
 from rss_hub.domain.discovery import describe_fetch_failure
 from rss_hub.domain.feed_url import FeedUrlError, validate_feed_url
-from rss_hub.domain.fulltext import extract_main_content, find_page_redirect
+from rss_hub.domain.fulltext import (
+    COVERAGE_MIN,
+    extract_article,
+    find_page_redirect,
+    reference_is_complete,
+)
 from rss_hub.domain.text import strip_html
 from rss_hub.services.ports import FetchError, PageFetcher, PageResult
 from rss_hub.storage.articles import MAX_FULL_TEXT_CHARS, Article, ArticleRepository
 
+MISMATCH = "Mismatch"  # 뽑은 글이 RSS 전문과 맞지 않는다(엉뚱한 덩어리를 뽑았거나 다른 글이다)
 NO_CONTENT = "NoContent"  # 페이지는 받았지만 본문을 찾지 못했다
 SHORTER_THAN_RSS = "ShorterThanRss"  # 페이지 본문이 RSS 본문보다 짧다(유료 벽으로 잘린 페이지 등)
 MIN_RSS_TO_COMPARE = 300  # RSS 본문이 이만큼 되어야 "이미 전문"으로 보고 비교한다
@@ -52,9 +58,16 @@ class FullTextService:
             page = self._load_page(link)
         except FetchError as error:
             return self._failed(article, error.reason)
-        html = extract_main_content(page.text, page.final_url, article.title)
-        if html is None:
+        extraction = extract_article(page.text, page.final_url, article.title, article.content_html)
+        if extraction is None:
             return self._failed(article, NO_CONTENT)
+        html = extraction.html
+        if (
+            extraction.coverage is not None
+            and extraction.coverage < COVERAGE_MIN
+            and reference_is_complete(article.content_html)
+        ):
+            return self._failed(article, MISMATCH)  # 더 넓게 뽑아도 RSS 전문과 맞지 않는다
         rss_length = len(strip_html(article.content_html))
         if rss_length >= MIN_RSS_TO_COMPARE and len(strip_html(html)) < SHORTER_RATIO * rss_length:
             return self._failed(article, SHORTER_THAN_RSS)  # RSS가 이미 더 완전한 전문이다
@@ -84,6 +97,8 @@ class FullTextService:
 def _describe(reason: str) -> str:
     if reason == NO_CONTENT:
         return "원문 페이지에서 본문을 찾지 못했습니다"
+    if reason == MISMATCH:
+        return "원문 페이지에서 뽑은 글이 RSS 내용과 맞지 않습니다"
     if reason == SHORTER_THAN_RSS:
         return "원문 페이지의 본문이 RSS 본문보다 짧습니다(유료 구독이 필요한 글일 수 있습니다)"
     return describe_fetch_failure(reason)

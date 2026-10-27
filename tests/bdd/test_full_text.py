@@ -14,7 +14,7 @@ from tests.fakes.viewer_world import open_world
 from tests.keywords.browser import BROWSER
 from tests.keywords.page import body
 
-bind(globals(), "18_full_text.feature", [f"FTX-{n:02d}" for n in range(1, 21)])
+bind(globals(), "18_full_text.feature", [f"FTX-{n:02d}" for n in range(1, 24)])
 
 LINK = "https://blog.example.com/post/1"
 FULL = "원문 전체에만 있는 본문 문장입니다. " * 30
@@ -568,3 +568,62 @@ def _limit_value():
     from rss_hub.adapters.http_feed_fetcher import DEFAULT_MAX_BYTES, MAX_PAGE_BYTES
 
     assert MAX_PAGE_BYTES > 1_000_000 and MAX_PAGE_BYTES <= DEFAULT_MAX_BYTES
+
+
+def _sentences(tag, count):
+    return " ".join(
+        f"{tag} {n}번째로 나오는 문장이고 다른 문장과 겹치지 않도록 충분히 길게 씁니다."
+        for n in range(count)
+    )
+
+
+@given(
+    "본문 중간에 관련 글 제목 줄이 있고 그 뒤의 짧은 본문이 끝 안내 규칙에 잘리는 글이 있고 RSS가 그 글 전체를 담고 있다"
+)
+def _cut_by_marker(world, ctx):
+    before, after = _sentences("앞쪽", 5), _sentences("뒤쪽", 6)
+    page = (
+        "<html><body><article>"
+        f"<p>{before}</p><h3>Related Articles</h3><p>{after}</p></article></body></html>"
+    )
+    world.fetcher.page(LINK, page)
+    ctx.article = world.article(link=LINK, content=f"<p>{before}</p><p>{after}</p>")
+    ctx.last = "뒤쪽 5번째로 나오는 문장"
+
+
+@then("관련 글 제목 줄 뒤의 본문까지 모두 보인다")
+def _all_text(ctx):
+    assert ctx.last in body(ctx.response.text) and "Related Articles" in body(ctx.response.text)
+
+
+@given("RSS 본문이 전문이고 원문 페이지는 전혀 다른 내용의 글이 있다")
+def _different_page(world, ctx):
+    rss = _sentences("RSS에만 있는", 12)
+    world.fetcher.page(
+        LINK,
+        f"<html><body><article><p>{_sentences('전혀 다른 글의', 8)}</p></article></body></html>",
+    )
+    ctx.article = world.article(link=LINK, content=f"<p>{rss}</p>")
+    ctx.rss_marker = "RSS에만 있는 11번째로 나오는 문장"
+
+
+@then(parsers.re(r'RSS 본문이 보이고 "(?P<reason>[^"]+)" 이유가 보인다'))
+def _rss_shown_with_reason(ctx, reason):
+    assert ctx.rss_marker in ctx.response.text and reason in ctx.response.text
+    assert "전혀 다른 글의" not in body(ctx.response.text)
+
+
+@given('RSS 본문이 "[…]"로 끝나는 짧은 요약이고 원문 페이지는 다른 표현의 글이 있다')
+def _teaser_rss(world, ctx):
+    teaser = _sentences("요약에만 있는", 3) + " […]"
+    world.fetcher.page(
+        LINK,
+        f"<html><body><article><p>{_sentences('원문에만 있는', 8)}</p></article></body></html>",
+    )
+    ctx.article = world.article(link=LINK, content=f"<p>{teaser}</p>")
+
+
+@then("원문 페이지에서 뽑은 글이 보이고 실패 안내는 없다")
+def _page_text_shown(ctx):
+    assert "원문에만 있는 7번째로 나오는 문장" in body(ctx.response.text)
+    assert "맞지 않습니다" not in ctx.response.text

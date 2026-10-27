@@ -8,11 +8,13 @@
 """
 
 import re
+from dataclasses import dataclass
 from html import escape
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit
 
 from rss_hub.domain.sanitize import sanitize_html
+from rss_hub.domain.text import unescape_entities
 
 MIN_TEXT_LENGTH = 200  # 이보다 짧으면 본문을 찾지 못한 것으로 본다
 MAX_DEPTH = 120  # 이보다 깊은 중첩은 잘라서 재귀가 넘치지 않게 한다
@@ -272,6 +274,7 @@ _MARKER_PREFIXES = (
     "share this", "explore more", "more from", "see more", "recorded at",
 )  # fmt: skip
 CUT_AFTER_SHARE = 0.4  # 글의 이만큼 이후에 나온 끝 안내만 자른다(앞쪽의 같은 낱말은 본문일 수 있다)
+_LIST_TAGS = frozenset({"ul", "ol", "p", "div", "span", "section"})
 _BLOCKS = frozenset(
     {"p", "div", "span", "section", "strong", "b", "h1", "h2", "h3", "h4", "h5", "h6"}
 )
@@ -475,6 +478,9 @@ class _Walk:
         self.seen: set[str] = set()  # 이미 낸 문단(같은 문단을 두 번 내지 않는다)
         self.skipped = 0  # 건너뛴 글자 수(글에서 지나온 위치를 셀 때 낸 글자와 함께 센다)
         self.top: _Node | None = None  # 본문으로 고른 덩어리(뒤에 본문이 더 있는지 볼 때의 한계)
+        self.lenient = (
+            False  # 참이면 링크 목록만 빼고 끝 안내, 앞머리, 홍보로 자르는 규칙은 쓰지 않는다
+        )
 
     def emit(self, piece: str) -> None:
         self.out.append(piece)
@@ -504,6 +510,8 @@ def _body_follows(node: _Node, walk: _Walk) -> bool:
 
 def _skip_block(node: _Node, walk: _Walk) -> bool:
     """글에 속하지 않는 한 덩어리인가(끝 안내는 walk.cut을 켠다)."""
+    if walk.lenient:
+        return node.tag in _LIST_TAGS and _is_noise_block(node)
     if node.tag in ("ul", "ol", "p", "div", "span", "section") and _is_noise_block(node):
         if _is_bare_url(node) and _position(walk) >= PROMO_ZONE * walk.total:
             walk.cut = True  # 글 끝의 상품 주소 뒤는 홍보(책 소개, 미리보기 카드)가 이어진다
@@ -605,7 +613,7 @@ def _serialize(node: _Node, walk: _Walk, depth: int = 0) -> None:
     walk.emit(f"<{node.tag}{rendered}>")
     if node.tag in _VOID:
         return
-    tail = _promo_tail_start(node, walk)
+    tail = None if walk.lenient else _promo_tail_start(node, walk)
     for index, child in enumerate(node.children):
         if tail is not None and index >= tail:
             walk.cut = True  # 글 끝의 홍보(주소 줄과 그 앞의 소개)는 여기서부터 뺀다
@@ -614,7 +622,7 @@ def _serialize(node: _Node, walk: _Walk, depth: int = 0) -> None:
             walk.text += len(child.strip())
             walk.emit(escape(child, quote=False))
             continue
-        if _is_label_of_noise(node, index):
+        if not walk.lenient and _is_label_of_noise(node, index):
             continue  # 링크 목록 바로 앞의 이름표(예: Cybersecurity Guides)는 목록과 함께 뺀다
         _serialize(child, walk, depth + 1)
     walk.emit(f"</{node.tag}>")
@@ -667,11 +675,84 @@ def _plain_length(clean_html: str) -> int:
     return len(re.sub(r"\s+", "", re.sub(r"<[^>]*>", "", clean_html)))
 
 
-def extract_main_content(html: str, base_url: str, title: str = "") -> str | None:
-    """원문 페이지에서 본문 HTML(정제됨)을 뽑는다. 본문을 찾지 못하면 None.
+COVERAGE_MIN = 0.6  # RSS 내용 가운데 이 비율 이상이 추출 결과에 있어야 제대로 뽑은 것으로 본다
+MIN_REFERENCE = 100  # RSS 본문이 이만큼(공백과 부호를 뺀 글자 수)은 되어야 비교한다
+SEGMENT_KEY = 24  # RSS 문장을 추출 결과에서 찾을 때 문장 앞에서 이만큼(정규화 글자)만 본다
+MAX_EXPAND_LEVELS = 3  # 못 찾으면 본문 덩어리의 바깥 덩어리로 이만큼까지 넓혀 본다
+MIN_COMPLETE_REFERENCE = 300  # 이만큼 길고 잘린 흔적이 없어야 RSS가 전문이라고 본다
+_SENTENCES = re.compile(r"(?<=[.!?。…])")
+_TRUNCATED_END = re.compile(
+    r"(\[(?:…|\.\.\.)\]|…|\.\.\.|read more|continue reading|더 보기|계속 읽기)\W*$", re.I
+)
 
-    title(글 제목)을 주면 본문 맨 앞의 같은 제목 머리글은 뺀다(화면이 이미 제목을 보여 주므로).
-    """
+
+def _visible_text(html: str) -> str:
+    """HTML의 글자(태그는 공백으로 바꿔 문단이 붙지 않게 한다)."""
+    return unescape_entities(re.sub(r"<[^>]*>", " ", html))
+
+
+def reference_coverage(reference_html: str, extracted_html: str) -> float | None:
+    """RSS 본문의 문장 가운데 추출 결과에 들어 있는 비율. 비교할 만큼 RSS가 길지 않으면 None.
+
+    문장 앞부분(SEGMENT_KEY자)이 추출 결과에 있으면 들어 있는 것으로 센다. RSS가 앞부분만 담은
+    요약이어도 그 앞부분이 글에 있으면 되므로 일부만 발행하는 피드도 같은 기준으로 본다."""
+    reference = _visible_text(reference_html)
+    if len(_normal(reference)) < MIN_REFERENCE:
+        return None
+    keys = [
+        key
+        for part in _SENTENCES.split(reference)
+        if len(key := _normal(part)[:SEGMENT_KEY]) >= SEGMENT_KEY
+    ]
+    if not keys:
+        return None
+    haystack = _normal(_visible_text(extracted_html))
+    return sum(key in haystack for key in keys) / len(keys)
+
+
+def reference_is_complete(reference_html: str) -> bool:
+    """RSS 본문이 글 전체로 보이는가(충분히 길고 "[…]", "더 보기" 같은 잘린 흔적이 없다)."""
+    reference = _visible_text(reference_html).strip()
+    return len(_normal(reference)) >= MIN_COMPLETE_REFERENCE and not _TRUNCATED_END.search(
+        reference
+    )
+
+
+@dataclass(frozen=True)
+class Extraction:
+    html: str  # 정제된 본문
+    coverage: float | None  # RSS 내용이 들어 있는 비율(비교할 RSS가 없으면 None)
+
+
+def _render(node: _Node, base_url: str, title: str, *, lenient: bool) -> str | None:
+    walk = _Walk(base_url, title, _measure(node)[0])
+    walk.top, walk.lenient = node, lenient
+    _serialize(node, walk)
+    clean = sanitize_html("".join(walk.out), base_url)
+    return clean if _plain_length(clean) >= MIN_TEXT_LENGTH else None
+
+
+def _attempts(best: _Node) -> list[tuple[_Node, bool]]:
+    """처음 고른 방식 다음에 시도할 것: 같은 덩어리를 덜 자르고, 그래도 안 되면 바깥 덩어리로."""
+    attempts = [(best, True)]
+    outer = best.parent
+    while (
+        outer is not None
+        and outer.tag not in ("root", "html")
+        and len(attempts) <= MAX_EXPAND_LEVELS
+    ):
+        attempts.append((outer, True))
+        outer = outer.parent
+    return attempts
+
+
+def extract_article(
+    html: str, base_url: str, title: str = "", reference: str = ""
+) -> Extraction | None:
+    """원문 페이지에서 본문을 뽑는다. 본문을 찾지 못하면 None.
+
+    reference(RSS 본문 HTML)를 주면 추출 결과에 RSS 내용이 들어 있는지 보고, 모자라면 덜 자르거나
+    더 넓은 덩어리로 다시 뽑아서 RSS 내용이 가장 많이 들어 있는 결과를 고른다."""
     builder = _Builder()
     try:
         builder.feed(html)
@@ -681,8 +762,27 @@ def extract_main_content(html: str, base_url: str, title: str = "") -> str | Non
     best = _best(builder.root)
     if best is None:
         return None
-    walk = _Walk(base_url, title, _measure(best)[0])
-    walk.top = best
-    _serialize(best, walk)
-    clean = sanitize_html("".join(walk.out), base_url)
-    return clean if _plain_length(clean) >= MIN_TEXT_LENGTH else None
+    first = _render(best, base_url, title, lenient=False)
+    if not reference or reference_coverage(reference, "") is None:  # 비교할 RSS가 없다
+        return None if first is None else Extraction(first, None)
+    chosen = first
+    chosen_coverage = 0.0 if first is None else reference_coverage(reference, first) or 0.0
+    if chosen_coverage >= COVERAGE_MIN:
+        return Extraction(first or "", chosen_coverage)
+    for node, lenient in _attempts(best):
+        retry = _render(node, base_url, title, lenient=lenient)
+        found = 0.0 if retry is None else reference_coverage(reference, retry) or 0.0
+        if retry is not None and found > chosen_coverage:
+            chosen, chosen_coverage = retry, found
+            if found >= COVERAGE_MIN:
+                break
+    return None if chosen is None else Extraction(chosen, chosen_coverage)
+
+
+def extract_main_content(html: str, base_url: str, title: str = "") -> str | None:
+    """원문 페이지에서 본문 HTML(정제됨)을 뽑는다. 본문을 찾지 못하면 None.
+
+    title(글 제목)을 주면 본문 맨 앞의 같은 제목 머리글은 뺀다(화면이 이미 제목을 보여 주므로).
+    """
+    extraction = extract_article(html, base_url, title)
+    return None if extraction is None else extraction.html

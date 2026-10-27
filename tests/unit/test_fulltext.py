@@ -10,8 +10,11 @@ import pytest
 from rss_hub.domain.fulltext import (
     MAX_SHELL_LENGTH,
     MIN_TEXT_LENGTH,
+    extract_article,
     extract_main_content,
     find_page_redirect,
+    reference_coverage,
+    reference_is_complete,
 )
 
 LONG = "본문 문장입니다. " * 40  # 충분히 긴 본문
@@ -909,3 +912,45 @@ NAVER_SHELL = (
 )
 def test_a_short_shell_page_that_only_redirects_gives_its_target(html, expected):
     assert find_page_redirect(html, "https://a.example.com/post") == expected
+
+
+def sentences(tag, count):
+    return " ".join(
+        f"{tag} {n}번째로 나오는 문장이고 다른 문장과 겹치지 않도록 길게 씁니다."
+        for n in range(count)
+    )
+
+
+def test_the_coverage_is_the_share_of_rss_sentences_found_in_the_extracted_text():
+    reference = f"<p>{sentences('가', 4)}</p>"
+    assert reference_coverage(reference, f"<p>{sentences('가', 4)}</p>") == 1.0
+    assert reference_coverage(reference, f"<p>{sentences('가', 2)}</p>") == 0.5
+    assert reference_coverage(reference, "<p>전혀 다른 글</p>") == 0.0
+
+
+def test_a_short_rss_body_is_not_compared():
+    assert reference_coverage("<p>짧은 요약</p>", "<p>아무 글</p>") is None
+    assert reference_coverage("<p>" + "가 " * 80 + "</p>", "<p>아무 글</p>") is None  # 문장이 없다
+
+
+@pytest.mark.parametrize(
+    ("reference", "expected"),
+    [
+        (sentences("전", 12), True),
+        (sentences("전", 12) + " […]", False),
+        (sentences("전", 12) + " Read more", False),
+        (sentences("전", 12) + "...", False),
+        (sentences("전", 2), False),
+    ],
+)
+def test_the_rss_body_is_complete_only_when_long_and_not_cut_off(reference, expected):
+    assert reference_is_complete(f"<p>{reference}</p>") is expected
+
+
+def test_a_page_whose_text_never_reaches_the_rss_is_returned_with_the_best_coverage():
+    reference = f"<p>{sentences('RSS', 8)}</p>"
+    html = page(f"<article><p>{sentences('딴', 8)}</p></article>")
+    result = extract_article(html, "https://x.example.com/post", "", reference)
+    assert result is not None and result.coverage == 0.0
+    assert extract_article(html, "https://x.example.com/post").coverage is None
+    assert extract_article("", "https://x.example.com/post", "", reference) is None
