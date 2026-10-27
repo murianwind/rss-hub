@@ -13,6 +13,7 @@ from rss_hub.domain.discovery import describe_fetch_failure
 from rss_hub.domain.error_log import KIND_FULLTEXT
 from rss_hub.domain.feed_url import FeedUrlError, validate_feed_url
 from rss_hub.domain.fulltext import (
+    COVERAGE_COMPLETE,
     COVERAGE_MIN,
     extract_article,
     find_page_redirect,
@@ -84,7 +85,13 @@ class FullTextService:
         ):
             return self._failed(article, MISMATCH)  # 더 넓게 뽑아도 RSS 전문과 맞지 않는다
         rss_length = len(strip_html(article.content_html))
-        if rss_length >= MIN_RSS_TO_COMPARE and len(strip_html(html)) < SHORTER_RATIO * rss_length:
+        found_all = extraction.coverage is not None and extraction.coverage >= COVERAGE_COMPLETE
+        # RSS 끝의 자동 문구는 페이지에 없어 짧아 보일 수 있다: RSS 내용이 다 있으면 건너뛴다
+        if (
+            not found_all
+            and rss_length >= MIN_RSS_TO_COMPARE
+            and len(strip_html(html)) < SHORTER_RATIO * rss_length
+        ):
             return self._failed(article, SHORTER_THAN_RSS)  # RSS가 이미 더 완전한 전문이다
         self._articles.save_full_text(article.id, html[:MAX_FULL_TEXT_CHARS])
         return FullText(html[:MAX_FULL_TEXT_CHARS], "ok")

@@ -14,7 +14,7 @@ from tests.fakes.viewer_world import open_world
 from tests.keywords.browser import BROWSER
 from tests.keywords.page import body
 
-bind(globals(), "18_full_text.feature", [f"FTX-{n:02d}" for n in range(1, 29)])
+bind(globals(), "18_full_text.feature", [f"FTX-{n:02d}" for n in range(1, 30)])
 
 LINK = "https://blog.example.com/post/1"
 FULL = "원문 전체에만 있는 본문 문장입니다. " * 30
@@ -739,3 +739,24 @@ def _wordpress_ok(ctx):
     assert "RSS 내용과 맞지 않습니다" not in text
     assert "전공자의 생성형 AI 활용이 더 큰 가치를" in body(text)
     assert "AWS에 배포하고 URL 알려줘" in body(text)  # 제목과 목록은 덜 자르기로 되살린다
+
+
+@given("RSS 본문이 원문 페이지의 본문 전체에 길이가 20% 넘는 자동 문구를 덧붙인 글이 있다")
+def _long_feed_footer(world, ctx):
+    text = "".join(f"<p>{_sentences(f'본문{n}', 2)}</p>" for n in range(4))
+    page = (
+        f'<html><body><div id="content"><article class="post">{text}</article></div></body></html>'
+    )
+    world.fetcher.page(LINK, page)
+    footer = (
+        '<p>The post <a href="https://jv.example.com/blog/p/1">'
+        + "아주 긴 글 제목 " * 20
+        + '</a> appeared first on <a href="https://jv.example.com/blog">Studio</a>.</p>'
+    )
+    ctx.article = world.article(link=LINK, content=text + footer)
+
+
+@then('원문 페이지의 전문이 보이고 "RSS 본문보다 짧습니다" 이유는 없다')
+def _full_without_shorter(ctx):
+    assert "원문 전문을 가져오지 못해" not in ctx.response.text
+    assert "본문3 1번째로 나오는 문장" in body(ctx.response.text)
