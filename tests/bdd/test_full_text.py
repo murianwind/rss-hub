@@ -14,7 +14,7 @@ from tests.fakes.viewer_world import open_world
 from tests.keywords.browser import BROWSER
 from tests.keywords.page import body
 
-bind(globals(), "18_full_text.feature", [f"FTX-{n:02d}" for n in range(1, 24)])
+bind(globals(), "18_full_text.feature", [f"FTX-{n:02d}" for n in range(1, 25)])
 
 LINK = "https://blog.example.com/post/1"
 FULL = "원문 전체에만 있는 본문 문장입니다. " * 30
@@ -627,3 +627,17 @@ def _teaser_rss(world, ctx):
 def _page_text_shown(ctx):
     assert "원문에만 있는 7번째로 나오는 문장" in body(ctx.response.text)
     assert "맞지 않습니다" not in ctx.response.text
+
+
+@given("글 주소가 본문 없는 짧은 페이지를 돌려주는 글이 있다")
+def _empty_page(world, ctx):
+    world.fetcher.page(LINK, "<html><body><p>로그인이 필요합니다.</p></body></html>")
+    ctx.article = world.article(link=LINK)
+
+
+@then("실패 안내에 받은 글자 수와 주소와 이동 횟수가 들어 있다")
+def _failure_detail(ctx):
+    page = "<html><body><p>로그인이 필요합니다.</p></body></html>"
+    assert (
+        f"(받은 페이지 {len(page)}자, blog.example.com, 다른 주소로 0번 이동)" in ctx.response.text
+    )
