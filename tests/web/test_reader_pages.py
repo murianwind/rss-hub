@@ -11,7 +11,7 @@ from tests.fakes.viewer_world import groups
 
 def test_the_sidebar_has_four_sections_in_order_and_only_rss_starts_open(world):
     html = world.get("/reader").text
-    assert list(groups(html)) == ["RSS", "카테고리", "주제", "환경 설정"]
+    assert list(groups(html)) == ["RSS", "카테고리", "주제", "설정"]
     # 처음 접속하면 RSS 피드 구역만 펼쳐져 있다
     assert re.findall(r'<details class="sec" id="sec-(\w+)" open>', html) == ["rss"]
     # 북마크는 RSS 피드와 카테고리 사이의 단독 항목이다

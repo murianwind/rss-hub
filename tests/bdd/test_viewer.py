@@ -185,9 +185,9 @@ def _open_missing_article(world, ctx):
 # ---------- 사이드바 ----------
 
 
-@then('사이드바에는 "RSS", "카테고리", "주제", "환경 설정" 구역이 이 순서로 있다')
+@then('사이드바에는 "RSS", "카테고리", "주제", "설정" 구역이 이 순서로 있다')
 def _four_sections(ctx):
-    assert list(groups(ctx.response.text)) == ["RSS", "카테고리", "주제", "환경 설정"]
+    assert list(groups(ctx.response.text)) == ["RSS", "카테고리", "주제", "설정"]
 
 
 @then(

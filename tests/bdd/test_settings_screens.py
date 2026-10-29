@@ -1,4 +1,4 @@
-"""23_settings_screens.feature: 환경 설정 화면 구성."""
+"""23_settings_screens.feature: 설정 화면 구성."""
 
 import re
 from types import SimpleNamespace
@@ -95,7 +95,7 @@ def _bad_cooldown(world, ctx, value):
     )
 
 
-@then(parsers.parse('환경 설정 메뉴는 "{names}" 순서이다'))
+@then(parsers.parse('설정 메뉴는 "{names}" 순서이다'))
 def _menu(ctx, names):
     menu = ctx.html.split('id="sec-settings"')[1].split("</details>")[0]
     shown = [t.strip() for t in re.findall(r'<span class="sb-text">([^<]+)</span>', menu)]

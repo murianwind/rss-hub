@@ -19,7 +19,7 @@
         <summary title="RSS 피드" data-drop-category="">{{ icon('rss') }}<span class="sec-title">RSS 피드</span>
           <span class="sec-actions">{{ plus('feed', 'RSS 피드') }}{{ icon('chevron-down', 'chev') }}</span></summary>
         <ul class="sec-body" data-drop-category="">
-          <li><a class="nav-item" href="/reader" title="전체 글" {% if scope_kind == 'all' %}aria-current="page"{% endif %}>{{ icon('list') }}<span class="sb-text">전체 글</span>{{ badge('all', ui_side.all_unread, 0) }}</a></li>
+          <li class="pin-top"><a class="nav-item" href="/reader" title="전체 글" {% if scope_kind == 'all' %}aria-current="page"{% endif %}>{{ icon('list') }}<span class="sb-text">전체 글</span>{{ badge('all', ui_side.all_unread, 0) }}</a></li>
           {% for f in ui_side.feeds if not f.category_id %}
           <li class="nav-row{% if f.unread %} has-unread{% endif %}" draggable="true" data-drag-kind="feed" data-drag-id="{{ f.id }}">{{ grip() }}{{ dot(f) }}<a class="nav-item" href="/reader/feed/{{ f.id }}" title="{{ f.name }}" {% if scope_kind == 'feed' and scope_id == f.id %}aria-current="page"{% endif %}><span class="sb-text">{{ f.name }}</span>{{ badge('feed:' ~ f.id, f.unread, 0) }}</a>{{ refresh(f.id) }}{{ actions('feed', f.id, f.name) }}</li>
           {% else %}<li class="empty-note">{{ '모든 피드가 카테고리에 들어 있습니다.' if ui_side.feeds else '등록된 피드가 없습니다.' }}</li>{% endfor %}
@@ -55,7 +55,7 @@
       </details>
 
       <details class="sec" id="sec-settings" {% if 'settings' in ui_open %}open{% endif %}>
-        <summary title="환경 설정">{{ icon('gear') }}<span class="sec-title">환경 설정</span><span class="sec-actions">{{ icon('chevron-down', 'chev') }}</span></summary>
+        <summary title="설정">{{ icon('gear') }}<span class="sec-title">설정</span><span class="sec-actions">{{ icon('chevron-down', 'chev') }}</span></summary>
         <ul class="sec-body">
           {% for href, label in ui_settings_items %}
           <li><a class="nav-item" href="{{ href }}" {% if href == ui_settings_tab %}aria-current="page"{% endif %}><span class="sb-text">{{ label }}</span></a></li>
