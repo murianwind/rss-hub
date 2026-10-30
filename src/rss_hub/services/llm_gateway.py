@@ -6,6 +6,8 @@
 
 - 한도 초과(429)는 Retry-After(최대 30초)만큼 기다렸다가 같은 모델에 한 번 더 시도하고,
   그래도 실패하면 다음 모델로 간다.
+- 호출자가 넘긴 검사(rejection)가 응답을 쓸 수 없다고 하면 그 모델의 실패로 보고 다음 모델로 간다.
+  모든 모델이 쓸 수 없는 응답을 주면 마지막 응답을 돌려줘서 호출자가 거부 이유를 처리하게 한다.
 - 잔액, 키, 개인정보 설정 문제는 모든 모델에 똑같이 일어나므로 체인을 멈추고 시스템 알림을 보낸다.
 - 호출 한 번마다(실패도) 기록하고, 하루 상한, 분당 상한, 서버가 알려 준 남은 호출 수를
   넘지 않게 막는다.
@@ -18,6 +20,7 @@ from datetime import UTC, datetime, timedelta
 
 from rss_hub.domain.budget import BudgetBlock, check_budget, warn_reached
 from rss_hub.domain.error_log import KIND_LLM
+from rss_hub.services.activity_log import NO_ACTIVITY, ActivityRecorder
 from rss_hub.services.alerts import AlertService
 from rss_hub.services.clock import Clock
 from rss_hub.services.error_log import NO_ERRORS, ErrorRecorder
@@ -84,6 +87,9 @@ class LlmAnswer:
     model: str
 
 
+Rejection = Callable[[LlmAnswer], str | None]  # 쓸 수 없는 응답이면 그 이유를, 쓸 수 있으면 None
+
+
 class LlmGateway:
     def __init__(
         self,
@@ -95,8 +101,10 @@ class LlmGateway:
         clock: Clock,
         sleep: Callable[[float], None] = time.sleep,
         errors: ErrorRecorder = NO_ERRORS,
+        activity: ActivityRecorder = NO_ACTIVITY,
     ) -> None:
         self._errors = errors
+        self._activity = activity
         self._client = client
         self._usage = usage
         self._settings = settings
@@ -106,17 +114,25 @@ class LlmGateway:
         self._json_rejected: set[str] = set()
         self._server_cache: tuple[datetime, ServerUsage | None] | None = None
 
-    def complete(self, prompt: str) -> LlmAnswer:
+    def complete(self, prompt: str, rejection: Rejection | None = None) -> LlmAnswer:
         if not self._settings.has_openrouter_key():
             raise LlmNotConfigured
         config = self._settings.snapshot()
         failures: list[tuple[str, LlmErrorKind]] = []
+        rejected: LlmAnswer | None = None
         for model in config.model_chain:
             answer, stop = self._try_model(model, prompt, failures)
             if answer is not None:
-                return answer
-            if stop:
+                reason = None if rejection is None else rejection(answer)
+                if reason is None:
+                    return answer
+                self._errors.record(KIND_LLM, model, f"쓸 수 없는 응답({reason})")
+                self._activity.failed(KIND_LLM, model, f"쓸 수 없는 응답({reason})")
+                rejected = answer
+            elif stop:
                 break
+        if rejected is not None:
+            return rejected
         raise LlmOutage(tuple(failures))
 
     def complete_with(self, model: str, prompt: str) -> LlmAnswer:
@@ -194,12 +210,19 @@ class LlmGateway:
             completion_tokens=result.completion_tokens,
             reasoning_tokens=result.reasoning_tokens,
         )
+        self._activity.done(
+            KIND_LLM,
+            model,
+            "호출 성공",
+            f"입력 {result.prompt_tokens or 0} · 출력 {result.completion_tokens or 0} 토큰",
+        )
         self._warn_if_needed()
 
     def _record_failure(self, model: str, error: LlmCallError) -> None:
         self._usage.record(model=model, outcome=error.kind.value, status=error.status)
         status = f" (HTTP {error.status})" if error.status else ""
         self._errors.record(KIND_LLM, model, f"{error.kind.value}{status}", str(error))
+        self._activity.failed(KIND_LLM, model, f"{error.kind.value}{status}", str(error))
         self._warn_if_needed()
 
     def _warn_if_needed(self) -> None:

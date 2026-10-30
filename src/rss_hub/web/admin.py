@@ -9,6 +9,7 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from rss_hub.domain import activity_log as activity_rules
 from rss_hub.domain.delivery import describe_send_failure
 from rss_hub.domain.error_log import KIND_LABELS, SORT_LABELS, SORT_RECENT
 from rss_hub.domain.settings_rules import SettingError, normalize_base_url
@@ -16,6 +17,7 @@ from rss_hub.domain.summary import summary_order
 from rss_hub.services.clock import Clock
 from rss_hub.services.ports import WebhookSender
 from rss_hub.services.settings import SettingsService
+from rss_hub.storage.activity_log import ActivityLogRepository
 from rss_hub.storage.articles import STATUS_COLLECTED, STATUS_READY, Article, ArticleRepository
 from rss_hub.storage.deliveries import DeliveryRepository
 from rss_hub.storage.error_log import ErrorLogRepository
@@ -135,6 +137,7 @@ def build_admin_router(
     clock: Clock,
     sender: WebhookSender,
     error_log: ErrorLogRepository,
+    activity_log: ActivityLogRepository,
     deliveries: DeliveryRepository,
     runner: Callable[[], JobStarter | None] = lambda: None,
 ) -> APIRouter:
@@ -217,7 +220,13 @@ def build_admin_router(
 
     @router.get("/status", response_class=HTMLResponse)
     def status_page(
-        request: Request, run: str = "", kind: str = "", sort: str = ""
+        request: Request,
+        run: str = "",
+        kind: str = "",
+        sort: str = "",
+        akind: str = "",
+        aresult: str = "",
+        asort: str = "",
     ) -> HTMLResponse:
         checklist = service.setup_checklist()
         waiting = (
@@ -312,6 +321,7 @@ def build_admin_router(
             "all_ready": all(item.ready for item in checklist if item.required),
             "audit": audit,
             **_error_log_context(error_log, config.timezone, kind, sort),
+            **_activity_log_context(activity_log, config.timezone, akind, aresult, asort),
         }
         return templates.TemplateResponse(request, "status.html", context)
 
@@ -441,6 +451,55 @@ def _error_log_context(
         "error_kind": chosen_kind,
         "error_sort": chosen_sort,
         "error_sorts": list(SORT_LABELS.items()),
+    }
+
+
+def _activity_log_context(
+    activity_log: ActivityLogRepository, zone: tzinfo, kind: str, outcome: str, sort: str
+) -> dict[str, Any]:
+    """상태 화면의 작업 이력: 유형별, 결과별 횟수, 거른 목록, 줄마다 복사할 글자."""
+    chosen_kind = kind if kind in activity_rules.ACTIVITY_KINDS else ""
+    chosen_outcome = outcome if outcome in activity_rules.OUTCOME_LABELS else ""
+    chosen_sort = sort if sort in activity_rules.SORT_LABELS else activity_rules.SORT_RECENT
+    counts = activity_log.counts()
+    by_kind: dict[str, int] = {}
+    by_outcome: dict[str, int] = {}
+    for (row_kind, row_outcome), n in counts.items():
+        by_kind[row_kind] = by_kind.get(row_kind, 0) + n
+        by_outcome[row_outcome] = by_outcome.get(row_outcome, 0) + n
+
+    rows = []
+    for e in activity_log.list(kind=chosen_kind, outcome=chosen_outcome, sort=chosen_sort):
+        label = activity_rules.ACTIVITY_KINDS.get(e.kind, e.kind)
+        result = activity_rules.OUTCOME_LABELS.get(e.outcome, e.outcome)
+        when = e.at.astimezone(zone).strftime("%m-%d %H:%M:%S")
+        lines = [f"[{label}] {e.source}", f"{result} · {e.message}", when]
+        rows.append(
+            {
+                "kind": e.kind,
+                "outcome": e.outcome,
+                "label": label,
+                "result": result,
+                "source": e.source,
+                "message": e.message,
+                "detail": e.detail,
+                "time": when,
+                "clip": "\n".join([*lines, e.detail] if e.detail else lines),
+            }
+        )
+    return {
+        "activity_rows": rows,
+        "activity_total": sum(counts.values()),
+        "activity_kinds": [
+            (k, label, by_kind.get(k, 0)) for k, label in activity_rules.ACTIVITY_KINDS.items()
+        ],
+        "activity_outcomes": [
+            (o, label, by_outcome.get(o, 0)) for o, label in activity_rules.OUTCOME_LABELS.items()
+        ],
+        "activity_kind": chosen_kind,
+        "activity_outcome": chosen_outcome,
+        "activity_sort": chosen_sort,
+        "activity_sorts": list(activity_rules.SORT_LABELS.items()),
     }
 
 

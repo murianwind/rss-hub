@@ -101,6 +101,7 @@
 <div class="status-tabs" data-tabs>
 <div class="tab-bar" role="tablist" aria-label="상태 화면 구역">
   <a class="tab" role="tab" href="#error-log" data-tab="error-log">오류 기록 <b class="tab-count{% if error_total %} warn{% endif %}">{{ error_total }}</b></a>
+  <a class="tab" role="tab" href="#activity-log" data-tab="activity-log">작업 이력 <b class="tab-count">{{ activity_total }}</b></a>
   <a class="tab" role="tab" href="#panel-history" data-tab="panel-history">변경 이력</a>
 </div>
 <section class="status-card panel tab-panel error-log" id="error-log" role="tabpanel">
@@ -130,7 +131,42 @@
     {% else %}
     <p class="note">{{ '이 유형의 ' if error_kind else '' }}기록된 오류가 없습니다.</p>
     {% endif %}
-    <p class="hint">수집, 전문 가져오기, 요약, 발송, LLM 호출, 작업 실행의 실패를 모읍니다. 같은 날의 같은 오류는 한 줄로 묶어 횟수를 세고, 설정의 오류 기록 보관 기간이 지나면 지웁니다. 최대 300줄까지 보여 줍니다.</p>
+    <p class="hint">수집, 전문 가져오기, 요약, 발송, LLM 호출, 작업 실행의 실패를 모읍니다. 같은 날의 같은 오류는 한 줄로 묶어 횟수를 세고, 설정의 기록 보관 기간이 지나면 지웁니다. 최대 300줄까지 보여 줍니다.</p>
+  </details>
+</section>
+
+<section class="status-card panel tab-panel" id="activity-log" role="tabpanel">
+  <h2>작업 이력 <span class="hint">{{ activity_total }}건</span></h2>
+  <details class="acc-limit" open>
+    <summary>유형과 결과로 보기와 복사</summary>
+    <div class="error-tools">
+      <div class="chips" role="group" aria-label="유형">
+        <a class="chip-link{% if not activity_kind %} on{% endif %}" href="/status?{% if activity_outcome %}aresult={{ activity_outcome }}&amp;{% endif %}asort={{ activity_sort }}#activity-log">전체 <b>{{ activity_total }}</b></a>
+        {% for key, label, n in activity_kinds %}<a class="chip-link{% if activity_kind == key %} on{% endif %}{% if not n %} dim{% endif %}" href="/status?akind={{ key }}{% if activity_outcome %}&amp;aresult={{ activity_outcome }}{% endif %}&amp;asort={{ activity_sort }}#activity-log">{{ label }} <b>{{ n }}</b></a>{% endfor %}
+      </div>
+      <div class="chips" role="group" aria-label="결과">
+        <a class="chip-link{% if not activity_outcome %} on{% endif %}" href="/status?{% if activity_kind %}akind={{ activity_kind }}&amp;{% endif %}asort={{ activity_sort }}#activity-log">모든 결과</a>
+        {% for key, label, n in activity_outcomes %}<a class="chip-link{% if activity_outcome == key %} on{% endif %}{% if not n %} dim{% endif %}" href="/status?aresult={{ key }}{% if activity_kind %}&amp;akind={{ activity_kind }}{% endif %}&amp;asort={{ activity_sort }}#activity-log">{{ label }} <b>{{ n }}</b></a>{% endfor %}
+      </div>
+      <div class="chips" role="group" aria-label="정렬">
+        {% for key, label in activity_sorts %}<a class="chip-link{% if activity_sort == key %} on{% endif %}" href="/status?{% if activity_kind %}akind={{ activity_kind }}&amp;{% endif %}{% if activity_outcome %}aresult={{ activity_outcome }}&amp;{% endif %}asort={{ key }}#activity-log">{{ label }}</a>{% endfor %}
+        <button type="button" class="compact" data-copy-all="[data-activity-list]"{% if not activity_rows %} disabled{% endif %}>목록 복사</button>
+      </div>
+    </div>
+    {% if activity_rows %}
+    <ul class="error-list" data-activity-list>
+      {% for e in activity_rows %}
+      <li class="activity-row" data-kind="{{ e.kind }}" data-copy="{{ e.clip }}">
+        <div class="error-head"><span class="state {{ 'ok' if e.outcome == 'ok' else 'todo' }}">{{ e.result }}</span><span class="hint">{{ e.label }}</span><b class="error-source">{{ e.source }}</b><span class="hint">{{ e.time }}</span><button type="button" class="link-btn" data-copy-row title="이 줄을 복사">복사</button></div>
+        <div class="error-message">{{ e.message }}</div>
+        {% if e.detail %}<div class="hint error-detail">{{ e.detail }}</div>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="note">{{ '이 조건에 맞는 ' if activity_kind or activity_outcome else '' }}기록된 작업이 없습니다.</p>
+    {% endif %}
+    <p class="hint">수집, 전문 가져오기, 요약, 발송, LLM 호출의 결과를 일어난 순간마다 남깁니다. 피드 수집은 실행 한 번에 요약 한 줄과 새 글이 생겼거나 실패한 피드의 줄만 남습니다. 설정의 기록 보관 기간이 지나면 지우고, 최대 300줄까지 보여 줍니다.</p>
   </details>
 </section>
 

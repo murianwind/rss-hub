@@ -14,7 +14,7 @@ from tests.fakes.viewer_world import BASE
 from tests.keywords.browser import post
 from tests.keywords.page import card
 
-bind(globals(), "15_reader_ui.feature", [f"RUI-{n:02d}" for n in range(1, 18)])
+bind(globals(), "15_reader_ui.feature", [f"RUI-{n:02d}" for n in range(1, 19)])
 
 FILTERS = {"전체": "", "읽지 않은 글": "unread", "북마크": "bookmarks"}
 
@@ -362,7 +362,7 @@ def _safe_back(world, ctx, feed):
 
 @then(parsers.re(r"펼쳐진 사이드바 구역은 (?P<open>.+)이다"))
 def _opened(ctx, open):
-    names = {"rss": "RSS", "categories": "카테고리", "topics": "주제", "settings": "환경 설정"}
+    names = {"rss": "RSS", "categories": "카테고리", "topics": "주제", "settings": "설정"}
     opened = {
         names[k]
         for k in re.findall(r'<details class="sec" id="sec-(\w+)" open>', ctx.response.text)
@@ -474,3 +474,13 @@ def _width_class(ctx, expected):
     body = ctx.response.text.split("<body")[1].split(">")[0]
     classes = re.findall(r"sw-\d+", body)
     assert classes == ([] if expected == "없음" else [expected])
+
+
+@then("RSS 피드 구역의 전체 글 줄은 스크롤해도 위에 붙어 있다")
+def _all_row_pinned(world, ctx):
+    rss = ctx.response.text.split('id="sec-rss"')[1].split("</details>")[0]
+    assert re.search(r'<li class="pin-top"><a class="nav-item" href="/reader" title="전체 글"', rss)
+    css = world.get("/static/app.css").text
+    assert re.search(
+        r"\.pin-top \{[^}]*position: sticky;[^}]*top: 0;[^}]*background: var\(--surface\)", css
+    )

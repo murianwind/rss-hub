@@ -22,6 +22,7 @@ from rss_hub.domain.fulltext import (
 )
 from rss_hub.domain.page_urls import reading_url
 from rss_hub.domain.text import strip_html
+from rss_hub.services.activity_log import NO_ACTIVITY, ActivityRecorder
 from rss_hub.services.error_log import NO_ERRORS, ErrorRecorder
 from rss_hub.services.ports import FetchError, PageFetcher, PageResult
 from rss_hub.storage.articles import MAX_FULL_TEXT_CHARS, Article, ArticleRepository
@@ -48,10 +49,12 @@ class FullTextService:
         articles: ArticleRepository,
         pages: PageFetcher,
         errors: ErrorRecorder = NO_ERRORS,
+        activity: ActivityRecorder = NO_ACTIVITY,
     ) -> None:
         self._articles = articles
         self._pages = pages
         self._errors = errors
+        self._activity = activity
 
     def ensure(self, article: Article, *, force: bool = False) -> FullText:
         """저장된 전문이 있으면 그것을, 없으면 처음 한 번 가져온다(force면 다시 가져온다)."""
@@ -94,6 +97,7 @@ class FullTextService:
         ):
             return self._failed(article, SHORTER_THAN_RSS)  # RSS가 이미 더 완전한 전문이다
         self._articles.save_full_text(article.id, html[:MAX_FULL_TEXT_CHARS])
+        self._activity.done(KIND_FULLTEXT, article.title, "원문 전문을 가져옴", article.link)
         return FullText(html[:MAX_FULL_TEXT_CHARS], "ok")
 
     def _load_page(self, link: str) -> tuple[PageResult, int]:
@@ -117,6 +121,7 @@ class FullTextService:
         self._articles.save_full_text_failure(article.id, reason)
         message = _describe(reason)
         self._errors.record(KIND_FULLTEXT, article.title, message, f"{reason} · {article.link}")
+        self._activity.failed(KIND_FULLTEXT, article.title, message, f"{reason} · {article.link}")
         return FullText(None, "failed", message)
 
 

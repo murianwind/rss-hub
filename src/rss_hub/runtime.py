@@ -16,6 +16,7 @@ from rss_hub.adapters.openrouter_client import OpenRouterClient
 from rss_hub.jobs.progress import JobProgress
 from rss_hub.jobs.results import describe_result
 from rss_hub.jobs.runner import IntervalJob, Job, JobRunner, SlotJob, start_thread
+from rss_hub.services.activity_log import NO_ACTIVITY, ActivityRecorder
 from rss_hub.services.alerts import AlertService
 from rss_hub.services.clock import Clock
 from rss_hub.services.collect import CollectService
@@ -28,6 +29,7 @@ from rss_hub.services.ports import FeedFetcher, LlmClient, PageFetcher, WebhookS
 from rss_hub.services.retention import RetentionService
 from rss_hub.services.settings import SettingsService
 from rss_hub.services.summarize import SummarizeService
+from rss_hub.storage.activity_log import ActivityLogRepository
 from rss_hub.storage.alerts import AlertRepository
 from rss_hub.storage.articles import ArticleRepository
 from rss_hub.storage.database import Database
@@ -62,6 +64,7 @@ def build_llm_services(
     client: LlmClient,
     sender: WebhookSender,
     errors: ErrorRecorder = NO_ERRORS,
+    activity: ActivityRecorder = NO_ACTIVITY,
 ) -> LlmServices:
     """시스템 알림과 LLM 게이트웨이(호출 예산 포함). 실행기와 웹 화면이 같은 방식으로 쓴다."""
     alerts = AlertService(
@@ -77,6 +80,7 @@ def build_llm_services(
         alerts=alerts,
         clock=clock,
         errors=errors,
+        activity=activity,
     )
     return LlmServices(alerts=alerts, gateway=gateway)
 
@@ -101,8 +105,16 @@ def build_runner(
     llm_client = client or OpenRouterClient(settings.get_openrouter_key)
     error_log = ErrorLogRepository(database, clock)
     errors = ErrorRecorder(error_log)
+    activity_log = ActivityLogRepository(database, clock)
+    activity = ActivityRecorder(activity_log)
     llm = build_llm_services(
-        database, clock, settings, client=llm_client, sender=webhook_sender, errors=errors
+        database,
+        clock,
+        settings,
+        client=llm_client,
+        sender=webhook_sender,
+        errors=errors,
+        activity=activity,
     )
     alerts, gateway = llm.alerts, llm.gateway
     feed_fetcher = fetcher or RequestsFeedFetcher()
@@ -116,6 +128,7 @@ def build_runner(
         pages=PageFeedSource(pages=cast(PageFetcher, feed_fetcher), clock=clock),
         progress=partial(progress.report, JOB_COLLECT),
         errors=errors,
+        activity=activity,
     )
     summarizer = SummarizeService(
         articles=articles,
@@ -125,9 +138,14 @@ def build_runner(
         clock=clock,
         progress=partial(progress.report, JOB_SUMMARIZE),
         errors=errors,
+        activity=activity,
     )
     retention = RetentionService(
-        articles=articles, settings=settings, clock=clock, error_log=error_log
+        articles=articles,
+        settings=settings,
+        clock=clock,
+        error_log=error_log,
+        activity=activity_log,
     )
     model_scan = ModelScanService(
         client=llm_client,
@@ -147,6 +165,7 @@ def build_runner(
         stop_requested=stop.is_set,
         progress=partial(progress.report, JOB_DELIVER),
         errors=errors,
+        activity=activity,
     )
     jobs: list[Job] = [
         SlotJob(

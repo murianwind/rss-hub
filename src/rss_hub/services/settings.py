@@ -180,10 +180,10 @@ SETTING_DEFS: tuple[SettingDef, ...] = (
     ),
     SettingDef(
         "error_log_retention_days",
-        "오류 기록 보관 기간(일)",
+        "기록 보관 기간(일)",
         "14",
         _bounded(365),
-        help="상태 화면의 오류 기록을 이 기간만 보관하고 지남(1~365일)",
+        help="상태 화면의 오류 기록과 작업 이력을 이 기간만 보관하고 지남(1~365일)",
     ),
     SettingDef(
         "model_chain",

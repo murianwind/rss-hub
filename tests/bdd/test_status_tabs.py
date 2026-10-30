@@ -44,13 +44,14 @@ def tab_labels(group):
 
 
 @then(
-    "첫 카드의 탭은 현재 상태, 작업 기록, 설정 점검이고 둘째 카드의 탭은 오류 기록, 변경 이력이다"
+    "첫 카드의 탭은 현재 상태, 작업 기록, 설정 점검이고 "
+    "둘째 카드의 탭은 오류 기록, 작업 이력, 변경 이력이다"
 )
 def _tabs(ctx):
     first, second = groups(ctx.html)
     assert tab_labels(first) == ["현재 상태", "작업 기록", "설정 점검"]
-    assert [label.split()[0] for label in tab_labels(second)] == ["오류", "변경"]
-    assert tab_labels(second)[1] == "변경 이력"
+    assert [label.split()[0] for label in tab_labels(second)] == ["오류", "작업", "변경"]
+    assert tab_labels(second)[2] == "변경 이력"
 
 
 @then("탭마다 같은 이름의 패널이 같은 카드 안에 있다")
@@ -74,7 +75,8 @@ def _two_errors(world):
 @then("오류 기록 탭에 건수 2가 나오고 칩과 정렬 링크는 오류 기록 탭을 가리킨다")
 def _error_tab(ctx):
     assert 'data-tab="error-log">오류 기록 <b class="tab-count warn">2</b>' in ctx.html
-    links = re.findall(r'<a class="chip-link[^"]*" href="(/status[^"]*)"', ctx.html)
+    errors = ctx.html.split('id="error-log"')[1].split("</section>")[0]
+    links = re.findall(r'<a class="chip-link[^"]*" href="(/status[^"]*)"', errors)
     assert links and all(link.endswith("#error-log") for link in links)
 
 

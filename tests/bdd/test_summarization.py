@@ -15,7 +15,7 @@ from tests.fakes.llm_client import failure as llm_failure
 from tests.fakes.llm_client import good, reply
 from tests.fakes.llm_env import LlmEnv
 
-bind(globals(), "03_summarization.feature", [f"SUM-{n:02d}" for n in range(1, 21)])
+bind(globals(), "03_summarization.feature", [f"SUM-{n:02d}" for n in range(1, 23)])
 
 
 @pytest.fixture
@@ -401,3 +401,15 @@ def _topics_recorded(env, ctx):
 @then(parsers.parse('요청에 "{text}"가 들어 있지 않다'))
 def _prompt_lacks(env, text):
     assert text not in env.client.calls[0].prompt
+
+
+@given("첫 모델은 쓸 수 없는 응답을 주고 둘째 모델은 정상 응답을 준다")
+def _first_bad_second_good(env):
+    env.client.will("model-a", BAD_RESPONSES["불량"])
+    env.client.will("model-b", BAD_RESPONSES["정상"])
+
+
+@then("글은 둘째 모델의 요약으로 확정된다")
+def _second_model_summary(env, ctx):
+    saved = article(env, ctx)
+    assert saved.status == "ready" and saved.llm_model == "model-b"

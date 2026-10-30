@@ -86,7 +86,7 @@ SIDEBAR_COOKIE = "sidebar"
 SIDEBAR_WIDTH_COOKIE = "sbw"
 SIDEBAR_MIN, SIDEBAR_MAX, SIDEBAR_STEP = 220, 480, 10  # 폭 조절의 범위와 단위(px)
 SETTINGS_ITEMS = (
-    ("/settings", "설정"),
+    ("/settings", "환경 설정"),
     ("/feeds", "피드 관리"),
     ("/topics", "주제 관리"),
     ("/discord", "Discord"),
