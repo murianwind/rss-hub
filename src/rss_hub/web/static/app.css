@@ -623,8 +623,8 @@ details.acc-limit[open] > summary { margin-bottom: 8px; }
 .chip-link.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .chip-link.dim { opacity: 0.55; }
 .error-list { list-style: none; margin: 0 0 6px; padding: 0; max-height: 420px; overflow-y: auto; border: 1px solid var(--line-soft); border-radius: 8px; }
-.error-row { padding: 6px 10px; border-bottom: 1px solid var(--line-soft); }
-.error-row:last-child { border-bottom: 0; }
+.error-row, .activity-row { padding: 6px 10px; border-bottom: 1px solid var(--line-soft); }
+.error-row:last-child, .activity-row:last-child { border-bottom: 0; }
 .error-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
 .error-source { overflow-wrap: anywhere; }
 .error-head .link-btn { margin-left: auto; }

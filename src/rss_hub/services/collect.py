@@ -24,6 +24,7 @@ from rss_hub.domain.schedule import (
     schedule_fingerprint,
     slot_for,
 )
+from rss_hub.services.activity_log import NO_ACTIVITY, ActivityRecorder
 from rss_hub.services.clock import Clock
 from rss_hub.services.error_log import NO_ERRORS, ErrorRecorder
 from rss_hub.services.page_source import PageFeedSource
@@ -41,6 +42,8 @@ from rss_hub.storage.articles import (
 from rss_hub.storage.feeds import KIND_PAGE, STATUS_BASELINE, Feed, FeedRepository
 
 logger = logging.getLogger(__name__)
+
+RUN_SOURCE = "수집 실행"  # 작업 이력에서 피드가 아니라 실행 한 번을 가리키는 대상 이름
 
 MAX_ENRICH_PER_RUN = 10  # 웹페이지 구독에서 한 번에 본문을 가져오는 새 글의 최대 수
 
@@ -68,8 +71,10 @@ class CollectService:
         pages: PageFeedSource | None = None,
         progress: Callable[[int, int], None] = lambda done, total: None,
         errors: ErrorRecorder = NO_ERRORS,
+        activity: ActivityRecorder = NO_ACTIVITY,
     ) -> None:
         self._errors = errors
+        self._activity = activity
         self._progress = progress
         self._pages = pages
         self._feeds = feeds
@@ -129,6 +134,9 @@ class CollectService:
                 self._errors.record(
                     KIND_COLLECT, feed.name, describe_fetch_failure(error.reason), error.reason
                 )
+                self._activity.failed(
+                    KIND_COLLECT, feed.name, describe_fetch_failure(error.reason), error.reason
+                )
                 failed.append((feed.id, error.reason))
             except Exception as error:  # 한 피드의 예상 못한 오류가 슬롯 전체를 막지 않게 한다
                 logger.exception("피드 점검 중 예상하지 못한 오류: feed_id=%s", feed.id)
@@ -136,14 +144,32 @@ class CollectService:
                 self._errors.record(
                     KIND_COLLECT, feed.name, type(error).__name__, f"예상하지 못한 오류: {error}"
                 )
+                self._activity.failed(
+                    KIND_COLLECT, feed.name, type(error).__name__, f"예상하지 못한 오류: {error}"
+                )
                 failed.append((feed.id, type(error).__name__))
             else:
                 added += new_articles
                 baseline += recorded
+                if new_articles:
+                    self._activity.done(KIND_COLLECT, feed.name, f"새 글 {new_articles}개")
+                if recorded:
+                    self._activity.done(KIND_COLLECT, feed.name, f"처음 점검: 기준선 {recorded}개")
         self._progress(len(feeds), len(feeds))
+        self._note_run(len(feeds), added, len(failed))
         return CollectReport(
             checked=len(feeds), added=added, baseline_recorded=baseline, failed=tuple(failed)
         )
+
+    def _note_run(self, checked: int, added: int, failed: int) -> None:
+        """점검 때마다 모두 남기면 양이 많아서, 실행 한 번에 한 줄의 요약만 남긴다."""
+        if not checked:
+            return
+        message = f"피드 {checked}개 점검 · 새 글 {added}개 · 실패 {failed}개"
+        if failed:
+            self._activity.failed(KIND_COLLECT, RUN_SOURCE, message)
+        else:
+            self._activity.done(KIND_COLLECT, RUN_SOURCE, message)
 
     def run_all(self) -> CollectReport:
         """슬롯과 상관없이 모든 피드를 지금 점검한다(상태 화면의 "지금 수집")."""

@@ -320,6 +320,21 @@ MIGRATIONS: tuple[Migration, ...] = (
     CREATE INDEX error_log_by_last ON error_log(last_at);
     CREATE INDEX error_log_by_kind ON error_log(kind, last_at);
     """,
+    # 21: 작업 이력. 수집, 전문, 요약, 발송, LLM 호출의 결과를 일어난 순간마다 한 줄씩 남긴다
+    """
+    CREATE TABLE activity_log (
+        id      INTEGER PRIMARY KEY AUTOINCREMENT,
+        day     TEXT NOT NULL,
+        kind    TEXT NOT NULL,
+        outcome TEXT NOT NULL,
+        source  TEXT NOT NULL,
+        message TEXT NOT NULL,
+        detail  TEXT NOT NULL DEFAULT '',
+        at      TEXT NOT NULL
+    );
+    CREATE INDEX activity_log_by_time ON activity_log(at);
+    CREATE INDEX activity_log_by_kind ON activity_log(kind, at);
+    """,
 )
 
 

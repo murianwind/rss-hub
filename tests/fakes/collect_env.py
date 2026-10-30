@@ -2,9 +2,11 @@
 
 from datetime import UTC, datetime
 
+from rss_hub.services.activity_log import ActivityRecorder
 from rss_hub.services.collect import CollectService
 from rss_hub.services.error_log import ErrorRecorder
 from rss_hub.services.settings import SettingsService
+from rss_hub.storage.activity_log import ActivityLogRepository
 from rss_hub.storage.articles import STATUS_COLLECTED, ArticleRepository
 from rss_hub.storage.database import Database
 from rss_hub.storage.error_log import ErrorLogRepository
@@ -24,6 +26,7 @@ class CollectEnv:
         self.articles = ArticleRepository(self.db, self.clock)
         self.fetcher = FakeFeedFetcher()
         self.error_log = ErrorLogRepository(self.db, self.clock)
+        self.activity = ActivityLogRepository(self.db, self.clock)
         self.service = CollectService(
             feeds=self.feeds,
             articles=self.articles,
@@ -31,6 +34,7 @@ class CollectEnv:
             settings=self.settings,
             clock=self.clock,
             errors=ErrorRecorder(self.error_log),
+            activity=ActivityRecorder(self.activity),
         )
 
     def add_feed(self, n=1, *, status=STATUS_ACTIVE, **options):

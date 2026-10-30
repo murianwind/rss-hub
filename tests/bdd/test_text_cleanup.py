@@ -129,6 +129,7 @@ def _old_db(env, ctx):
             ("제목&middot;하나", "제목&amp;middot;둘", ctx.article),
         )
         conn.execute("DROP TABLE error_log")  # 19번 이후의 마이그레이션이 다시 만든다
+        conn.execute("DROP TABLE activity_log")
         conn.execute("PRAGMA user_version = 18")
 
 

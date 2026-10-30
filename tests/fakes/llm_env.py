@@ -2,11 +2,13 @@
 
 from datetime import UTC, datetime, timedelta
 
+from rss_hub.services.activity_log import ActivityRecorder
 from rss_hub.services.alerts import AlertService
 from rss_hub.services.error_log import ErrorRecorder
 from rss_hub.services.llm_gateway import LlmGateway
 from rss_hub.services.settings import SettingsService
 from rss_hub.services.summarize import SummarizeService
+from rss_hub.storage.activity_log import ActivityLogRepository
 from rss_hub.storage.alerts import AlertRepository
 from rss_hub.storage.articles import ArticleRepository, NewArticle
 from rss_hub.storage.database import Database
@@ -32,7 +34,9 @@ class LlmEnv:
         self.articles = ArticleRepository(self.db, self.clock)
         self.usage = LlmUsageRepository(self.db, self.clock)
         self.error_log = ErrorLogRepository(self.db, self.clock)
+        self.activity = ActivityLogRepository(self.db, self.clock)
         errors = ErrorRecorder(self.error_log)
+        activity = ActivityRecorder(self.activity)
         self.alert_log = AlertRepository(self.db, self.clock)
         self.client = FakeLlmClient(default=good())
         self.notifier = FakeNotifier()
@@ -48,6 +52,7 @@ class LlmEnv:
             clock=self.clock,
             sleep=self.sleeps.append,
             errors=errors,
+            activity=activity,
         )
         self.topics = TopicRepository(self.db, self.clock)
         self.summarizer = SummarizeService(
@@ -58,6 +63,7 @@ class LlmEnv:
             clock=self.clock,
             progress=progress,
             errors=errors,
+            activity=activity,
         )
         self.settings.update({"model_chain": "model-a,model-b"})
         self.feed_id = self.feeds.add("https://feed.example.com/rss", "피드", status=STATUS_ACTIVE)

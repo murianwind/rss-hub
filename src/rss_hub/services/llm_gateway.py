@@ -20,6 +20,7 @@ from datetime import UTC, datetime, timedelta
 
 from rss_hub.domain.budget import BudgetBlock, check_budget, warn_reached
 from rss_hub.domain.error_log import KIND_LLM
+from rss_hub.services.activity_log import NO_ACTIVITY, ActivityRecorder
 from rss_hub.services.alerts import AlertService
 from rss_hub.services.clock import Clock
 from rss_hub.services.error_log import NO_ERRORS, ErrorRecorder
@@ -100,8 +101,10 @@ class LlmGateway:
         clock: Clock,
         sleep: Callable[[float], None] = time.sleep,
         errors: ErrorRecorder = NO_ERRORS,
+        activity: ActivityRecorder = NO_ACTIVITY,
     ) -> None:
         self._errors = errors
+        self._activity = activity
         self._client = client
         self._usage = usage
         self._settings = settings
@@ -124,6 +127,7 @@ class LlmGateway:
                 if reason is None:
                     return answer
                 self._errors.record(KIND_LLM, model, f"쓸 수 없는 응답({reason})")
+                self._activity.failed(KIND_LLM, model, f"쓸 수 없는 응답({reason})")
                 rejected = answer
             elif stop:
                 break
@@ -206,12 +210,19 @@ class LlmGateway:
             completion_tokens=result.completion_tokens,
             reasoning_tokens=result.reasoning_tokens,
         )
+        self._activity.done(
+            KIND_LLM,
+            model,
+            "호출 성공",
+            f"입력 {result.prompt_tokens or 0} · 출력 {result.completion_tokens or 0} 토큰",
+        )
         self._warn_if_needed()
 
     def _record_failure(self, model: str, error: LlmCallError) -> None:
         self._usage.record(model=model, outcome=error.kind.value, status=error.status)
         status = f" (HTTP {error.status})" if error.status else ""
         self._errors.record(KIND_LLM, model, f"{error.kind.value}{status}", str(error))
+        self._activity.failed(KIND_LLM, model, f"{error.kind.value}{status}", str(error))
         self._warn_if_needed()
 
     def _warn_if_needed(self) -> None:

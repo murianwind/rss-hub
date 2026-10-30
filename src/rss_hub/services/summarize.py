@@ -21,6 +21,7 @@ from rss_hub.domain.summary import summary_order
 from rss_hub.domain.text import fallback_excerpt, strip_html
 from rss_hub.domain.topics import Topic, is_candidate
 from rss_hub.domain.validation import validate_summary
+from rss_hub.services.activity_log import NO_ACTIVITY, ActivityRecorder
 from rss_hub.services.clock import Clock
 from rss_hub.services.error_log import NO_ERRORS, ErrorRecorder
 from rss_hub.services.llm_gateway import BudgetBlocked, LlmGateway, LlmNotConfigured, LlmOutage
@@ -59,8 +60,10 @@ class SummarizeService:
         clock: Clock,
         progress: Callable[[int, int], None] = lambda done, total: None,
         errors: ErrorRecorder = NO_ERRORS,
+        activity: ActivityRecorder = NO_ACTIVITY,
     ) -> None:
         self._errors = errors
+        self._activity = activity
         self._progress = progress
         self._topics = topics
         self._articles = articles
@@ -186,6 +189,7 @@ class SummarizeService:
             model=answer.model,
         )
         self._record_topic_matches(article, topics, result.draft.topics)
+        self._activity.done(KIND_SUMMARIZE, article.title, f"요약 완료({answer.model})")
         return "ready"
 
     def _record_topic_matches(
@@ -215,6 +219,7 @@ class SummarizeService:
 
     def _note(self, article: Article, message: str, detail: str = "") -> None:
         self._errors.record(KIND_SUMMARIZE, article.title, message, detail)
+        self._activity.failed(KIND_SUMMARIZE, article.title, message, detail)
 
     def _finalize_fallback(self, article: Article) -> None:
         self._note(article, "번역하지 못해 원문 제목과 본문 발췌로 확정")

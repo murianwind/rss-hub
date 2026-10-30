@@ -17,6 +17,7 @@ from rss_hub.domain.error_log import KIND_DELIVER
 from rss_hub.domain.message import article_url, build_message
 from rss_hub.domain.routing import resolve_targets
 from rss_hub.domain.topics import Topic, match_topic
+from rss_hub.services.activity_log import NO_ACTIVITY, ActivityRecorder
 from rss_hub.services.alerts import AlertService
 from rss_hub.services.clock import Clock
 from rss_hub.services.error_log import NO_ERRORS, ErrorRecorder
@@ -78,8 +79,10 @@ class DeliveryService:
         stop_requested: Callable[[], bool] = lambda: False,
         progress: Callable[[int, int], None] = lambda done, total: None,
         errors: ErrorRecorder = NO_ERRORS,
+        activity: ActivityRecorder = NO_ACTIVITY,
     ) -> None:
         self._errors = errors
+        self._activity = activity
         self._stop_requested = stop_requested
         self._progress = progress
         self._topics = topics
@@ -219,6 +222,12 @@ class DeliveryService:
 
         if outcome is SendOutcome.SENT:
             self._deliveries.mark_sent(delivery.id, result.message_id)
+            self._activity.done(
+                KIND_DELIVER,
+                names.get(delivery.webhook_id, f"#{delivery.webhook_id}"),
+                "발송함",
+                f"글 #{delivery.article_id}",
+            )
             state.sent += 1
             state.consecutive_failures = 0
             pause = pause_after_send(result.rate_remaining, result.rate_reset_after)
@@ -253,9 +262,9 @@ class DeliveryService:
     ) -> None:
         source = names.get(delivery.webhook_id, f"#{delivery.webhook_id}")
         suffix = " (다시 시도하지 않음)" if permanent else ""
-        self._errors.record(
-            KIND_DELIVER, source, f"발송하지 못함: {reason}{suffix}", f"글 #{delivery.article_id}"
-        )
+        message = f"발송하지 못함: {reason}{suffix}"
+        self._errors.record(KIND_DELIVER, source, message, f"글 #{delivery.article_id}")
+        self._activity.failed(KIND_DELIVER, source, message, f"글 #{delivery.article_id}")
 
     def _fail_permanently(
         self, delivery: Delivery, reason: str, names: dict[int, str], state: _Run
