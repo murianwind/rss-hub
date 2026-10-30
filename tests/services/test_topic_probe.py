@@ -172,11 +172,11 @@ def test_a_rate_limited_chain_asks_the_user_to_wait(env, probe):
     assert "잠시 뒤에 다시 시도하세요" in probe.run(MATCHING_TITLE).error
 
 
-def test_an_unusable_answer_is_reported_with_the_model_that_gave_it(env, probe):
+def test_an_unusable_answer_is_reported_with_the_last_model_that_gave_it(env, probe):
     add_topics(env)
-    env.client.default = good("이건 JSON이 아닙니다")
+    env.client.default = good("이건 JSON이 아닙니다")  # 체인의 모든 모델이 같은 불량 응답을 준다
     result = probe.run(MATCHING_TITLE)
-    assert "모델의 응답을 사용할 수 없습니다" in result.error and result.model == "model-a"
+    assert "모델의 응답을 사용할 수 없습니다" in result.error and result.model == "model-b"
 
 
 def test_a_second_probe_within_the_interval_is_refused_without_a_call(env, probe):

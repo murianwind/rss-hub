@@ -17,6 +17,7 @@ from rss_hub.domain.validation import validate_summary
 from rss_hub.services.clock import Clock
 from rss_hub.services.llm_gateway import BudgetBlocked, LlmGateway, LlmNotConfigured, LlmOutage
 from rss_hub.services.ports import LlmErrorKind
+from rss_hub.services.summary_check import summary_rejection
 from rss_hub.services.topic_examples import load_examples
 from rss_hub.storage.topics import TopicRepository
 
@@ -97,7 +98,7 @@ class TopicProbe:
         examples = load_examples(self._topics, candidates, self._examples_count())
         prompt = build_summary_prompt(title, summary_excerpt(body), candidates, examples)
         try:
-            answer = self._gateway.complete(prompt)
+            answer = self._gateway.complete(prompt, summary_rejection({t.id for t in candidates}))
         except LlmNotConfigured:
             return ProbeResult(error="OpenRouter 키가 설정되지 않았습니다")
         except BudgetBlocked:

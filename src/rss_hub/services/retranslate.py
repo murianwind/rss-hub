@@ -10,6 +10,7 @@ from rss_hub.domain.korean import is_korean
 from rss_hub.domain.prompts import build_summary_prompt, summary_excerpt
 from rss_hub.domain.validation import validate_summary
 from rss_hub.services.llm_gateway import BudgetBlocked, LlmGateway, LlmNotConfigured, LlmOutage
+from rss_hub.services.summary_check import summary_rejection
 from rss_hub.storage.articles import Article, ArticleRepository
 
 OK = "ok"
@@ -50,7 +51,7 @@ class RetranslateService:
         body = article.full_html if article.full_status == "ok" and article.full_html else None
         prompt = build_summary_prompt(article.title, summary_excerpt(body or article.content_html))
         try:
-            answer = self._gateway.complete(prompt)
+            answer = self._gateway.complete(prompt, summary_rejection())
         except LlmNotConfigured:
             return Retranslation(NOT_CONFIGURED)
         except BudgetBlocked:

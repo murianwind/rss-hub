@@ -25,6 +25,7 @@ from rss_hub.services.clock import Clock
 from rss_hub.services.error_log import NO_ERRORS, ErrorRecorder
 from rss_hub.services.llm_gateway import BudgetBlocked, LlmGateway, LlmNotConfigured, LlmOutage
 from rss_hub.services.settings import SettingsService
+from rss_hub.services.summary_check import summary_rejection
 from rss_hub.services.topic_examples import load_examples
 from rss_hub.storage.articles import MODEL_PLAIN, STATUS_COLLECTED, Article, ArticleRepository
 from rss_hub.storage.topics import TopicRepository
@@ -165,10 +166,11 @@ class SummarizeService:
         prompt = build_summary_prompt(
             article.title, summary_excerpt(article.content_html), topics, examples
         )
-        answer = self._gateway.complete(prompt)
+        valid_topic_ids = {t.id for t in topics}
+        answer = self._gateway.complete(prompt, summary_rejection(valid_topic_ids))
 
         result = validate_summary(
-            answer.content, answer.finish_reason, valid_topic_ids={t.id for t in topics}
+            answer.content, answer.finish_reason, valid_topic_ids=valid_topic_ids
         )
         if result.draft is None:
             reason = result.reason.value if result.reason else ""

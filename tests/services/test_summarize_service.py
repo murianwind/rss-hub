@@ -383,7 +383,7 @@ def test_a_key_removed_during_the_run_makes_the_service_wait_without_changing_ar
 
     article_id = env.add_article()
 
-    def key_vanished(_prompt):
+    def key_vanished(_prompt, _rejection):
         raise LlmNotConfigured
 
     monkeypatch.setattr(env.gateway, "complete", key_vanished)
