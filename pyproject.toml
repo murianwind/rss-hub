@@ -16,7 +16,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest==9.1.1",
+    "pytest==9.2.0",
     "pytest-bdd==9.0.0",
     "pytest-cov==7.1.0",
     "gherkin-official==42.0.1",  # tests/bdd/binding.py가 직접 사용
