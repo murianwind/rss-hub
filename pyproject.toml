@@ -21,7 +21,7 @@ dev = [
     "pytest-cov==7.1.0",
     "gherkin-official==42.0.1",  # tests/bdd/binding.py가 직접 사용
     "httpx2==2.16.0",  # FastAPI TestClient (starlette가 httpx 대신 httpx2를 권장)
-    "ruff==0.17.1",
+    "ruff==0.17.3",
     "mypy==2.4.0",
     "vulture==2.16",
 ]
