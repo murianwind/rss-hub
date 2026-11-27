@@ -36,7 +36,7 @@ jobs:
         run: make deadcode
 
       - name: 테스트와 커버리지
-        run: pytest --cov --cov-report=term-missing --cov-fail-under=95
+        run: pytest -n auto --cov --cov-report=term-missing --cov-fail-under=99
 
   docker-smoke:
     name: Docker 이미지 빌드와 기동 확인

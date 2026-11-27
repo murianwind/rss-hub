@@ -36,6 +36,15 @@ def test_a_bad_order_is_refused_and_nothing_changes(world, ids):
     assert response.status_code == 400 and feed_order(world) == before
 
 
+def test_categories_and_topics_can_be_reordered_by_dragging(world):
+    ids = f"{world.tech},{world.news}"
+    response = post(world, "/ui/reorder", kind="category", ids=ids)
+    assert (response.status_code, response.text) == (200, "ok")
+    html = world.get("/reader").text
+    shown = re.findall(r'data-drag-kind="category" data-drag-id="(\d+)"', html)
+    assert shown == [str(world.tech), str(world.news)]
+
+
 def test_an_unknown_kind_is_refused(world):
     assert post(world, "/ui/reorder", kind="articles", ids=str(world.f_news)).status_code == 400
 

@@ -8,6 +8,7 @@ import time
 import pytest
 
 from rss_hub.domain.fulltext import (
+    COVERAGE_MIN,
     MAX_SHELL_LENGTH,
     MIN_TEXT_LENGTH,
     _reference_keys,
@@ -17,6 +18,7 @@ from rss_hub.domain.fulltext import (
     reference_coverage,
     reference_is_complete,
 )
+from tests.fakes.wordpress_page import WP_BODY
 
 LONG = "본문 문장입니다. " * 40  # 충분히 긴 본문
 
@@ -970,3 +972,29 @@ def test_reference_lines_split_at_blocks_and_skip_urls_and_feed_footers():
     )
     assert len(_reference_keys(reference)) == 3  # 주소 줄과 자동 문구는 뺀다
     assert reference_coverage(reference, f"<p>{' '.join(lines)}</p>") == 1.0
+
+
+@pytest.mark.parametrize("between", ["", "<script>var a = 1;</script>", "중간에 낀 글자"])
+def test_a_related_posts_title_in_the_middle_keeps_the_body_that_follows_it(between):
+    before, after = sentences("앞쪽", 30), sentences("뒤쪽", 9)
+    html = page(
+        f"<article><p>{before}</p><h3>Related Articles</h3>{between}<p>{after}</p></article>"
+    )
+    text = extract_main_content(html, "https://x.example.com/post")
+    assert text is not None and "뒤쪽 8번째" in text
+
+
+def test_a_frame_without_an_address_is_skipped_when_looking_for_the_main_frame():
+    shell = '<iframe name="ad"></iframe><iframe id="mainFrame" src="/real"></iframe>'
+    assert find_page_redirect(shell, "https://a.example.com/post") == "https://a.example.com/real"
+
+
+def test_the_best_attempt_is_kept_even_when_no_attempt_reaches_the_minimum_coverage():
+    page_html = (
+        '<html><body><div id="content"><article class="post"><div class="entry-content">'
+        f"{WP_BODY}</div></article></div></body></html>"
+    )
+    reference = WP_BODY + f"<p>{sentences('RSS에만', 3)}</p>"  # RSS에는 있고 페이지에는 없는 내용
+    result = extract_article(page_html, "https://x.example.com/post", "", reference)
+    assert result is not None and 0 < result.coverage < COVERAGE_MIN
+    assert "AWS에 배포하고 URL 알려줘" in result.html  # 제목과 목록을 되살린 쪽이 남는다
