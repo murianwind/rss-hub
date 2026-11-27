@@ -58,6 +58,20 @@ def build_reading_router(*, articles: ArticleRepository, reader: ReaderRepositor
             {"ok": True, "read": state == "read", "state": sidebar_state(reader.sidebar())}
         )
 
+    @router.post("/ui/bookmark")
+    async def bookmark_json(request: Request) -> Response:
+        """목록의 북마크 버튼: 화면을 다시 불러오지 않고 상태만 바꾸고 사이드바 개수를 돌려준다."""
+        form = await request.form()
+        raw, on = str(form.get("id", "")), form.get("on")
+        if not (raw.isascii() and raw.isdigit()) or on not in ("0", "1"):
+            return JSONResponse({"ok": False}, status_code=400)
+        if articles.get(int(raw)) is None:
+            return JSONResponse({"ok": False}, status_code=404)
+        articles.set_bookmark(int(raw), on == "1")
+        return JSONResponse(
+            {"ok": True, "bookmarked": on == "1", "state": sidebar_state(reader.sidebar())}
+        )
+
     @router.post("/ui/auto-read")
     async def auto_read(request: Request) -> Response:
         """스크롤로 지나간 글을 읽음 처리한다. 읽지 않음으로 고정한 글은 건드리지 않는다."""

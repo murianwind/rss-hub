@@ -14,7 +14,7 @@ from tests.fakes.viewer_world import BASE
 from tests.keywords.browser import post
 from tests.keywords.page import card
 
-bind(globals(), "15_reader_ui.feature", [f"RUI-{n:02d}" for n in range(1, 19)])
+bind(globals(), "15_reader_ui.feature", [f"RUI-{n:02d}" for n in range(1, 20)])
 
 FILTERS = {"전체": "", "읽지 않은 글": "unread", "북마크": "bookmarks"}
 
@@ -484,3 +484,42 @@ def _all_row_pinned(world, ctx):
     assert re.search(
         r"\.pin-top \{[^}]*position: sticky;[^}]*top: 0;[^}]*background: var\(--surface\)", css
     )
+
+
+@when(parsers.re(r'글 "(?P<title>[^"]+)"의 북마크 버튼을 누른다'))
+def _bookmark_button(world, ctx, title):
+    ctx.response = post(world, "/ui/bookmark", id=str(ctx.ids[title]), on="1")
+
+
+@when(parsers.re(r'글 "(?P<title>[^"]+)"의 북마크를 해제한다'))
+def _unbookmark_button(world, ctx, title):
+    ctx.response = post(world, "/ui/bookmark", id=str(ctx.ids[title]), on="0")
+
+
+@then(
+    parsers.re(
+        r'글 "(?P<title>[^"]+)"는 북마크되고 응답에는 갱신된 사이드바 북마크 개수가 들어 있다'
+    )
+)
+def _bookmarked_with_count(world, ctx, title):
+    assert world.articles.get(ctx.ids[title]).bookmarked_at is not None
+    data = ctx.response.json()
+    assert data["ok"] is True and data["bookmarked"] is True and data["state"]["bookmarks"] == 1
+
+
+@then("읽기 화면의 북마크 버튼은 화면을 다시 불러오지 않고 상태만 바꾸는 스크립트로 처리된다")
+def _bookmark_in_place(world):
+    html = world.get(f"/reader/feed/{world.f_free}").text
+    assert re.search(
+        r'<form method="post" action="/a/\d+/bookmark" data-bookmark-toggle="\d+">', html
+    )
+    js = world.client.get("/static/app.js").text
+    assert "form[data-bookmark-toggle]" in js and '"/ui/bookmark"' in js
+
+
+@then(parsers.re(r'글 "(?P<title>[^"]+)"는 북마크가 해제되고 잘못된 요청은 거부된다'))
+def _unbookmarked_and_bad(world, ctx, title):
+    assert world.articles.get(ctx.ids[title]).bookmarked_at is None
+    assert ctx.response.json()["bookmarked"] is False
+    assert post(world, "/ui/bookmark", id="abc", on="1").status_code == 400
+    assert post(world, "/ui/bookmark", id="999999", on="1").status_code == 404
