@@ -535,6 +535,38 @@
       });
   });
 
+  // ---------- 북마크: 목록의 버튼은 화면을 다시 불러오지 않고 그 자리에서 바꾼다 ----------
+  function setCardBookmark(form, on) {
+    form.elements.on.value = on ? "0" : "1";
+    var button = form.querySelector("button");
+    button.classList.toggle("on", on);
+    button.setAttribute("aria-pressed", on ? "true" : "false");
+    button.querySelector("svg").classList.toggle("fill", on);
+    button.lastChild.textContent = on ? "북마크 해제" : "북마크";
+  }
+
+  document.addEventListener("submit", function (event) {
+    var form = event.target.closest ? event.target.closest("form[data-bookmark-toggle]") : null;
+    if (!form) return;
+    event.preventDefault();
+    post("/ui/bookmark", {
+      id: form.getAttribute("data-bookmark-toggle"),
+      on: form.elements.on.value,
+    })
+      .then(function (result) {
+        var data = readStateOf(result);
+        if (!data || !data.ok) throw new Error("rejected");
+        var card = form.closest("article.card");
+        // 북마크만 모아 보는 목록에서 해제한 글은 더 이상 그 목록에 맞지 않아 뺀다
+        if (!data.bookmarked && card && card.closest(".list[data-bookmarks-only]")) card.remove();
+        else setCardBookmark(form, data.bookmarked);
+        applyState(data.state);
+      })
+      .catch(function () {
+        showToast("북마크를 바꾸지 못했습니다.");
+      });
+  });
+
   var cardList = document.querySelector(".list");
   var scrollBox = document.querySelector(".main .scroll");
   if (cardList && scrollBox && document.body.getAttribute("data-auto-read") === "on") {

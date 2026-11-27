@@ -27,7 +27,7 @@
   {{ mark_all('mark-all') }}
   {% endif %}
 </header>
-<div class="scroll"><div class="list">
+<div class="scroll"><div class="list"{% if scope.kind == 'bookmarks' or only == 'bookmarks' %} data-bookmarks-only{% endif %}>
   {% if page is none %}
   <p class="empty">찾을 수 없는 목록입니다. 왼쪽 목록에서 다시 골라 주세요.</p>
   {% elif not page.items %}
@@ -49,7 +49,7 @@
     {% if snippets[item.id] %}<p class="snippet">{{ snippets[item.id] }}</p>{% endif %}
     <div class="card-foot">
       <span class="row">
-        <form method="post" action="/a/{{ item.id }}/bookmark">
+        <form method="post" action="/a/{{ item.id }}/bookmark" data-bookmark-toggle="{{ item.id }}">
           <input type="hidden" name="on" value="{{ 0 if item.bookmarked else 1 }}">
           <input type="hidden" name="next" value="{{ back }}">
           <button type="submit" class="link-btn{% if item.bookmarked %} on{% endif %}" aria-pressed="{{ 'true' if item.bookmarked else 'false' }}">{{ icon('bookmark', 'fill' if item.bookmarked else '') }}{{ '북마크 해제' if item.bookmarked else '북마크' }}</button>
