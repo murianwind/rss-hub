@@ -27,7 +27,7 @@
   {{ mark_all('mark-all') }}
   {% endif %}
 </header>
-<div class="scroll"><div class="list">
+<div class="scroll"><div class="list"{% if scope.kind == 'bookmarks' or only == 'bookmarks' %} data-bookmarks-only{% endif %}>
   {% if page is none %}
   <p class="empty">찾을 수 없는 목록입니다. 왼쪽 목록에서 다시 골라 주세요.</p>
   {% elif not page.items %}

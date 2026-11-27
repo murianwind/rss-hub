@@ -556,7 +556,10 @@
       .then(function (result) {
         var data = readStateOf(result);
         if (!data || !data.ok) throw new Error("rejected");
-        setCardBookmark(form, data.bookmarked);
+        var card = form.closest("article.card");
+        // 북마크만 모아 보는 목록에서 해제한 글은 더 이상 그 목록에 맞지 않아 뺀다
+        if (!data.bookmarked && card && card.closest(".list[data-bookmarks-only]")) card.remove();
+        else setCardBookmark(form, data.bookmarked);
         applyState(data.state);
       })
       .catch(function () {

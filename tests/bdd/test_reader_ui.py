@@ -523,3 +523,14 @@ def _unbookmarked_and_bad(world, ctx, title):
     assert ctx.response.json()["bookmarked"] is False
     assert post(world, "/ui/bookmark", id="abc", on="1").status_code == 400
     assert post(world, "/ui/bookmark", id="999999", on="1").status_code == 404
+
+
+@then("북마크만 보는 목록은 해제한 글을 목록에서 빼도록 표시되고 다른 목록은 그렇지 않다")
+def _bookmarks_only_marker(world):
+    only = world.get("/reader/bookmarks").text
+    filtered = world.get(f"/reader/feed/{world.f_free}?only=bookmarks").text
+    plain = world.get(f"/reader/feed/{world.f_free}").text
+    assert '<div class="list" data-bookmarks-only>' in only
+    assert '<div class="list" data-bookmarks-only>' in filtered
+    assert "data-bookmarks-only" not in plain
+    assert ".list[data-bookmarks-only]" in world.client.get("/static/app.js").text
