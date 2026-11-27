@@ -7,6 +7,7 @@ import pytest
 from pytest_bdd import given, parsers, then, when
 
 from rss_hub.services.ports import LlmErrorKind
+from rss_hub.storage.llm_usage import LlmUsageRepository
 from tests.bdd.binding import bind
 from tests.fakes.llm_client import failure, good, reply
 from tests.fakes.viewer_world import open_world
@@ -97,6 +98,11 @@ def _situation(world, situation):
     llm = world.parts.llm
     if situation == "키가 없다":
         world.parts.settings.delete_openrouter_key()
+    elif situation == "오늘 호출 한도에 도달했다":
+        world.parts.settings.update({"llm_daily_cap": "1"})
+        LlmUsageRepository(world.parts.db, world.parts.clock).record(
+            model="model-a", outcome="success", status=200
+        )
     elif situation == "모델이 응답하지 않는다":
         llm.default = failure(LlmErrorKind.UNAUTHORIZED, status=401)
     else:

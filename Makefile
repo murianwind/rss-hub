@@ -1,14 +1,15 @@
 # 품질 게이트. 모든 단계가 통과해야 한다.
 .PHONY: test lint typecheck deadcode check golden coverage
 
+# 시험은 서로 독립(임시 폴더)이라 코어 수만큼 나눠 돌린다. 한 프로세스로 돌리려면 `pytest -n 0`.
 test:
-	pytest
+	pytest -n auto
 
 golden:
 	pytest -m golden
 
 coverage:
-	pytest --cov --cov-report=term-missing
+	pytest -n auto --cov --cov-report=term-missing
 
 lint:
 	ruff check src tests

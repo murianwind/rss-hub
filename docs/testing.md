@@ -7,13 +7,14 @@
 ```
 pip install -e ".[dev]"
 make check        # lint + typecheck + deadcode + test
-make test         # 시험만 (전체 약 6분)
+make test         # 시험만(코어 수만큼 나눠 돌린다: 4코어에서 약 2분, 한 프로세스로는 약 5분)
 make coverage     # 커버리지 보고
-pytest tests/unit -q                 # 빠른 순수 규칙 시험
+pytest tests/unit -q                 # 빠른 순수 규칙 시험(한 프로세스)
+pytest -n 0                          # 병렬 없이 전체(고정 자원 문제를 의심할 때)
 pytest -k "page_subscription" -q     # 이름으로 고르기
 ```
 
-CI는 같은 검사를 하고 커버리지 95% 미만이면 실패시킵니다(현재 100%).
+CI는 같은 검사를 하고 커버리지 99% 미만이면 실패시킵니다(현재 100%).
 
 ## 구성
 
